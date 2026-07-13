@@ -226,10 +226,14 @@ main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
 .case.st-na   { border-left-color:var(--na); }
 
 .case-head { display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-bottom:13px; }
-.case-code {
-  font-family:'Roboto Mono',monospace; font-size:11.5px; font-weight:700; letter-spacing:.2px;
+.case-num {
+  font-family:'Roboto Slab',serif; font-size:12px; font-weight:700; letter-spacing:.2px;
   color:#fff; background:var(--grad-primary);
-  border-radius:6px; padding:3px 9px;
+  border-radius:999px; padding:4px 13px;
+}
+.case-code-mini {
+  margin-left:auto; font-family:'Roboto Mono',monospace; font-size:10px; font-weight:500;
+  color:var(--text-3); letter-spacing:.2px; opacity:.75; user-select:all;
 }
 .tag {
   font-size:10.5px; font-weight:500; padding:3px 10px; border-radius:999px;

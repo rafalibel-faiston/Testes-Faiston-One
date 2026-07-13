@@ -92,14 +92,16 @@
     const stCode = STATUS_CODE[c.status] || "nt";
     const frontCode = FRONT_CODE[c.frente] || "trv";
     const shots = (c.screenshots || []).map((s) => shotThumb(s, c.code)).join("");
+    const idx = CASES.indexOf(c) + 1;
     return `<article class="case st-${stCode}" data-code="${c.code}"
         data-grupo="${esc(c.grupo)}" data-estagio="${esc(c.estagio)}" data-frente="${esc(c.frente)}" data-status="${esc(c.status)}"
         data-search="${esc((c.code + " " + c.resultado_esperado + " " + c.estagio).toLowerCase())}">
       <div class="case-head">
-        <span class="case-code">${esc(c.code)}</span>
+        <span class="case-num">Teste ${idx}</span>
         <span class="tag front-${frontCode}">${esc(c.frente)}</span>
         <span class="tag">${esc(c.estagio)}</span>
         <span class="tag prio-${esc(c.prioridade)}">${esc(c.prioridade)}</span>
+        <span class="case-code-mini" title="Código técnico de referência">${esc(c.code)}</span>
       </div>
       <div class="case-grid">
         <div class="blk"><div class="k">Pré-condição</div><div class="v">${esc(c.pre_condicao)}</div></div>

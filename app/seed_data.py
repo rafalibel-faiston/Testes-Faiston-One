@@ -111,6 +111,29 @@ for s in _STAGES:
             case["code"] = f"FC-{s['num']:02d}-{front}-{_seq[key]:02d}"
             _group_a.append(case)
 
+# ---------------------------------------------------------------------------
+# Orientação de data/horário: os testes do estágio "Agendado" só reproduzem o
+# comportamento certo se o chamado de teste tiver a data marcada do jeito certo.
+# Sem isso, dá pra clicar tudo achando que passou e não ter testado nada.
+# ---------------------------------------------------------------------------
+_DATA_NOTE_FUTURA = (
+    " AGENDE O CHAMADO DE TESTE PARA UMA DATA FUTURA (não hoje) — é a data marcada "
+    "que aciona esse comportamento (chamado aparece como agendado e o botão Iniciar fica bloqueado). "
+    "Depois, se quiser ver o desbloqueio, reagenda esse mesmo chamado pra hoje e confere que libera."
+)
+_DATA_NOTE_24H = (
+    " Esse item só dá pra confirmar se o chamado de teste for agendado com PELO MENOS 24 HORAS "
+    "de antecedência a partir de agora — o lembrete é enviado ~24h antes do horário marcado. "
+    "Se não der tempo hoje, marca como Bloqueado e revalida depois."
+)
+for _case in _group_a:
+    if _case.get("estagio_num") != 4:
+        continue
+    if "lembrete de confirmação" in _case["resultado_esperado"].lower():
+        _case["pre_condicao"] += _DATA_NOTE_24H
+    else:
+        _case["pre_condicao"] += _DATA_NOTE_FUTURA
+
 _PEND_RAW = [
     dict(estagio="02 · Buscando Técnico", status="done",
          quote='O chamado do tipo "Ocorrência" ainda aparece disponível para aceite do técnico, mesmo não devendo estar disponível.',
@@ -149,7 +172,11 @@ for i, p in enumerate(_PEND_RAW, start=1):
         frente="Transversal",
         tipo=tipo,
         prioridade="Alta",
-        pre_condicao="Chamado de teste no estágio indicado; usar o cenário descrito na pendência original (tabela de 02/07).",
+        pre_condicao=(
+            "Chamado de teste no estágio indicado; usar o cenário descrito na pendência original (tabela de 02/07)."
+            + (" AGENDE COM PELO MENOS 24H DE ANTECEDÊNCIA a partir de agora — precisa dessa janela pra ver o lembrete de confirmação chegar; se não der tempo hoje, marca \"Bloqueado\" e revalida depois."
+               if p["estagio"].startswith("04") else "")
+        ),
         passos=f'1) Reproduzir o cenário da pendência: "{p["quote"]}" 2) Conferir se o comportamento atual bate com o esperado abaixo.',
         resultado_esperado=p["esperado"],
         origem="Status das pendências (02/07)",
@@ -194,17 +221,41 @@ _group_d = [dict(
 ALL_CASES = _group_a + _group_b + _group_c + _group_d
 
 
+# Campos que descrevem O CASO (mudam quando eu melhoro o texto/roteiro).
+# Nunca inclui status/observacao/testado_por/screenshots — isso é do Rafa, intocável.
+_SYNC_FIELDS = [
+    "grupo", "estagio", "estagio_num", "frente", "tipo", "prioridade",
+    "pre_condicao", "passos", "resultado_esperado", "origem",
+]
+
+
 def seed(db):
-    """Popula o banco na primeira vez que sobe (idempotente por `code`)."""
+    """Popula/atualiza o banco a cada subida.
+
+    - Caso novo (code inédito): insere com status "Não testado".
+    - Caso já existente: SINCRONIZA os campos descritivos (texto do passo,
+      resultado esperado etc.) com o que está em ALL_CASES aqui embaixo, mas
+      NUNCA mexe em status, observação, testado_por ou nos prints já anexados
+      — isso é progresso real de teste e não pode ser perdido num redeploy.
+    """
     from .models import TestCase
 
-    existing = {c.code for c in db.query(TestCase.code).all()}
+    rows = {c.code: c for c in db.query(TestCase).all()}
     added = 0
+    updated = 0
     for case in ALL_CASES:
-        if case["code"] in existing:
+        row = rows.get(case["code"])
+        if row is None:
+            db.add(TestCase(status="Não testado", observacao="", **case))
+            added += 1
             continue
-        db.add(TestCase(status="Não testado", observacao="", **case))
-        added += 1
-    if added:
+        changed = False
+        for field in _SYNC_FIELDS:
+            if getattr(row, field) != case.get(field):
+                setattr(row, field, case.get(field))
+                changed = True
+        if changed:
+            updated += 1
+    if added or updated:
         db.commit()
-    return added
+    return added, updated
