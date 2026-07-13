@@ -92,7 +92,10 @@
     const stCode = STATUS_CODE[c.status] || "nt";
     const frontCode = FRONT_CODE[c.frente] || "trv";
     const shots = (c.screenshots || []).map((s) => shotThumb(s, c.code)).join("");
-    const idx = CASES.indexOf(c) + 1;
+    // numero curto e estavel: pega o sufixo do codigo (ex.: FC-02-APP-01 -> 1)
+    // em vez de um indice global, que por coincidencia podia parecer o numero do estagio.
+    const seqMatch = c.code.match(/-(\d+)$/);
+    const idx = seqMatch ? parseInt(seqMatch[1], 10) : (CASES.indexOf(c) + 1);
     return `<article class="case st-${stCode}" data-code="${c.code}"
         data-grupo="${esc(c.grupo)}" data-estagio="${esc(c.estagio)}" data-frente="${esc(c.frente)}" data-status="${esc(c.status)}"
         data-search="${esc((c.code + " " + c.resultado_esperado + " " + c.estagio).toLowerCase())}">

@@ -156,7 +156,6 @@ main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
   display:flex; flex-direction:column; gap:12px;
   background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
   padding:16px 18px; margin-bottom:22px;
-  position:sticky; top:74px; z-index:20;
   box-shadow:var(--shadow-1);
 }
 .chip-row { display:flex; align-items:center; gap:10px; }
@@ -328,7 +327,6 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 /* ---------- responsive ---------- */
 @media (max-width:820px) {
   .case-grid { grid-template-columns:1fr; }
-  .toolbar { position:static; }
   .chip-row { flex-wrap:wrap; }
   .chip-row-label { width:auto; }
 }
