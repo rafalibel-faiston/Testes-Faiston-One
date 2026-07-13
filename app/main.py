@@ -19,6 +19,7 @@ Base.metadata.create_all(bind=engine)
 _db = SessionLocal()
 try:
     seed_data.seed(_db)
+    seed_data.migrate_observations(_db)
 finally:
     _db.close()
 

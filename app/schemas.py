@@ -14,6 +14,20 @@ class ScreenshotOut(BaseModel):
     created_at: Optional[datetime] = None
 
 
+class ObservationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    autor: Optional[str] = None
+    texto: str
+    created_at: Optional[datetime] = None
+
+
+class ObservationCreate(BaseModel):
+    texto: str
+    autor: Optional[str] = None
+
+
 class TestCaseOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -34,11 +48,11 @@ class TestCaseOut(BaseModel):
     testado_por: Optional[str] = None
     updated_at: Optional[datetime] = None
     screenshots: List[ScreenshotOut] = []
+    observations: List[ObservationOut] = []
 
 
 class TestCaseUpdate(BaseModel):
     status: Optional[str] = None
-    observacao: Optional[str] = None
     testado_por: Optional[str] = None
 
 

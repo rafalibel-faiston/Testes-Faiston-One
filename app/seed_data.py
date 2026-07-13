@@ -259,3 +259,35 @@ def seed(db):
     if added or updated:
         db.commit()
     return added, updated
+
+
+def migrate_observations(db):
+    """Migração única: casos antigos guardavam UMA observação sem autor no campo
+    TestCase.observacao. Agora cada nota vira uma linha em Observation, com autor
+    (usa testado_por, se houver). Roda a cada subida mas é idempotente — só cria
+    a nota histórica se o caso ainda não tiver nenhuma Observation e o campo
+    antigo tiver texto.
+    """
+    from .models import TestCase, Observation
+
+    cases = (
+        db.query(TestCase)
+        .filter(TestCase.observacao.isnot(None), TestCase.observacao != "")
+        .all()
+    )
+    migrated = 0
+    for case in cases:
+        ja_tem = db.query(Observation).filter(Observation.test_case_id == case.id).first()
+        if ja_tem:
+            continue
+        db.add(
+            Observation(
+                test_case_id=case.id,
+                autor=case.testado_por,
+                texto=case.observacao,
+            )
+        )
+        migrated += 1
+    if migrated:
+        db.commit()
+    return migrated

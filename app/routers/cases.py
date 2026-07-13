@@ -18,7 +18,7 @@ VALID_STATUSES = {"Não testado", "Aprovado", "Reprovado", "Bloqueado", "N/A"}
 def _get_case_or_404(db: Session, code: str) -> models.TestCase:
     case = (
         db.query(models.TestCase)
-        .options(joinedload(models.TestCase.screenshots))
+        .options(joinedload(models.TestCase.screenshots), joinedload(models.TestCase.observations))
         .filter(models.TestCase.code == code)
         .first()
     )
@@ -31,7 +31,7 @@ def _get_case_or_404(db: Session, code: str) -> models.TestCase:
 def list_cases(db: Session = Depends(get_db)):
     cases = (
         db.query(models.TestCase)
-        .options(joinedload(models.TestCase.screenshots))
+        .options(joinedload(models.TestCase.screenshots), joinedload(models.TestCase.observations))
         .order_by(models.TestCase.grupo, models.TestCase.estagio_num.nulls_last(), models.TestCase.code)
         .all()
     )
@@ -50,10 +50,34 @@ def update_case(code: str, payload: schemas.TestCaseUpdate, db: Session = Depend
         if payload.status not in VALID_STATUSES:
             raise HTTPException(status_code=400, detail=f"Status inválido: {payload.status}")
         case.status = payload.status
-    if payload.observacao is not None:
-        case.observacao = payload.observacao
     if payload.testado_por is not None:
         case.testado_por = payload.testado_por
+    db.commit()
+    db.refresh(case)
+    return case
+
+
+@router.post("/cases/{code}/observacoes", response_model=schemas.TestCaseOut)
+def add_observation(code: str, payload: schemas.ObservationCreate, db: Session = Depends(get_db)):
+    """Adiciona uma nova nota ao historico do caso — nunca sobrescreve as anteriores,
+    cada uma guarda o autor de quem escreveu."""
+    case = _get_case_or_404(db, code)
+    texto = (payload.texto or "").strip()
+    if not texto:
+        raise HTTPException(status_code=400, detail="Observação vazia.")
+    db.add(models.Observation(test_case_id=case.id, autor=payload.autor, texto=texto))
+    db.commit()
+    db.refresh(case)
+    return case
+
+
+@router.delete("/observacoes/{observation_id}", response_model=schemas.TestCaseOut)
+def delete_observation(observation_id: int, db: Session = Depends(get_db)):
+    obs = db.query(models.Observation).filter(models.Observation.id == observation_id).first()
+    if not obs:
+        raise HTTPException(status_code=404, detail="Observação não encontrada")
+    case = db.query(models.TestCase).filter(models.TestCase.id == obs.test_case_id).first()
+    db.delete(obs)
     db.commit()
     db.refresh(case)
     return case

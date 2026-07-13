@@ -22,6 +22,14 @@
   const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
   const esc = (s) => (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+  function fmtWhen(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
   function toast(msg, isError) {
     const el = $("#toast");
     el.textContent = msg;
@@ -88,6 +96,16 @@
     </div>`;
   }
 
+  function obsList(observations) {
+    if (!observations || !observations.length) {
+      return `<div class="obs-empty">Nenhuma observação ainda.</div>`;
+    }
+    return observations.map((o) => `<div class="obs-item">
+        <div class="obs-item-head"><span class="obs-author">${esc(o.autor || "Anônimo")}</span><span class="obs-when">${fmtWhen(o.created_at)}</span></div>
+        <div class="obs-text">${esc(o.texto)}</div>
+      </div>`).join("");
+  }
+
   function caseCard(c) {
     const stCode = STATUS_CODE[c.status] || "nt";
     const frontCode = FRONT_CODE[c.frente] || "trv";
@@ -117,8 +135,13 @@
             ${STATUSES.map((s) => `<button class="sbtn ${s === c.status ? "active" : ""}" data-s="${s}">${s}</button>`).join("")}
           </div>
         </div>
+        <div class="case-meta">Testado por <span class="who">${c.testado_por ? esc(c.testado_por) : "—"}</span><span class="when">${c.testado_por ? " · " + fmtWhen(c.updated_at) : ""}</span></div>
         <div class="obs-row">
-          <textarea class="obs-input" rows="1" placeholder="Observação...">${esc(c.observacao || "")}</textarea>
+          <div class="obs-list">${obsList(c.observations)}</div>
+          <div class="obs-add">
+            <textarea class="obs-input" rows="1" placeholder="Adicionar observação..."></textarea>
+            <button type="button" class="obs-add-btn">Adicionar</button>
+          </div>
         </div>
         <div class="shots-row">
           <div class="shots-grid">${shots}</div>
@@ -155,70 +178,95 @@
   }
 
   // ---------------- handlers ----------------
+  // IMPORTANTE: cada card so pode ter seus listeners anexados UMA vez.
+  // attachCardHandlers() roda no load inicial (todos os cards).
+  // rerenderCard() (upload/exclusao de print) chama attachOneCardHandlers()
+  // so no card que foi substituido — nunca a versao global, senao os
+  // listeners se empilham a cada acao e cada clique dispara N vezes
+  // (era a causa da duplicacao de prints ao anexar).
   function attachCardHandlers() {
-    $$(".case").forEach((card) => {
-      const code = card.dataset.code;
+    $$(".case").forEach(attachOneCardHandlers);
+  }
 
-      $$(".sbtn", card).forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          const s = btn.dataset.s;
-          $$(".sbtn", card).forEach((b) => b.classList.toggle("active", b.dataset.s === s));
-          card.className = card.className.replace(/\bst-\w+\b/, "") + ` st-${STATUS_CODE[s]}`;
-          card.dataset.status = s;
-          try {
-            const updated = await api(`/api/cases/${encodeURIComponent(code)}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ status: s, testado_por: testerName() || undefined }),
-            });
-            patchCaseLocal(code, updated);
-            updateStats();
-            toast(`${code} → ${s}`);
-          } catch (e) { toast("Erro ao salvar: " + e.message, true); }
+  function attachOneCardHandlers(card) {
+    const code = card.dataset.code;
+
+    const updateMeta = (updated) => {
+      const whoEl = $(".case-meta .who", card);
+      const whenEl = $(".case-meta .when", card);
+      if (whoEl) whoEl.textContent = updated.testado_por ? updated.testado_por : "—";
+      if (whenEl) whenEl.textContent = updated.testado_por ? " · " + fmtWhen(updated.updated_at) : "";
+    };
+
+    $$(".sbtn", card).forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const s = btn.dataset.s;
+        $$(".sbtn", card).forEach((b) => b.classList.toggle("active", b.dataset.s === s));
+        card.className = card.className.replace(/\bst-\w+\b/, "") + ` st-${STATUS_CODE[s]}`;
+        card.dataset.status = s;
+        try {
+          const updated = await api(`/api/cases/${encodeURIComponent(code)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: s, testado_por: testerName() || undefined }),
+          });
+          patchCaseLocal(code, updated);
+          updateMeta(updated);
+          updateStats();
+          toast(`${code} → ${s}`);
+        } catch (e) { toast("Erro ao salvar: " + e.message, true); }
+      });
+    });
+
+    const obsInput = $(".obs-input", card);
+    const obsBtn = $(".obs-add-btn", card);
+    const submitObs = async () => {
+      const texto = obsInput.value.trim();
+      if (!texto) return;
+      obsBtn.disabled = true;
+      try {
+        const updated = await api(`/api/cases/${encodeURIComponent(code)}/observacoes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ texto, autor: testerName() || undefined }),
         });
-      });
+        patchCaseLocal(code, updated);
+        rerenderCard(code);
+        toast("Observação adicionada");
+      } catch (e) {
+        toast("Erro ao salvar observação: " + e.message, true);
+      } finally {
+        obsBtn.disabled = false;
+      }
+    };
+    obsBtn.addEventListener("click", submitObs);
+    obsInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitObs(); }
+    });
 
-      const obs = $(".obs-input", card);
-      let obsTimer = null;
-      obs.addEventListener("input", () => {
-        clearTimeout(obsTimer);
-        obsTimer = setTimeout(async () => {
-          try {
-            const updated = await api(`/api/cases/${encodeURIComponent(code)}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ observacao: obs.value, testado_por: testerName() || undefined }),
-            });
-            patchCaseLocal(code, updated);
-            toast("Observação salva");
-          } catch (e) { toast("Erro ao salvar observação: " + e.message, true); }
-        }, 700);
-      });
+    const fileInput = $(".shot-input", card);
+    const zone = $(".upload-zone", card);
+    fileInput.addEventListener("change", () => { if (fileInput.files[0]) uploadShot(code, fileInput.files[0], card); });
+    ["dragover", "dragenter"].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add("dragover"); }));
+    ["dragleave", "drop"].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.remove("dragover"); }));
+    zone.addEventListener("drop", (e) => {
+      const f = e.dataTransfer.files[0];
+      if (f) uploadShot(code, f, card);
+    });
 
-      const fileInput = $(".shot-input", card);
-      const zone = $(".upload-zone", card);
-      fileInput.addEventListener("change", () => { if (fileInput.files[0]) uploadShot(code, fileInput.files[0], card); });
-      ["dragover", "dragenter"].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add("dragover"); }));
-      ["dragleave", "drop"].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.remove("dragover"); }));
-      zone.addEventListener("drop", (e) => {
-        const f = e.dataTransfer.files[0];
-        if (f) uploadShot(code, f, card);
-      });
-
-      $$(".shots-grid .shot-thumb img", card).forEach((img) => {
-        img.addEventListener("click", () => openLightbox(img.src));
-      });
-      $$(".del[data-del-shot]", card).forEach((btn) => {
-        btn.addEventListener("click", async (e) => {
-          e.stopPropagation();
-          if (!confirm("Remover este print?")) return;
-          try {
-            const updated = await api(`/api/screenshots/${btn.dataset.delShot}`, { method: "DELETE" });
-            patchCaseLocal(code, updated);
-            rerenderCard(code);
-            toast("Print removido");
-          } catch (err) { toast("Erro ao remover: " + err.message, true); }
-        });
+    $$(".shots-grid .shot-thumb img", card).forEach((img) => {
+      img.addEventListener("click", () => openLightbox(img.src));
+    });
+    $$(".del[data-del-shot]", card).forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!confirm("Remover este print?")) return;
+        try {
+          const updated = await api(`/api/screenshots/${btn.dataset.delShot}`, { method: "DELETE" });
+          patchCaseLocal(code, updated);
+          rerenderCard(code);
+          toast("Print removido");
+        } catch (err) { toast("Erro ao remover: " + err.message, true); }
       });
     });
   }
@@ -231,7 +279,7 @@
     wrap.innerHTML = caseCard(c);
     const fresh = wrap.firstElementChild;
     old.replaceWith(fresh);
-    attachCardHandlers();
+    attachOneCardHandlers(fresh);
     applyFilters();
   }
 

@@ -28,6 +28,23 @@ class TestCase(Base):
     screenshots = relationship(
         "Screenshot", back_populates="test_case", cascade="all, delete-orphan", order_by="Screenshot.id"
     )
+    observations = relationship(
+        "Observation", back_populates="test_case", cascade="all, delete-orphan", order_by="Observation.id"
+    )
+
+
+class Observation(Base):
+    """Uma nota do historico de observacoes de um caso — cada uma com seu proprio autor,
+    diferente do campo antigo `TestCase.observacao` (unico, qualquer um sobrescrevia)."""
+    __tablename__ = "observations"
+
+    id = Column(Integer, primary_key=True)
+    test_case_id = Column(Integer, ForeignKey("test_cases.id", ondelete="CASCADE"), nullable=False)
+    autor = Column(String, nullable=True)
+    texto = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    test_case = relationship("TestCase", back_populates="observations")
 
 
 class Screenshot(Base):
