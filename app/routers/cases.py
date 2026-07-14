@@ -1,4 +1,5 @@
 import io
+import re
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -13,13 +14,33 @@ router = APIRouter(tags=["cases"])
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8MB por print
 ALLOWED_CONTENT_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"}
 VALID_STATUSES = {"Não testado", "Aprovado", "Reprovado", "Bloqueado", "N/A"}
+# campos descritivos que, ao serem editados, tornam o caso "do usuário"
+DESCRIPTIVE_FIELDS = {
+    "fluxo", "grupo", "estagio", "frente", "tipo", "prioridade",
+    "origem", "pre_condicao", "passos", "resultado_esperado",
+}
+
+
+def _parse_stage_num(estagio: str):
+    """Deriva o número do estágio do rótulo (ex.: '01 · Criar OS' -> 1) para
+    manter a ordenação e o agrupamento do carrossel funcionando."""
+    m = re.match(r"\s*(\d+)", estagio or "")
+    return int(m.group(1)) if m else None
+
+
+def _next_manual_code(db: Session) -> str:
+    existing = {row[0] for row in db.query(models.TestCase.code).all()}
+    n = 1
+    while f"FC-MAN-{n:02d}" in existing:
+        n += 1
+    return f"FC-MAN-{n:02d}"
 
 
 def _get_case_or_404(db: Session, code: str) -> models.TestCase:
     case = (
         db.query(models.TestCase)
         .options(joinedload(models.TestCase.screenshots), joinedload(models.TestCase.observations))
-        .filter(models.TestCase.code == code)
+        .filter(models.TestCase.code == code, models.TestCase.active.is_(True))
         .first()
     )
     if not case:
@@ -32,10 +53,55 @@ def list_cases(db: Session = Depends(get_db)):
     cases = (
         db.query(models.TestCase)
         .options(joinedload(models.TestCase.screenshots), joinedload(models.TestCase.observations))
+        .filter(models.TestCase.active.is_(True))
         .order_by(models.TestCase.grupo, models.TestCase.estagio_num.nulls_last(), models.TestCase.code)
         .all()
     )
     return cases
+
+
+@router.post("/cases", response_model=schemas.TestCaseOut, status_code=201)
+def create_case(payload: schemas.TestCaseCreate, db: Session = Depends(get_db)):
+    """Cria um caso novo pela tela. Marca user_managed=True (o seed não mexe nele)."""
+    if not (payload.resultado_esperado or "").strip():
+        raise HTTPException(status_code=400, detail="Informe o resultado esperado.")
+    code = (payload.code or "").strip() or _next_manual_code(db)
+    if db.query(models.TestCase).filter(models.TestCase.code == code).first():
+        raise HTTPException(status_code=400, detail=f"Já existe um caso com o código {code}.")
+    case = models.TestCase(
+        code=code,
+        fluxo=payload.fluxo or "C",
+        grupo=payload.grupo,
+        estagio=payload.estagio,
+        estagio_num=_parse_stage_num(payload.estagio),
+        frente=payload.frente,
+        tipo=payload.tipo,
+        prioridade=payload.prioridade,
+        origem=payload.origem,
+        pre_condicao=payload.pre_condicao,
+        passos=payload.passos,
+        resultado_esperado=payload.resultado_esperado,
+        chamado=payload.chamado,
+        horario=payload.horario,
+        status="Não testado",
+        observacao="",
+        user_managed=True,
+        active=True,
+    )
+    db.add(case)
+    db.commit()
+    db.refresh(case)
+    return case
+
+
+@router.delete("/cases/{code}")
+def delete_case(code: str, db: Session = Depends(get_db)):
+    """Exclusão suave: some da tela mas não ressuscita no próximo deploy."""
+    case = _get_case_or_404(db, code)
+    case.active = False
+    case.user_managed = True  # não deixa o seed re-sincronizar/reviver
+    db.commit()
+    return {"deleted": code}
 
 
 @router.get("/cases/{code}", response_model=schemas.TestCaseOut)
@@ -52,6 +118,24 @@ def update_case(code: str, payload: schemas.TestCaseUpdate, db: Session = Depend
         case.status = payload.status
     if payload.testado_por is not None:
         case.testado_por = payload.testado_por
+    # dados de execução — do testador, não são "conteúdo do caso" (não viram user_managed)
+    if payload.chamado is not None:
+        case.chamado = payload.chamado
+    if payload.horario is not None:
+        case.horario = payload.horario
+
+    # edição de campos descritivos → o caso passa a ser "do usuário"
+    data = payload.model_dump(exclude_unset=True)
+    touched_descriptive = False
+    for field in DESCRIPTIVE_FIELDS:
+        if field in data and data[field] is not None:
+            setattr(case, field, data[field])
+            touched_descriptive = True
+    if "estagio" in data and data["estagio"] is not None:
+        case.estagio_num = _parse_stage_num(data["estagio"])
+    if touched_descriptive:
+        case.user_managed = True
+
     db.commit()
     db.refresh(case)
     return case

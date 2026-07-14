@@ -22,6 +22,12 @@
   const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
   const esc = (s) => (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+  function nowStr() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
   function fmtWhen(iso) {
     if (!iso) return "";
     const d = new Date(iso);
@@ -58,16 +64,16 @@
   async function loadCases() {
     CASES = await api("/api/cases");
     $("#cases-loading").hidden = true;
-    buildFilters();
     render();
   }
 
-  function buildFilters() {
+  function buildFilters(list) {
+    const src = list || CASES;
     const uniq = (arr) => [...new Set(arr)];
-    buildChipGroup("chips-grupo", "grupo", ["Todos", ...uniq(CASES.map((c) => c.grupo))]);
-    buildChipGroup("chips-frente", "frente", ["Todas", ...uniq(CASES.map((c) => c.frente))], FRENT_CHIP_CLASS);
+    buildChipGroup("chips-grupo", "grupo", ["Todos", ...uniq(src.map((c) => c.grupo))]);
+    buildChipGroup("chips-frente", "frente", ["Todas", ...uniq(src.map((c) => c.frente))], FRENT_CHIP_CLASS);
     buildChipGroup("chips-status", "status", ["Todos", ...STATUSES], STATUS_CHIP_CLASS);
-    buildChipGroup("chips-estagio", "estagio", ["Todos", ...uniq(CASES.map((c) => c.estagio))]);
+    buildChipGroup("chips-estagio", "estagio", ["Todos", ...uniq(src.map((c) => c.estagio))]);
   }
 
   function buildChipGroup(containerId, filterKey, values, colorMap) {
@@ -122,6 +128,15 @@
         <span class="tag front-${frontCode}">${esc(c.frente)}</span>
         <span class="tag">${esc(c.estagio)}</span>
         <span class="tag prio-${esc(c.prioridade)}">${esc(c.prioridade)}</span>
+        ${c.user_managed ? '<span class="case-managed-flag" title="Criado ou editado na tela — o sistema não sobrescreve">editado</span>' : ""}
+        <div class="case-actions">
+          <button type="button" class="case-icon-btn" data-edit="${c.code}" title="Editar teste" aria-label="Editar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
+          <button type="button" class="case-icon-btn danger" data-del-case="${c.code}" title="Excluir teste" aria-label="Excluir">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        </div>
         <span class="case-code-mini" title="Código técnico de referência">${esc(c.code)}</span>
       </div>
       <div class="case-grid">
@@ -136,6 +151,19 @@
           </div>
         </div>
         <div class="case-meta">Testado por <span class="who">${c.testado_por ? esc(c.testado_por) : "—"}</span><span class="when">${c.testado_por ? " · " + fmtWhen(c.updated_at) : ""}</span></div>
+        <div class="reg-row">
+          <label class="reg-field">
+            <span class="reg-k">Chamado testado</span>
+            <input class="reg-chamado" type="text" value="${esc(c.chamado || "")}" placeholder="nº da OS" autocomplete="off">
+          </label>
+          <label class="reg-field">
+            <span class="reg-k">Horário do teste</span>
+            <span class="reg-h">
+              <input class="reg-horario" type="text" value="${esc(c.horario || "")}" placeholder="dd/mm hh:mm" autocomplete="off">
+              <button type="button" class="reg-now" title="Preencher com o horário de agora">agora</button>
+            </span>
+          </label>
+        </div>
         <div class="obs-row">
           <div class="obs-list">${obsList(c.observations)}</div>
           <div class="obs-add">
@@ -155,16 +183,31 @@
   }
 
   function render() {
+    const flowCases = CASES.filter((c) => caseFlow(c) === currentFlow);
+    const emptyEl = $("#flow-empty");
+    if (!flowCases.length) {
+      $("#cases").innerHTML = "";
+      $("#flow-empty-badge").textContent = "Fluxo " + currentFlow;
+      emptyEl.hidden = false;
+      buildFilters(flowCases);
+      updateStats();
+      return;
+    }
+    emptyEl.hidden = true;
     const order = ["Grupo A", "Grupo B", "Grupo C", "Grupo D"];
     const groups = {};
-    CASES.forEach((c) => { (groups[c.grupo] = groups[c.grupo] || []).push(c); });
+    flowCases.forEach((c) => { (groups[c.grupo] = groups[c.grupo] || []).push(c); });
+    // grupos conhecidos primeiro, depois quaisquer grupos novos (criados pelo usuário)
+    const ordered = order.filter((g) => groups[g])
+      .concat(Object.keys(groups).filter((g) => !order.includes(g)).sort());
     let html = "";
-    order.filter((g) => groups[g]).forEach((g) => {
-      html += `<div class="grp-heading"><span class="badge">${g}</span><span class="desc">${GRUPO_DESC[g] || ""}</span></div>`;
+    ordered.forEach((g) => {
+      html += `<div class="grp-heading"><span class="badge">${esc(g)}</span><span class="desc">${esc(GRUPO_DESC[g] || "")}</span></div>`;
       html += groups[g].map(caseCard).join("");
     });
     $("#cases").innerHTML = html;
     attachCardHandlers();
+    buildFilters(flowCases);
     applyFilters();
     updateStats();
   }
@@ -190,6 +233,31 @@
 
   function attachOneCardHandlers(card) {
     const code = card.dataset.code;
+
+    const editBtn = $(".case-icon-btn[data-edit]", card);
+    if (editBtn) editBtn.addEventListener("click", () => openCaseModal("edit", code));
+    const delBtn = $(".case-icon-btn[data-del-case]", card);
+    if (delBtn) delBtn.addEventListener("click", () => deleteCase(code));
+
+    // registro de execução: chamado + horário (salva sozinho ao sair do campo)
+    const chamadoInput = $(".reg-chamado", card);
+    const horarioInput = $(".reg-horario", card);
+    const nowBtn = $(".reg-now", card);
+    const saveReg = async (patch) => {
+      try {
+        const updated = await api(`/api/cases/${encodeURIComponent(code)}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
+        });
+        patchCaseLocal(code, updated);
+        toast("Registro salvo");
+      } catch (e) { toast("Erro ao salvar: " + e.message, true); }
+    };
+    if (chamadoInput) chamadoInput.addEventListener("change", () => saveReg({ chamado: chamadoInput.value.trim() }));
+    if (horarioInput) horarioInput.addEventListener("change", () => saveReg({ horario: horarioInput.value.trim() }));
+    if (nowBtn) nowBtn.addEventListener("click", () => {
+      horarioInput.value = nowStr();
+      saveReg({ horario: horarioInput.value });
+    });
 
     const updateMeta = (updated) => {
       const whoEl = $(".case-meta .who", card);
@@ -336,16 +404,17 @@
 
   // ---------------- stats ----------------
   function updateStats() {
+    const flowCases = CASES.filter((c) => caseFlow(c) === currentFlow);
     const counts = { "Não testado": 0, "Aprovado": 0, "Reprovado": 0, "Bloqueado": 0, "N/A": 0 };
-    CASES.forEach((c) => { counts[c.status] = (counts[c.status] || 0) + 1; });
+    flowCases.forEach((c) => { counts[c.status] = (counts[c.status] || 0) + 1; });
     $("#stat-nt").textContent = counts["Não testado"];
     $("#stat-ok").textContent = counts["Aprovado"];
     $("#stat-bad").textContent = counts["Reprovado"];
     $("#stat-warn").textContent = counts["Bloqueado"];
     $("#stat-na").textContent = counts["N/A"];
-    const total = CASES.length || 1;
+    const total = flowCases.length;
     const executado = total - counts["Não testado"];
-    const pct = Math.round((executado / total) * 100);
+    const pct = total ? Math.round((executado / total) * 100) : 0;
     $("#hero-pct").textContent = pct + "%";
     $("#pbar-fill").style.width = pct + "%";
     updatePresentCount();
@@ -365,8 +434,10 @@
       t.classList.toggle("active", on);
       t.setAttribute("aria-selected", on ? "true" : "false");
     });
-    $$(".flow-panel").forEach((p) => { p.hidden = p.dataset.flowPanel !== flow; });
-    updatePresentCount();
+    activeFilters.grupo = activeFilters.estagio = activeFilters.frente = activeFilters.status = "";
+    const busca = $("#f-busca");
+    if (busca) busca.value = "";
+    render();
   }
   $$(".flow-tab").forEach((t) => t.addEventListener("click", () => setFlow(t.dataset.flow)));
 
@@ -378,6 +449,7 @@
     return {
       id: s.id, filename: s.filename, uploaded_by: s.uploaded_by, created_at: s.created_at,
       code: c.code, estagio: c.estagio, estagio_num: c.estagio_num, frente: c.frente, status: c.status,
+      chamado: c.chamado, horario: c.horario,
     };
   }
   function cmpSlide(a, b) {
@@ -437,6 +509,10 @@
     prev.disabled = i === 0;
     next.disabled = i === slides.length - 1;
     const stCode = STATUS_CAP[s.status] || "nt";
+    const regBits = [
+      s.chamado ? "Chamado " + esc(s.chamado) : "",
+      s.horario ? esc(s.horario) : "",
+    ].filter(Boolean).join(" · ");
     const metaBits = [
       `<span class="cap-code">${esc(s.code)}</span>`,
       s.uploaded_by ? "enviado por " + esc(s.uploaded_by) : "",
@@ -448,6 +524,7 @@
         <span class="cap-tag">${esc(s.frente)}</span>
         <span class="cap-tag cap-status ${stCode}">${esc(s.status)}</span>
       </div>
+      ${regBits ? `<div class="cap-reg">${regBits}</div>` : ""}
       <div class="cap-meta">${metaBits}</div>`;
     const dots = $$(".track-dot", $("#carousel-track"));
     dots.forEach((d, di) => d.classList.toggle("active", di === i));
@@ -481,6 +558,103 @@
     const btn = $("#btn-present");
     if (btn) btn.disabled = n === 0;
   }
+
+  // ---------------- modal: criar / editar / excluir caso ----------------
+  let editingCode = null;
+  const modal = $("#case-modal");
+  const form = $("#case-form");
+
+  function openCaseModal(mode, code) {
+    editingCode = mode === "edit" ? code : null;
+    $("#modal-title").textContent = mode === "edit" ? "Editar teste" : "Novo teste";
+    const codeEl = $("#modal-code");
+    if (mode === "edit") {
+      const c = findCase(code);
+      if (!c) return;
+      codeEl.textContent = c.code; codeEl.hidden = false;
+      form.fluxo.value = caseFlow(c);
+      form.grupo.value = c.grupo || "";
+      form.prioridade.value = c.prioridade || "Média";
+      form.estagio.value = c.estagio || "";
+      form.frente.value = c.frente || "A definir";
+      form.pre_condicao.value = c.pre_condicao || "";
+      form.passos.value = c.passos || "";
+      form.resultado_esperado.value = c.resultado_esperado || "";
+      form.chamado.value = c.chamado || "";
+      form.horario.value = c.horario || "";
+    } else {
+      form.reset();
+      codeEl.hidden = true;
+      form.fluxo.value = currentFlow;   // teste novo entra no fluxo que está aberto
+      form.grupo.value = "Grupo C";
+      form.prioridade.value = "Média";
+      form.frente.value = "A definir";
+    }
+    modal.hidden = false;
+    setTimeout(() => { try { form.estagio.focus(); } catch (e) {} }, 30);
+  }
+  function closeCaseModal() { modal.hidden = true; editingCode = null; }
+
+  async function submitCaseForm(e) {
+    e.preventDefault();
+    const payload = {
+      fluxo: form.fluxo.value,
+      grupo: form.grupo.value.trim() || "Grupo C",
+      prioridade: form.prioridade.value,
+      estagio: form.estagio.value.trim(),
+      frente: form.frente.value,
+      pre_condicao: form.pre_condicao.value.trim(),
+      passos: form.passos.value.trim(),
+      resultado_esperado: form.resultado_esperado.value.trim(),
+      chamado: form.chamado.value.trim(),
+      horario: form.horario.value.trim(),
+    };
+    if (!payload.estagio) { toast("Informe o estágio.", true); return; }
+    if (!payload.resultado_esperado) { toast("Informe o resultado esperado.", true); return; }
+    const saveBtn = $("#modal-save");
+    saveBtn.disabled = true;
+    try {
+      if (editingCode) {
+        await api(`/api/cases/${encodeURIComponent(editingCode)}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        });
+        toast("Teste atualizado");
+      } else {
+        await api("/api/cases", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        });
+        toast("Teste criado");
+      }
+      const targetFlow = payload.fluxo;
+      await loadCases();
+      setFlow(targetFlow);   // leva você pro fluxo onde o teste ficou
+      closeCaseModal();
+    } catch (err) {
+      toast("Erro ao salvar: " + err.message, true);
+    } finally {
+      saveBtn.disabled = false;
+    }
+  }
+
+  async function deleteCase(code) {
+    if (!confirm(`Excluir o teste ${code}? Ele sai da lista (dá pra recriar depois).`)) return;
+    try {
+      await api(`/api/cases/${encodeURIComponent(code)}`, { method: "DELETE" });
+      CASES = CASES.filter((c) => c.code !== code);
+      render();
+      toast("Teste excluído");
+    } catch (err) {
+      toast("Erro ao excluir: " + err.message, true);
+    }
+  }
+
+  form.addEventListener("submit", submitCaseForm);
+  $("#modal-close").addEventListener("click", closeCaseModal);
+  $("#modal-cancel").addEventListener("click", closeCaseModal);
+  modal.addEventListener("click", (e) => { if (e.target.id === "case-modal") closeCaseModal(); });
+  $("#btn-add-case").addEventListener("click", () => openCaseModal("create"));
+  $("#flow-empty-add").addEventListener("click", () => openCaseModal("create"));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !modal.hidden) closeCaseModal(); });
 
   // ---------------- tester name ----------------
   const testerInput = $("#input-tester");

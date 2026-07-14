@@ -20,6 +20,8 @@ APP_VERSION = os.getenv("RAILWAY_GIT_COMMIT_SHA", str(int(time.time())))[:12]
 app = FastAPI(title="Fluxo C — Console de Teste (Faiston)")
 
 Base.metadata.create_all(bind=engine)
+# adiciona colunas novas em bancos que já existem (antes de qualquer query ORM)
+seed_data.migrate_schema(engine)
 
 # semeia a base de casos na primeira subida (idempotente)
 _db = SessionLocal()
