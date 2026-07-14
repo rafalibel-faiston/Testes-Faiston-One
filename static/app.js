@@ -418,6 +418,7 @@
     const busca = $("#f-busca");
     if (busca) busca.value = "";
     render();
+    loadNotes();
   }
   $$(".flow-tab").forEach((t) => t.addEventListener("click", () => setFlow(t.dataset.flow)));
 
@@ -631,6 +632,106 @@
   $("#flow-empty-add").addEventListener("click", () => openCaseModal("create"));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !modal.hidden) closeCaseModal(); });
 
+  // ---------------- pontos para reunião ----------------
+  // Lista solta por fluxo, independente de qualquer caso de teste — pra
+  // anotar na hora um ponto (bug, dúvida, decisão pendente) e levar pra reunião.
+  let NOTES = [];
+  const notesModal = $("#notes-modal");
+
+  async function loadNotes() {
+    try {
+      NOTES = await api(`/api/notas?fluxo=${encodeURIComponent(currentFlow)}`);
+    } catch (e) {
+      NOTES = [];
+    }
+    updateNotesCount();
+    if (!notesModal.hidden) renderNotesList();
+  }
+
+  function updateNotesCount() {
+    const open = NOTES.filter((n) => !n.resolvido).length;
+    const el = $("#notes-count");
+    if (el) el.textContent = open;
+  }
+
+  function noteItem(n) {
+    return `<div class="note-item ${n.resolvido ? "resolvido" : ""}" data-id="${n.id}">
+      <input type="checkbox" class="note-check" ${n.resolvido ? "checked" : ""} title="Marcar como discutido">
+      <div class="note-body">
+        <div class="note-text">${esc(n.texto)}</div>
+        <div class="note-meta">${n.autor ? esc(n.autor) + " · " : ""}${fmtWhen(n.created_at)}</div>
+      </div>
+      <button type="button" class="note-del" title="Excluir ponto" aria-label="Excluir">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+    </div>`;
+  }
+
+  function renderNotesList() {
+    const el = $("#notes-list");
+    if (!NOTES.length) {
+      el.innerHTML = `<div class="notes-empty">Nenhum ponto anotado ainda neste fluxo.</div>`;
+      return;
+    }
+    el.innerHTML = NOTES.map(noteItem).join("");
+    $$(".note-check", el).forEach((chk) => {
+      chk.addEventListener("change", () => toggleNote(chk.closest(".note-item").dataset.id, chk.checked));
+    });
+    $$(".note-del", el).forEach((btn) => {
+      btn.addEventListener("click", () => deleteNote(btn.closest(".note-item").dataset.id));
+    });
+  }
+
+  async function toggleNote(id, resolvido) {
+    try {
+      const updated = await api(`/api/notas/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resolvido }),
+      });
+      const idx = NOTES.findIndex((n) => n.id === updated.id);
+      if (idx >= 0) NOTES[idx] = updated;
+      updateNotesCount();
+    } catch (e) { toast("Erro ao atualizar ponto: " + e.message, true); }
+  }
+
+  async function deleteNote(id) {
+    try {
+      await api(`/api/notas/${id}`, { method: "DELETE" });
+      NOTES = NOTES.filter((n) => String(n.id) !== String(id));
+      renderNotesList();
+      updateNotesCount();
+    } catch (e) { toast("Erro ao excluir ponto: " + e.message, true); }
+  }
+
+  function openNotesModal() {
+    $("#notes-flow-label").textContent = "Fluxo " + currentFlow;
+    renderNotesList();
+    notesModal.hidden = false;
+    setTimeout(() => { try { $("#notes-input").focus(); } catch (e) {} }, 30);
+  }
+  function closeNotesModal() { notesModal.hidden = true; }
+
+  $("#btn-notes").addEventListener("click", openNotesModal);
+  $("#notes-close").addEventListener("click", closeNotesModal);
+  notesModal.addEventListener("click", (e) => { if (e.target.id === "notes-modal") closeNotesModal(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !notesModal.hidden) closeNotesModal(); });
+
+  $("#notes-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = $("#notes-input");
+    const texto = input.value.trim();
+    if (!texto) return;
+    try {
+      const created = await api("/api/notas", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fluxo: currentFlow, texto, autor: testerName() || undefined }),
+      });
+      NOTES.push(created);
+      input.value = "";
+      renderNotesList();
+      updateNotesCount();
+    } catch (err) { toast("Erro ao salvar ponto: " + err.message, true); }
+  });
+
   // ---------------- tester name ----------------
   const testerInput = $("#input-tester");
   testerInput.value = localStorage.getItem(TESTER_KEY) || "";
@@ -640,4 +741,5 @@
   loadCases().catch((e) => {
     $("#cases-loading").textContent = "Erro ao carregar casos: " + e.message;
   });
+  loadNotes();
 })();

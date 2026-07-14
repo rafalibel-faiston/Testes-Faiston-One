@@ -71,6 +71,11 @@
         Ver evidências em sequência
         <span class="present-count" id="present-count">0 prints</span>
       </button>
+      <button type="button" class="notes-btn" id="btn-notes">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+        Pontos para reunião
+        <span class="notes-count" id="notes-count">0</span>
+      </button>
       <span class="present-hint">Passa print a print, agrupado por estágio</span>
     </div>
   </section>
@@ -199,6 +204,25 @@
         <button type="submit" class="btn-primary" id="modal-save">Salvar teste</button>
       </div>
     </form>
+  </div>
+</div>
+
+<div class="modal" id="notes-modal" hidden aria-modal="true" role="dialog">
+  <div class="modal-card notes-card">
+    <div class="modal-head">
+      <h3>Pontos para reunião</h3>
+      <span class="modal-code" id="notes-flow-label">Fluxo C</span>
+      <button type="button" class="modal-close" id="notes-close" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="notes-hint">Anote aqui qualquer ponto que surgir durante os testes — dúvida, bug, decisão pendente —
+      pra levar pra reunião. Não precisa ter um caso de teste vinculado.</p>
+      <form id="notes-form" class="notes-add">
+        <textarea id="notes-input" rows="2" placeholder="Escreva o ponto..." required></textarea>
+        <button type="submit" class="btn-primary">Adicionar</button>
+      </form>
+      <div class="notes-list" id="notes-list"></div>
+    </div>
   </div>
 </div>
 
