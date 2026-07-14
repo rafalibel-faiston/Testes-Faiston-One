@@ -28,6 +28,40 @@ PRECOND = {
 }
 
 
+# "Problema encontrado" original (planilha-mãe do projeto, Dispatcher_Andamento —
+# aba "Ajustes Fluxo C", 19/06/2026), casado por (estágio, frente, resultado_esperado)
+# com o texto que já usávamos aqui. Só entram pares com correspondência EXATA de texto
+# — itens refinados/adicionados depois dessa planilha ficam sem "problema encontrado"
+# (a exportação cai pro texto de Passos nesses casos) em vez de arriscar um match errado.
+_ORIGINAL_PROBLEMA = {
+    (1, 'OPR', 'Novo chamado aparece no painel com o estado certo'): 'Chamado não aparece no painel',
+    (2, 'APP', 'Novo chamado aparece e pode ser aceito (caminho normal)'): 'Novo chamado não estava aparecendo corretamente para aceite no aplicativo.',
+    (3, 'OPR', 'Painel passa para "Técnico Confirmado", fiel'): 'Após o aceite do técnico, o painel não refletia corretamente o status de técnico confirmado.',
+    (3, 'APP', 'Ao aceitar, o chamado sai da lista e o passo avança'): 'Após o aceite, o aplicativo não atualizava corretamente a lista e o avanço de etapa.',
+    (4, 'OPR', 'Painel mostra "Agendado", fiel'): 'O painel não refletia corretamente o status de agendamento do chamado.',
+    (4, 'APP', 'Mostra "Aguardando início" (não "Em rota")'): 'O aplicativo exibia status incorreto na etapa de agendamento.',
+    (4, 'APP', '"Iniciar" bloqueado até confirmar e chegar a data'): 'O botão “Iniciar” ficava disponível antes da confirmação e da data prevista.',
+    (5, 'OPR', 'Painel mostra "Deslocamento", fiel'): 'O painel não refletia corretamente o início do deslocamento do técnico.',
+    (5, 'APP', 'Passo avança para "Em Rota"'): 'A barra de progresso não avançava corretamente para a etapa de deslocamento.',
+    (5, 'APP', 'Botão "Navegar" abre a rota até o endereço'): 'O técnico não conseguia iniciar a navegação pela rota do atendimento.',
+    (6, 'OPR', 'Painel mostra "Aguardando Liberação", fiel'): 'Painel não está mostrando o botão "Aguardando liberação"',
+    (6, 'APP', 'Botão "Acesso Liberado" reconectado e funcional'): 'Não está funcionando o botão "Acesso liberado"',
+    (6, 'APP', 'A etapa aparece com o rótulo "Aguardando Liberação de Acesso"'): 'Aguardando liberação de acesso não aparece',
+    (6, 'APP', 'O técnico registra "Acesso Liberado" e então toca "Iniciar Atendimento" — sem etapa de liberação pelo operador'): 'Mudança de fluxo',
+    (7, 'OPR', 'Painel mostra "Em Execução" e recebe os horários de chegada/início'): 'Não está aparecendo data e hora de chegada do técnico',
+    (7, 'APP', 'Tela "Em Atendimento"; cronômetro mede o tempo real'): 'SLA não estava sendo contabilizado',
+    (7, 'APP', '"Concluir" removido da visão do técnico'): 'Opção "Concluir" tirar da visualização do técnico',
+    (8, 'OPR', 'Painel mostra "Suporte N2"; operador conduz "Acompanhamento Concluído"'): 'N2 deve realizar o acompanhamento',
+    (8, 'APP', 'Técnico sem ação; botões indevidos ocultos por perfil'): 'Técnico está tendo ação nesse ticket',
+    (9, 'OPR', 'Painel mostra o chamado aguardando relatório/revisão, fiel'): 'Não estava mostrando o relatorio',
+    (9, 'APP', 'Tela da RAT abre e é enviada pelo app, mesmo abrindo do zero'): 'RAT não encaminhada ao técnico',
+    (10, 'OPR', 'Tela de revisão (aprovar/recusar, ver fotos e assinatura), fiel'): 'Tela não estava aparecendo dados da rat',
+    (10, 'APP', 'Corrigido: ao recusar, "Corrigir RAT" preserva fotos e assinatura'): 'Fotos não anexando no app',
+    (11, 'OPR', 'Painel mostra "Concluído" e encerra o bloco de revisão'): 'Não aparece opção "Concluido"',
+    (11, 'APP', 'Tela mostra "Concluído"'): 'Não aparece opção "Concluido"',
+}
+
+
 def _stage_case(stage_num, front, text, status):
     meta = STAGE_META[stage_num]
     tipo = "Validação (comprovar ao vivo)" if status == "done" else "Verificação de pendência (acabamento em curso)"
@@ -42,6 +76,7 @@ def _stage_case(stage_num, front, text, status):
         pre_condicao=PRECOND[front],
         passos=f"1) {meta['gatilho']} 2) Conferir {VERIFY_WHERE[front]} o comportamento abaixo.",
         resultado_esperado=text,
+        problema_encontrado=_ORIGINAL_PROBLEMA.get((stage_num, front, text)),
         origem="Matriz por frente (02/07)",
     )
 
@@ -179,6 +214,7 @@ for i, p in enumerate(_PEND_RAW, start=1):
         ),
         passos=f'1) Reproduzir o cenário da pendência: "{p["quote"]}" 2) Conferir se o comportamento atual bate com o esperado abaixo.',
         resultado_esperado=p["esperado"],
+        problema_encontrado=p["quote"],
         origem="Status das pendências (02/07)",
     ))
 
@@ -225,7 +261,7 @@ ALL_CASES = _group_a + _group_b + _group_c + _group_d
 # Nunca inclui status/observacao/testado_por/screenshots — isso é do Rafa, intocável.
 _SYNC_FIELDS = [
     "grupo", "estagio", "estagio_num", "frente", "tipo", "prioridade",
-    "pre_condicao", "passos", "resultado_esperado", "origem",
+    "pre_condicao", "passos", "resultado_esperado", "problema_encontrado", "origem",
 ]
 
 
@@ -253,6 +289,8 @@ def migrate_schema(engine):
                          + ("FALSE" if pg else "0"))
         if "chamado" not in cols:
             stmts.append("ALTER TABLE test_cases ADD COLUMN chamado VARCHAR")
+        if "problema_encontrado" not in cols:
+            stmts.append("ALTER TABLE test_cases ADD COLUMN problema_encontrado TEXT")
 
     if "meeting_notes" in existing_tables:
         note_cols = {c["name"] for c in insp.get_columns("meeting_notes")}

@@ -21,6 +21,9 @@ class TestCase(Base):
     pre_condicao = Column(Text, nullable=False)
     passos = Column(Text, nullable=False)
     resultado_esperado = Column(Text, nullable=False)
+    # texto original do "problema encontrado" (planilha-mãe do projeto), quando existe —
+    # usado na exportação Excel pra reproduzir o formato original com o status atualizado.
+    problema_encontrado = Column(Text, nullable=True)
     status = Column(String, nullable=False, default="Não testado")
     observacao = Column(Text, nullable=True, default="")
     testado_por = Column(String, nullable=True)
