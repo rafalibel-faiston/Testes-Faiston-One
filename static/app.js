@@ -254,8 +254,15 @@
       if (f) uploadShot(code, f, card);
     });
 
-    $$(".shots-grid .shot-thumb img", card).forEach((img) => {
-      img.addEventListener("click", () => openLightbox(img.src));
+    $$(".shots-grid .shot-thumb", card).forEach((thumb) => {
+      const img = $("img", thumb);
+      if (!img) return;
+      img.addEventListener("click", () => {
+        const shotId = parseInt(thumb.dataset.shot, 10);
+        const slides = caseShots(code);
+        const idx = slides.findIndex((s) => s.id === shotId);
+        openCarousel(slides, idx < 0 ? 0 : idx, `Evidências — ${code}`);
+      });
     });
     $$(".del[data-del-shot]", card).forEach((btn) => {
       btn.addEventListener("click", async (e) => {
@@ -281,6 +288,7 @@
     old.replaceWith(fresh);
     attachOneCardHandlers(fresh);
     applyFilters();
+    updatePresentCount();
   }
 
   function cssEscape(s) { return s.replace(/[^a-zA-Z0-9_-]/g, (c) => "\\" + c); }
@@ -340,6 +348,138 @@
     const pct = Math.round((executado / total) * 100);
     $("#hero-pct").textContent = pct + "%";
     $("#pbar-fill").style.width = pct + "%";
+    updatePresentCount();
+  }
+
+  // ---------------- flow tabs (Fluxo A / B / C) ----------------
+  // Hoje todo o conteúdo é do Fluxo C. Fluxo A e B ficam separados como abas
+  // "ainda não iniciadas" — quando começarem os testes, os casos ganham um
+  // marcador de fluxo (campo `fluxo`) e caem na aba certa; por ora tudo cai em C.
+  let currentFlow = "C";
+  function caseFlow(c) { return c.fluxo || "C"; }
+
+  function setFlow(flow) {
+    currentFlow = flow;
+    $$(".flow-tab").forEach((t) => {
+      const on = t.dataset.flow === flow;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    $$(".flow-panel").forEach((p) => { p.hidden = p.dataset.flowPanel !== flow; });
+    updatePresentCount();
+  }
+  $$(".flow-tab").forEach((t) => t.addEventListener("click", () => setFlow(t.dataset.flow)));
+
+  // ---------------- carrossel de evidências (modo apresentação) ----------------
+  const STATUS_CAP = { "Aprovado": "ok", "Reprovado": "bad", "Bloqueado": "warn", "N/A": "na", "Não testado": "nt" };
+  const carState = { slides: [], i: 0 };
+
+  function slideOf(c, s) {
+    return {
+      id: s.id, filename: s.filename, uploaded_by: s.uploaded_by, created_at: s.created_at,
+      code: c.code, estagio: c.estagio, estagio_num: c.estagio_num, frente: c.frente, status: c.status,
+    };
+  }
+  function cmpSlide(a, b) {
+    const an = a.estagio_num == null ? 999 : a.estagio_num;
+    const bn = b.estagio_num == null ? 999 : b.estagio_num;
+    if (an !== bn) return an - bn;                     // ordena por estágio (01→12)
+    if (a.code !== b.code) return a.code < b.code ? -1 : 1;
+    return a.id - b.id;                                 // e por ordem de upload dentro do caso
+  }
+  function flowShots(flow) {
+    const slides = [];
+    CASES.filter((c) => caseFlow(c) === flow).forEach((c) => {
+      (c.screenshots || []).forEach((s) => slides.push(slideOf(c, s)));
+    });
+    return slides.sort(cmpSlide);
+  }
+  function caseShots(code) {
+    const c = findCase(code);
+    return c ? (c.screenshots || []).map((s) => slideOf(c, s)) : [];
+  }
+
+  function openCarousel(slides, startIndex, title) {
+    carState.slides = slides;
+    carState.i = Math.max(0, Math.min(startIndex || 0, slides.length - 1));
+    $("#carousel-title").textContent = title;
+    buildTrack();
+    renderSlide();
+    $("#carousel").hidden = false;
+  }
+  function closeCarousel() { $("#carousel").hidden = true; }
+
+  function buildTrack() {
+    const track = $("#carousel-track");
+    track.innerHTML = carState.slides.map((s, i) =>
+      `<button type="button" class="track-dot" data-i="${i}" title="${esc(s.estagio)}"><img src="/api/screenshots/${s.id}" alt="" loading="lazy"></button>`
+    ).join("");
+    $$(".track-dot", track).forEach((d) => d.addEventListener("click", () => { carState.i = parseInt(d.dataset.i, 10); renderSlide(); }));
+  }
+
+  function renderSlide() {
+    const { slides, i } = carState;
+    const img = $("#carousel-img");
+    const empty = $("#carousel-empty");
+    const prev = $("#carousel-prev"), next = $("#carousel-next");
+    if (!slides.length) {
+      empty.hidden = false; img.style.display = "none";
+      $("#carousel-counter").textContent = "0 / 0";
+      $("#carousel-caption").innerHTML = "";
+      prev.disabled = next.disabled = true;
+      return;
+    }
+    empty.hidden = true; img.style.display = "";
+    const s = slides[i];
+    img.src = `/api/screenshots/${s.id}`;
+    img.alt = s.filename || "Evidência";
+    $("#carousel-counter").textContent = `${i + 1} / ${slides.length}`;
+    prev.disabled = i === 0;
+    next.disabled = i === slides.length - 1;
+    const stCode = STATUS_CAP[s.status] || "nt";
+    const metaBits = [
+      `<span class="cap-code">${esc(s.code)}</span>`,
+      s.uploaded_by ? "enviado por " + esc(s.uploaded_by) : "",
+      s.created_at ? fmtWhen(s.created_at) : "",
+    ].filter(Boolean).join(" · ");
+    $("#carousel-caption").innerHTML =
+      `<div class="cap-line">
+        <span class="cap-stage">${esc(s.estagio)}</span>
+        <span class="cap-tag">${esc(s.frente)}</span>
+        <span class="cap-tag cap-status ${stCode}">${esc(s.status)}</span>
+      </div>
+      <div class="cap-meta">${metaBits}</div>`;
+    const dots = $$(".track-dot", $("#carousel-track"));
+    dots.forEach((d, di) => d.classList.toggle("active", di === i));
+    if (dots[i]) dots[i].scrollIntoView({ inline: "center", block: "nearest" });
+  }
+
+  function carNext() { if (carState.i < carState.slides.length - 1) { carState.i++; renderSlide(); } }
+  function carPrev() { if (carState.i > 0) { carState.i--; renderSlide(); } }
+
+  $("#carousel-next").addEventListener("click", carNext);
+  $("#carousel-prev").addEventListener("click", carPrev);
+  $("#carousel-close").addEventListener("click", closeCarousel);
+  $("#carousel").addEventListener("click", (e) => { if (e.target.id === "carousel") closeCarousel(); });
+  document.addEventListener("keydown", (e) => {
+    if ($("#carousel").hidden) return;
+    if (e.key === "Escape") closeCarousel();
+    else if (e.key === "ArrowRight") carNext();
+    else if (e.key === "ArrowLeft") carPrev();
+  });
+
+  $("#btn-present").addEventListener("click", () => {
+    const slides = flowShots(currentFlow);
+    if (!slides.length) { toast("Nenhum print anexado ainda neste fluxo."); return; }
+    openCarousel(slides, 0, `Evidências — Fluxo ${currentFlow}`);
+  });
+
+  function updatePresentCount() {
+    const n = flowShots(currentFlow).length;
+    const el = $("#present-count");
+    if (el) el.textContent = n === 1 ? "1 print" : `${n} prints`;
+    const btn = $("#btn-present");
+    if (btn) btn.disabled = n === 0;
   }
 
   // ---------------- tester name ----------------

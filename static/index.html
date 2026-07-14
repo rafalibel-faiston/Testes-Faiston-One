@@ -31,6 +31,23 @@
 
 <main>
 
+  <nav class="flow-tabs" id="flow-tabs" aria-label="Selecionar fluxo de teste">
+    <button type="button" class="flow-tab active" data-flow="C" aria-selected="true">
+      <span class="flow-tab-name">Fluxo C</span>
+      <span class="flow-tab-sub">Despacho NEXO · em teste</span>
+    </button>
+    <button type="button" class="flow-tab" data-flow="A" aria-selected="false">
+      <span class="flow-tab-name">Fluxo A</span>
+      <span class="flow-tab-sub">ainda não iniciado</span>
+    </button>
+    <button type="button" class="flow-tab" data-flow="B" aria-selected="false">
+      <span class="flow-tab-name">Fluxo B</span>
+      <span class="flow-tab-sub">ainda não iniciado</span>
+    </button>
+  </nav>
+
+  <div class="flow-panel" data-flow-panel="C">
+
   <section class="hero">
     <div class="hero-progress">
       <div class="hero-progress-top">
@@ -45,6 +62,14 @@
       <div class="stat bad" data-k="Reprovado"><span class="stat-n" id="stat-bad">0</span><span class="stat-l">Reprovado</span></div>
       <div class="stat warn" data-k="Bloqueado"><span class="stat-n" id="stat-warn">0</span><span class="stat-l">Bloqueado</span></div>
       <div class="stat na" data-k="N/A"><span class="stat-n" id="stat-na">0</span><span class="stat-l">N/A</span></div>
+    </div>
+    <div class="hero-actions">
+      <button type="button" class="present-btn" id="btn-present">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Ver evidências em sequência
+        <span class="present-count" id="present-count">0 prints</span>
+      </button>
+      <span class="present-hint">Passa print a print, agrupado por estágio — feito pros superiores revisarem.</span>
     </div>
   </section>
 
@@ -76,6 +101,28 @@
     <div id="cases"></div>
   </section>
 
+  </div><!-- /flow-panel C -->
+
+  <div class="flow-panel" data-flow-panel="A" hidden>
+    <div class="flow-empty">
+      <div class="flow-empty-badge">Fluxo A</div>
+      <h2>Ainda não começamos a testar</h2>
+      <p>Este fluxo está separado e reservado. Quando a execução do Fluxo A começar,
+      os casos de teste, o progresso e as evidências aparecem aqui — do mesmo jeito que no Fluxo C.</p>
+      <span class="flow-empty-tag">Aguardando início</span>
+    </div>
+  </div>
+
+  <div class="flow-panel" data-flow-panel="B" hidden>
+    <div class="flow-empty">
+      <div class="flow-empty-badge">Fluxo B</div>
+      <h2>Ainda não começamos a testar</h2>
+      <p>Este fluxo está separado e reservado. Quando a execução do Fluxo B começar,
+      os casos de teste, o progresso e as evidências aparecem aqui — do mesmo jeito que no Fluxo C.</p>
+      <span class="flow-empty-tag">Aguardando início</span>
+    </div>
+  </div>
+
 </main>
 
 <footer>
@@ -86,6 +133,24 @@
 <div class="lightbox" id="lightbox" hidden>
   <button class="lightbox-close" id="lightbox-close" aria-label="Fechar">✕</button>
   <img id="lightbox-img" src="" alt="Print ampliado">
+</div>
+
+<div class="carousel" id="carousel" hidden aria-modal="true" role="dialog">
+  <div class="carousel-top">
+    <div class="carousel-title" id="carousel-title">Evidências</div>
+    <div class="carousel-counter" id="carousel-counter">0 / 0</div>
+    <button class="carousel-close" id="carousel-close" aria-label="Fechar">✕</button>
+  </div>
+  <div class="carousel-body">
+    <button class="carousel-nav prev" id="carousel-prev" aria-label="Anterior">‹</button>
+    <div class="carousel-stage">
+      <div class="carousel-empty" id="carousel-empty" hidden>Nenhum print anexado ainda neste fluxo.</div>
+      <img id="carousel-img" src="" alt="Evidência">
+    </div>
+    <button class="carousel-nav next" id="carousel-next" aria-label="Próximo">›</button>
+  </div>
+  <div class="carousel-caption" id="carousel-caption"></div>
+  <div class="carousel-track" id="carousel-track"></div>
 </div>
 
 <div class="toast" id="toast" hidden></div>
