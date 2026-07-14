@@ -218,8 +218,11 @@
       <p class="notes-hint">Anote aqui qualquer ponto que surgir durante os testes — dúvida, bug, decisão pendente —
       pra levar pra reunião. Não precisa ter um caso de teste vinculado.</p>
       <form id="notes-form" class="notes-add">
-        <textarea id="notes-input" rows="2" placeholder="Escreva o ponto..." required></textarea>
-        <button type="submit" class="btn-primary">Adicionar</button>
+        <input type="text" id="notes-estagio" placeholder="Estágio relacionado (opcional) — ex.: 03 · Téc. Aceitou" autocomplete="off">
+        <div class="notes-add-row">
+          <textarea id="notes-input" rows="2" placeholder="Escreva o ponto..." required></textarea>
+          <button type="submit" class="btn-primary">Adicionar</button>
+        </div>
       </form>
       <div class="notes-list" id="notes-list"></div>
     </div>

@@ -47,6 +47,7 @@ class MeetingNote(Base):
 
     id = Column(Integer, primary_key=True)
     fluxo = Column(String, nullable=False, default="C", server_default="C")
+    estagio = Column(String, nullable=True)   # de qual estágio é o ponto, se aplicável
     texto = Column(Text, nullable=False)
     autor = Column(String, nullable=True)
     resolvido = Column(Boolean, nullable=False, default=False, server_default=expression.false())

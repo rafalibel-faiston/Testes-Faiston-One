@@ -656,14 +656,15 @@
 
   function noteItem(n) {
     return `<div class="note-item ${n.resolvido ? "resolvido" : ""}" data-id="${n.id}">
-      <input type="checkbox" class="note-check" ${n.resolvido ? "checked" : ""} title="Marcar como discutido">
-      <div class="note-body">
-        <div class="note-text">${esc(n.texto)}</div>
-        <div class="note-meta">${n.autor ? esc(n.autor) + " · " : ""}${fmtWhen(n.created_at)}</div>
+      <div class="note-head">
+        <input type="checkbox" class="note-check" ${n.resolvido ? "checked" : ""} title="Marcar como discutido">
+        ${n.estagio ? `<span class="tag note-stage">${esc(n.estagio)}</span>` : ""}
+        <button type="button" class="note-del" title="Excluir ponto" aria-label="Excluir">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
       </div>
-      <button type="button" class="note-del" title="Excluir ponto" aria-label="Excluir">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-      </button>
+      <div class="note-text">${esc(n.texto)}</div>
+      <div class="note-meta">${n.autor ? esc(n.autor) + " · " : ""}${fmtWhen(n.created_at)}</div>
     </div>`;
   }
 
@@ -689,6 +690,7 @@
       });
       const idx = NOTES.findIndex((n) => n.id === updated.id);
       if (idx >= 0) NOTES[idx] = updated;
+      renderNotesList();
       updateNotesCount();
     } catch (e) { toast("Erro ao atualizar ponto: " + e.message, true); }
   }
@@ -718,15 +720,20 @@
   $("#notes-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const input = $("#notes-input");
+    const estagioInput = $("#notes-estagio");
     const texto = input.value.trim();
     if (!texto) return;
     try {
       const created = await api("/api/notas", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fluxo: currentFlow, texto, autor: testerName() || undefined }),
+        body: JSON.stringify({
+          fluxo: currentFlow, texto, autor: testerName() || undefined,
+          estagio: estagioInput.value.trim() || undefined,
+        }),
       });
       NOTES.push(created);
       input.value = "";
+      estagioInput.value = "";
       renderNotesList();
       updateNotesCount();
     } catch (err) { toast("Erro ao salvar ponto: " + err.message, true); }
