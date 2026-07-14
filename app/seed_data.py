@@ -229,6 +229,35 @@ _SYNC_FIELDS = [
 ]
 
 
+def migrate_schema(engine):
+    """Adiciona colunas novas (fluxo, active, user_managed) em bancos que já
+    existem — create_all() só cria tabelas do zero, não altera as existentes.
+    Idempotente: checa as colunas atuais antes de qualquer ALTER.
+    """
+    from sqlalchemy import inspect, text
+
+    insp = inspect(engine)
+    if "test_cases" not in insp.get_table_names():
+        return 0
+    cols = {c["name"] for c in insp.get_columns("test_cases")}
+    pg = engine.dialect.name == "postgresql"
+    stmts = []
+    if "fluxo" not in cols:
+        stmts.append("ALTER TABLE test_cases ADD COLUMN fluxo VARCHAR NOT NULL DEFAULT 'C'")
+    if "active" not in cols:
+        stmts.append("ALTER TABLE test_cases ADD COLUMN active BOOLEAN NOT NULL DEFAULT "
+                     + ("TRUE" if pg else "1"))
+    if "user_managed" not in cols:
+        stmts.append("ALTER TABLE test_cases ADD COLUMN user_managed BOOLEAN NOT NULL DEFAULT "
+                     + ("FALSE" if pg else "0"))
+    if not stmts:
+        return 0
+    with engine.begin() as conn:
+        for s in stmts:
+            conn.execute(text(s))
+    return len(stmts)
+
+
 def seed(db):
     """Popula/atualiza o banco a cada subida.
 
@@ -237,6 +266,8 @@ def seed(db):
       resultado esperado etc.) com o que está em ALL_CASES aqui embaixo, mas
       NUNCA mexe em status, observação, testado_por ou nos prints já anexados
       — isso é progresso real de teste e não pode ser perdido num redeploy.
+    - Caso marcado user_managed (criado/editado na tela): NÃO sincroniza nada —
+      o dono do caso é o usuário, não este arquivo.
     """
     from .models import TestCase
 
@@ -249,6 +280,8 @@ def seed(db):
             db.add(TestCase(status="Não testado", observacao="", **case))
             added += 1
             continue
+        if getattr(row, "user_managed", False):
+            continue  # usuário assumiu esse caso — não toca nos textos dele
         changed = False
         for field in _SYNC_FIELDS:
             if getattr(row, field) != case.get(field):

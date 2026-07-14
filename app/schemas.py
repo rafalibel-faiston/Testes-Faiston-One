@@ -33,6 +33,7 @@ class TestCaseOut(BaseModel):
 
     id: int
     code: str
+    fluxo: str = "C"
     grupo: str
     estagio: str
     estagio_num: Optional[int] = None
@@ -46,6 +47,7 @@ class TestCaseOut(BaseModel):
     status: str
     observacao: Optional[str] = ""
     testado_por: Optional[str] = None
+    user_managed: Optional[bool] = False
     updated_at: Optional[datetime] = None
     screenshots: List[ScreenshotOut] = []
     observations: List[ObservationOut] = []
@@ -54,6 +56,32 @@ class TestCaseOut(BaseModel):
 class TestCaseUpdate(BaseModel):
     status: Optional[str] = None
     testado_por: Optional[str] = None
+    # campos descritivos — editáveis na tela; ao mudar qualquer um, o caso
+    # vira user_managed e o seed para de sobrescrevê-lo.
+    fluxo: Optional[str] = None
+    grupo: Optional[str] = None
+    estagio: Optional[str] = None
+    frente: Optional[str] = None
+    tipo: Optional[str] = None
+    prioridade: Optional[str] = None
+    origem: Optional[str] = None
+    pre_condicao: Optional[str] = None
+    passos: Optional[str] = None
+    resultado_esperado: Optional[str] = None
+
+
+class TestCaseCreate(BaseModel):
+    code: Optional[str] = None          # gerado automaticamente se vazio
+    fluxo: str = "C"
+    grupo: str = "Grupo C"
+    estagio: str
+    frente: str = "A definir"
+    tipo: str = "Manual"
+    prioridade: str = "Média"
+    origem: str = "Criado no console"
+    pre_condicao: str = ""
+    passos: str = ""
+    resultado_esperado: str
 
 
 class SummaryOut(BaseModel):

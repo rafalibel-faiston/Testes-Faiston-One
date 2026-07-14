@@ -46,8 +46,6 @@
     </button>
   </nav>
 
-  <div class="flow-panel" data-flow-panel="C">
-
   <section class="hero">
     <div class="hero-progress">
       <div class="hero-progress-top">
@@ -64,6 +62,10 @@
       <div class="stat na" data-k="N/A"><span class="stat-n" id="stat-na">0</span><span class="stat-l">N/A</span></div>
     </div>
     <div class="hero-actions">
+      <button type="button" class="add-btn" id="btn-add-case">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Novo teste
+      </button>
       <button type="button" class="present-btn" id="btn-present">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         Ver evidências em sequência
@@ -98,30 +100,18 @@
 
   <section id="cases-wrap">
     <div id="cases-loading" class="loading">Carregando casos de teste…</div>
+    <div id="flow-empty" class="flow-empty" hidden>
+      <div class="flow-empty-badge" id="flow-empty-badge">Fluxo A</div>
+      <h2>Ainda não começamos a testar</h2>
+      <p>Este fluxo está separado e reservado. Adicione o primeiro teste aqui, ou
+      jogue o material dele no Cowork que eu gero os casos pra você.</p>
+      <button type="button" class="add-btn" id="flow-empty-add">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Adicionar primeiro teste
+      </button>
+    </div>
     <div id="cases"></div>
   </section>
-
-  </div><!-- /flow-panel C -->
-
-  <div class="flow-panel" data-flow-panel="A" hidden>
-    <div class="flow-empty">
-      <div class="flow-empty-badge">Fluxo A</div>
-      <h2>Ainda não começamos a testar</h2>
-      <p>Este fluxo está separado e reservado. Quando a execução do Fluxo A começar,
-      os casos de teste, o progresso e as evidências aparecem aqui — do mesmo jeito que no Fluxo C.</p>
-      <span class="flow-empty-tag">Aguardando início</span>
-    </div>
-  </div>
-
-  <div class="flow-panel" data-flow-panel="B" hidden>
-    <div class="flow-empty">
-      <div class="flow-empty-badge">Fluxo B</div>
-      <h2>Ainda não começamos a testar</h2>
-      <p>Este fluxo está separado e reservado. Quando a execução do Fluxo B começar,
-      os casos de teste, o progresso e as evidências aparecem aqui — do mesmo jeito que no Fluxo C.</p>
-      <span class="flow-empty-tag">Aguardando início</span>
-    </div>
-  </div>
 
 </main>
 
@@ -151,6 +141,62 @@
   </div>
   <div class="carousel-caption" id="carousel-caption"></div>
   <div class="carousel-track" id="carousel-track"></div>
+</div>
+
+<div class="modal" id="case-modal" hidden aria-modal="true" role="dialog">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3 id="modal-title">Novo teste</h3>
+      <span class="modal-code" id="modal-code"></span>
+      <button type="button" class="modal-close" id="modal-close" aria-label="Fechar">✕</button>
+    </div>
+    <form id="case-form" class="modal-body">
+      <div class="form-grid">
+        <label class="fld">Fluxo
+          <select name="fluxo">
+            <option value="C">Fluxo C</option>
+            <option value="A">Fluxo A</option>
+            <option value="B">Fluxo B</option>
+          </select>
+        </label>
+        <label class="fld">Grupo
+          <input name="grupo" list="grupo-opts" placeholder="ex.: Grupo C" value="Grupo C">
+          <datalist id="grupo-opts">
+            <option value="Grupo A"><option value="Grupo B"><option value="Grupo C"><option value="Grupo D">
+          </datalist>
+        </label>
+        <label class="fld">Prioridade
+          <select name="prioridade">
+            <option>Alta</option><option selected>Média</option><option>Baixa</option><option>A definir</option>
+          </select>
+        </label>
+      </div>
+      <div class="form-grid">
+        <label class="fld fld-wide">Estágio
+          <input name="estagio" placeholder="ex.: 03 · Téc. Aceitou" required>
+          <span class="fld-hint">Comece com o número (01, 02…) pra entrar na ordem certa do carrossel.</span>
+        </label>
+        <label class="fld">Frente
+          <select name="frente">
+            <option>Operador (web)</option><option>App do técnico</option><option>Transversal</option><option>A definir</option>
+          </select>
+        </label>
+      </div>
+      <label class="fld">Pré-condição
+        <textarea name="pre_condicao" rows="2" placeholder="O que precisa estar pronto antes de testar"></textarea>
+      </label>
+      <label class="fld">Passos
+        <textarea name="passos" rows="2" placeholder="Como reproduzir"></textarea>
+      </label>
+      <label class="fld">Resultado esperado <b>*</b>
+        <textarea name="resultado_esperado" rows="3" placeholder="O que tem que acontecer pra passar" required></textarea>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="modal-cancel">Cancelar</button>
+        <button type="submit" class="btn-primary" id="modal-save">Salvar teste</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <div class="toast" id="toast" hidden></div>

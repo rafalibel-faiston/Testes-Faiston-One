@@ -1,6 +1,6 @@
-from sqlalchemy import Column, Integer, String, Text, LargeBinary, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, LargeBinary, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, expression
 
 from .database import Base
 
@@ -10,6 +10,7 @@ class TestCase(Base):
 
     id = Column(Integer, primary_key=True)
     code = Column(String, unique=True, index=True, nullable=False)
+    fluxo = Column(String, nullable=False, default="C", server_default="C")  # Fluxo A / B / C
     grupo = Column(String, nullable=False)          # Grupo A / B / C / D
     estagio = Column(String, nullable=False)
     estagio_num = Column(Integer, nullable=True)
@@ -23,6 +24,11 @@ class TestCase(Base):
     status = Column(String, nullable=False, default="Não testado")
     observacao = Column(Text, nullable=True, default="")
     testado_por = Column(String, nullable=True)
+    # active=False é exclusão suave (some da tela, não ressuscita no deploy, recuperável).
+    active = Column(Boolean, nullable=False, default=True, server_default=expression.true())
+    # user_managed=True marca um caso que o usuário criou/editou na tela — o seed
+    # NUNCA sobrescreve os textos desse caso num redeploy.
+    user_managed = Column(Boolean, nullable=False, default=False, server_default=expression.false())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
     screenshots = relationship(
