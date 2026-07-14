@@ -252,8 +252,6 @@ def migrate_schema(engine):
                      + ("FALSE" if pg else "0"))
     if "chamado" not in cols:
         stmts.append("ALTER TABLE test_cases ADD COLUMN chamado VARCHAR")
-    if "horario" not in cols:
-        stmts.append("ALTER TABLE test_cases ADD COLUMN horario VARCHAR")
     if not stmts:
         return 0
     with engine.begin() as conn:

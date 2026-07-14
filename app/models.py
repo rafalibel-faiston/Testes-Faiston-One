@@ -24,8 +24,7 @@ class TestCase(Base):
     status = Column(String, nullable=False, default="Não testado")
     observacao = Column(Text, nullable=True, default="")
     testado_por = Column(String, nullable=True)
-    chamado = Column(String, nullable=True)     # nº do chamado/OS usado no teste
-    horario = Column(String, nullable=True)     # horário em que o teste foi feito
+    chamado = Column(String, nullable=True)     # chamado testado
     # active=False é exclusão suave (some da tela, não ressuscita no deploy, recuperável).
     active = Column(Boolean, nullable=False, default=True, server_default=expression.true())
     # user_managed=True marca um caso que o usuário criou/editou na tela — o seed

@@ -82,7 +82,6 @@ def create_case(payload: schemas.TestCaseCreate, db: Session = Depends(get_db)):
         passos=payload.passos,
         resultado_esperado=payload.resultado_esperado,
         chamado=payload.chamado,
-        horario=payload.horario,
         status="Não testado",
         observacao="",
         user_managed=True,
@@ -118,11 +117,9 @@ def update_case(code: str, payload: schemas.TestCaseUpdate, db: Session = Depend
         case.status = payload.status
     if payload.testado_por is not None:
         case.testado_por = payload.testado_por
-    # dados de execução — do testador, não são "conteúdo do caso" (não viram user_managed)
+    # dado de execução — do testador, não é "conteúdo do caso" (não vira user_managed)
     if payload.chamado is not None:
         case.chamado = payload.chamado
-    if payload.horario is not None:
-        case.horario = payload.horario
 
     # edição de campos descritivos → o caso passa a ser "do usuário"
     data = payload.model_dump(exclude_unset=True)
