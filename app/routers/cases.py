@@ -17,7 +17,7 @@ VALID_STATUSES = {"Não testado", "Aprovado", "Reprovado", "Bloqueado", "N/A"}
 # campos descritivos que, ao serem editados, tornam o caso "do usuário"
 DESCRIPTIVE_FIELDS = {
     "fluxo", "grupo", "estagio", "frente", "tipo", "prioridade",
-    "origem", "pre_condicao", "passos", "resultado_esperado",
+    "origem", "pre_condicao", "passos", "resultado_esperado", "problema_encontrado",
 }
 
 
@@ -81,6 +81,7 @@ def create_case(payload: schemas.TestCaseCreate, db: Session = Depends(get_db)):
         pre_condicao=payload.pre_condicao,
         passos=payload.passos,
         resultado_esperado=payload.resultado_esperado,
+        problema_encontrado=payload.problema_encontrado,
         chamado=payload.chamado,
         status="Não testado",
         observacao="",

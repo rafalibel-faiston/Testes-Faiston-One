@@ -102,7 +102,8 @@ def export_excel(fluxo: str = Query("C"), db: Session = Depends(get_db)):
                 ws.cell(row=r, column=5).fill = PatternFill(start_color=fill, end_color=fill, fill_type="solid")
 
             for c in items:
-                ws.append(["-", c.frente, c.passos, c.resultado_esperado, c.status])
+                problema = c.problema_encontrado or c.passos
+                ws.append(["-", c.frente, problema, c.resultado_esperado, c.status])
                 r = ws.max_row
                 fill = STATUS_FILL.get(c.status)
                 if fill:

@@ -44,6 +44,7 @@ class TestCaseOut(BaseModel):
     pre_condicao: str
     passos: str
     resultado_esperado: str
+    problema_encontrado: Optional[str] = None
     status: str
     observacao: Optional[str] = ""
     testado_por: Optional[str] = None
@@ -71,6 +72,7 @@ class TestCaseUpdate(BaseModel):
     pre_condicao: Optional[str] = None
     passos: Optional[str] = None
     resultado_esperado: Optional[str] = None
+    problema_encontrado: Optional[str] = None
 
 
 class TestCaseCreate(BaseModel):
@@ -85,6 +87,7 @@ class TestCaseCreate(BaseModel):
     pre_condicao: str = ""
     passos: str = ""
     resultado_esperado: str
+    problema_encontrado: Optional[str] = None
     chamado: Optional[str] = None
 
 
