@@ -40,6 +40,20 @@ class TestCase(Base):
     )
 
 
+class MeetingNote(Base):
+    """Ponto solto levantado durante os testes pra levar pra reunião — não
+    exige nenhum caso de teste executado, só o registro da ideia/dúvida/bug."""
+    __tablename__ = "meeting_notes"
+
+    id = Column(Integer, primary_key=True)
+    fluxo = Column(String, nullable=False, default="C", server_default="C")
+    texto = Column(Text, nullable=False)
+    autor = Column(String, nullable=True)
+    resolvido = Column(Boolean, nullable=False, default=False, server_default=expression.false())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
 class Observation(Base):
     """Uma nota do historico de observacoes de um caso — cada uma com seu proprio autor,
     diferente do campo antigo `TestCase.observacao` (unico, qualquer um sobrescrevia)."""

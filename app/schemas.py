@@ -92,3 +92,26 @@ class SummaryOut(BaseModel):
     total: int
     counts: dict
     pct_executado: float
+
+
+class MeetingNoteOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    fluxo: str = "C"
+    texto: str
+    autor: Optional[str] = None
+    resolvido: bool = False
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class MeetingNoteCreate(BaseModel):
+    fluxo: str = "C"
+    texto: str
+    autor: Optional[str] = None
+
+
+class MeetingNoteUpdate(BaseModel):
+    texto: Optional[str] = None
+    resolvido: Optional[bool] = None
