@@ -99,6 +99,7 @@ class MeetingNoteOut(BaseModel):
 
     id: int
     fluxo: str = "C"
+    estagio: Optional[str] = None
     texto: str
     autor: Optional[str] = None
     resolvido: bool = False
@@ -108,10 +109,12 @@ class MeetingNoteOut(BaseModel):
 
 class MeetingNoteCreate(BaseModel):
     fluxo: str = "C"
+    estagio: Optional[str] = None
     texto: str
     autor: Optional[str] = None
 
 
 class MeetingNoteUpdate(BaseModel):
     texto: Optional[str] = None
+    estagio: Optional[str] = None
     resolvido: Optional[bool] = None

@@ -230,28 +230,35 @@ _SYNC_FIELDS = [
 
 
 def migrate_schema(engine):
-    """Adiciona colunas novas (fluxo, active, user_managed) em bancos que já
-    existem — create_all() só cria tabelas do zero, não altera as existentes.
-    Idempotente: checa as colunas atuais antes de qualquer ALTER.
+    """Adiciona colunas novas em tabelas que já existem — create_all() só cria
+    tabelas do zero, não altera as existentes. Idempotente: checa as colunas
+    atuais antes de qualquer ALTER.
     """
     from sqlalchemy import inspect, text
 
     insp = inspect(engine)
-    if "test_cases" not in insp.get_table_names():
-        return 0
-    cols = {c["name"] for c in insp.get_columns("test_cases")}
+    existing_tables = set(insp.get_table_names())
     pg = engine.dialect.name == "postgresql"
     stmts = []
-    if "fluxo" not in cols:
-        stmts.append("ALTER TABLE test_cases ADD COLUMN fluxo VARCHAR NOT NULL DEFAULT 'C'")
-    if "active" not in cols:
-        stmts.append("ALTER TABLE test_cases ADD COLUMN active BOOLEAN NOT NULL DEFAULT "
-                     + ("TRUE" if pg else "1"))
-    if "user_managed" not in cols:
-        stmts.append("ALTER TABLE test_cases ADD COLUMN user_managed BOOLEAN NOT NULL DEFAULT "
-                     + ("FALSE" if pg else "0"))
-    if "chamado" not in cols:
-        stmts.append("ALTER TABLE test_cases ADD COLUMN chamado VARCHAR")
+
+    if "test_cases" in existing_tables:
+        cols = {c["name"] for c in insp.get_columns("test_cases")}
+        if "fluxo" not in cols:
+            stmts.append("ALTER TABLE test_cases ADD COLUMN fluxo VARCHAR NOT NULL DEFAULT 'C'")
+        if "active" not in cols:
+            stmts.append("ALTER TABLE test_cases ADD COLUMN active BOOLEAN NOT NULL DEFAULT "
+                         + ("TRUE" if pg else "1"))
+        if "user_managed" not in cols:
+            stmts.append("ALTER TABLE test_cases ADD COLUMN user_managed BOOLEAN NOT NULL DEFAULT "
+                         + ("FALSE" if pg else "0"))
+        if "chamado" not in cols:
+            stmts.append("ALTER TABLE test_cases ADD COLUMN chamado VARCHAR")
+
+    if "meeting_notes" in existing_tables:
+        note_cols = {c["name"] for c in insp.get_columns("meeting_notes")}
+        if "estagio" not in note_cols:
+            stmts.append("ALTER TABLE meeting_notes ADD COLUMN estagio VARCHAR")
+
     if not stmts:
         return 0
     with engine.begin() as conn:

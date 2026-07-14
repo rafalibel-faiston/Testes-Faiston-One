@@ -22,7 +22,9 @@ def create_note(payload: schemas.MeetingNoteCreate, db: Session = Depends(get_db
     texto = (payload.texto or "").strip()
     if not texto:
         raise HTTPException(status_code=400, detail="Ponto vazio.")
-    note = models.MeetingNote(fluxo=payload.fluxo or "C", texto=texto, autor=payload.autor)
+    note = models.MeetingNote(
+        fluxo=payload.fluxo or "C", estagio=payload.estagio, texto=texto, autor=payload.autor
+    )
     db.add(note)
     db.commit()
     db.refresh(note)
@@ -39,6 +41,8 @@ def update_note(note_id: int, payload: schemas.MeetingNoteUpdate, db: Session = 
         if not texto:
             raise HTTPException(status_code=400, detail="Ponto vazio.")
         note.texto = texto
+    if payload.estagio is not None:
+        note.estagio = payload.estagio
     if payload.resolvido is not None:
         note.resolvido = payload.resolvido
     db.commit()
