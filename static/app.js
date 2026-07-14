@@ -537,6 +537,20 @@
     if (btn) btn.disabled = n === 0;
   }
 
+  // ---------------- exportar excel ----------------
+  // Baixa o fluxo aberto no formato da planilha de acompanhamento (# / Estágio /
+  // Problema encontrado / Ajuste solicitado / Status) — o servidor monta o .xlsx.
+  $("#btn-export").addEventListener("click", () => {
+    const url = `/api/export?fluxo=${encodeURIComponent(currentFlow)}`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    toast(`Exportando Fluxo ${currentFlow}...`);
+  });
+
   // ---------------- modal: criar / editar / excluir caso ----------------
   let editingCode = null;
   const modal = $("#case-modal");
