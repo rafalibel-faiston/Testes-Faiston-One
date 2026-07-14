@@ -294,7 +294,7 @@ main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
 .obs-add-btn:hover { transform:translateY(-1px); box-shadow:0 6px 16px -6px rgba(0,84,236,.5); }
 .obs-add-btn:disabled { opacity:.6; cursor:default; transform:none; }
 
-/* ---------- registro de execução (chamado + horário) ---------- */
+/* ---------- registro de execução (chamado testado) ---------- */
 .reg-row { display:flex; gap:12px; flex-wrap:wrap; }
 .reg-field { display:flex; flex-direction:column; gap:4px; flex:1; min-width:150px; }
 .reg-k { font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:var(--text-3); font-weight:700; }
@@ -304,16 +304,8 @@ main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
   transition:border-color .15s var(--ease), box-shadow .15s var(--ease); width:100%;
 }
 .reg-field input:focus { outline:none; border-color:var(--f-blue); box-shadow:0 0 0 3px rgba(0,84,236,.10); }
-.reg-h { display:flex; gap:6px; align-items:stretch; }
-.reg-h input { flex:1; }
-.reg-now {
-  flex-shrink:0; border:1px solid var(--line-2); background:var(--surface-2); color:var(--text-2);
-  border-radius:8px; padding:0 12px; font-size:11px; font-weight:600; font-family:'Roboto',sans-serif;
-  cursor:pointer; transition:all .15s var(--ease);
-}
-.reg-now:hover { color:var(--f-blue); border-color:var(--f-blue); background:rgba(0,84,236,.06); }
 
-/* linha de chamado/horário na legenda do carrossel */
+/* linha de chamado na legenda do carrossel */
 .carousel-caption .cap-reg {
   font-size:12.5px; font-weight:600; color:#fff;
   background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2);

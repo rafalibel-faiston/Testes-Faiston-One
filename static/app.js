@@ -22,12 +22,6 @@
   const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
   const esc = (s) => (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  function nowStr() {
-    const d = new Date();
-    const pad = (n) => String(n).padStart(2, "0");
-    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  }
-
   function fmtWhen(iso) {
     if (!iso) return "";
     const d = new Date(iso);
@@ -154,14 +148,7 @@
         <div class="reg-row">
           <label class="reg-field">
             <span class="reg-k">Chamado testado</span>
-            <input class="reg-chamado" type="text" value="${esc(c.chamado || "")}" placeholder="nº da OS" autocomplete="off">
-          </label>
-          <label class="reg-field">
-            <span class="reg-k">Horário do teste</span>
-            <span class="reg-h">
-              <input class="reg-horario" type="text" value="${esc(c.horario || "")}" placeholder="dd/mm hh:mm" autocomplete="off">
-              <button type="button" class="reg-now" title="Preencher com o horário de agora">agora</button>
-            </span>
+            <input class="reg-chamado" type="text" value="${esc(c.chamado || "")}" placeholder="qual chamado foi testado" autocomplete="off">
           </label>
         </div>
         <div class="obs-row">
@@ -239,24 +226,17 @@
     const delBtn = $(".case-icon-btn[data-del-case]", card);
     if (delBtn) delBtn.addEventListener("click", () => deleteCase(code));
 
-    // registro de execução: chamado + horário (salva sozinho ao sair do campo)
+    // registro de execução: chamado testado (salva sozinho ao sair do campo)
     const chamadoInput = $(".reg-chamado", card);
-    const horarioInput = $(".reg-horario", card);
-    const nowBtn = $(".reg-now", card);
-    const saveReg = async (patch) => {
+    if (chamadoInput) chamadoInput.addEventListener("change", async () => {
       try {
         const updated = await api(`/api/cases/${encodeURIComponent(code)}`, {
-          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chamado: chamadoInput.value.trim() }),
         });
         patchCaseLocal(code, updated);
-        toast("Registro salvo");
+        toast("Chamado salvo");
       } catch (e) { toast("Erro ao salvar: " + e.message, true); }
-    };
-    if (chamadoInput) chamadoInput.addEventListener("change", () => saveReg({ chamado: chamadoInput.value.trim() }));
-    if (horarioInput) horarioInput.addEventListener("change", () => saveReg({ horario: horarioInput.value.trim() }));
-    if (nowBtn) nowBtn.addEventListener("click", () => {
-      horarioInput.value = nowStr();
-      saveReg({ horario: horarioInput.value });
     });
 
     const updateMeta = (updated) => {
@@ -449,7 +429,7 @@
     return {
       id: s.id, filename: s.filename, uploaded_by: s.uploaded_by, created_at: s.created_at,
       code: c.code, estagio: c.estagio, estagio_num: c.estagio_num, frente: c.frente, status: c.status,
-      chamado: c.chamado, horario: c.horario,
+      chamado: c.chamado,
     };
   }
   function cmpSlide(a, b) {
@@ -509,10 +489,7 @@
     prev.disabled = i === 0;
     next.disabled = i === slides.length - 1;
     const stCode = STATUS_CAP[s.status] || "nt";
-    const regBits = [
-      s.chamado ? "Chamado " + esc(s.chamado) : "",
-      s.horario ? esc(s.horario) : "",
-    ].filter(Boolean).join(" · ");
+    const regBits = s.chamado ? "Chamado " + esc(s.chamado) : "";
     const metaBits = [
       `<span class="cap-code">${esc(s.code)}</span>`,
       s.uploaded_by ? "enviado por " + esc(s.uploaded_by) : "",
@@ -581,7 +558,6 @@
       form.passos.value = c.passos || "";
       form.resultado_esperado.value = c.resultado_esperado || "";
       form.chamado.value = c.chamado || "";
-      form.horario.value = c.horario || "";
     } else {
       form.reset();
       codeEl.hidden = true;
@@ -607,7 +583,6 @@
       passos: form.passos.value.trim(),
       resultado_esperado: form.resultado_esperado.value.trim(),
       chamado: form.chamado.value.trim(),
-      horario: form.horario.value.trim(),
     };
     if (!payload.estagio) { toast("Informe o estágio.", true); return; }
     if (!payload.resultado_esperado) { toast("Informe o resultado esperado.", true); return; }
