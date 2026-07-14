@@ -191,6 +191,14 @@
       <label class="fld">Resultado esperado <b>*</b>
         <textarea name="resultado_esperado" rows="3" placeholder="O que tem que acontecer pra passar" required></textarea>
       </label>
+      <div class="form-grid">
+        <label class="fld">Chamado testado
+          <input name="chamado" placeholder="nº da OS (opcional)" autocomplete="off">
+        </label>
+        <label class="fld fld-wide">Horário do teste
+          <input name="horario" placeholder="dd/mm hh:mm (opcional)" autocomplete="off">
+        </label>
+      </div>
       <div class="modal-actions">
         <button type="button" class="btn-ghost" id="modal-cancel">Cancelar</button>
         <button type="submit" class="btn-primary" id="modal-save">Salvar teste</button>

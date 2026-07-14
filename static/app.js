@@ -22,6 +22,12 @@
   const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
   const esc = (s) => (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+  function nowStr() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
   function fmtWhen(iso) {
     if (!iso) return "";
     const d = new Date(iso);
@@ -145,6 +151,19 @@
           </div>
         </div>
         <div class="case-meta">Testado por <span class="who">${c.testado_por ? esc(c.testado_por) : "—"}</span><span class="when">${c.testado_por ? " · " + fmtWhen(c.updated_at) : ""}</span></div>
+        <div class="reg-row">
+          <label class="reg-field">
+            <span class="reg-k">Chamado testado</span>
+            <input class="reg-chamado" type="text" value="${esc(c.chamado || "")}" placeholder="nº da OS" autocomplete="off">
+          </label>
+          <label class="reg-field">
+            <span class="reg-k">Horário do teste</span>
+            <span class="reg-h">
+              <input class="reg-horario" type="text" value="${esc(c.horario || "")}" placeholder="dd/mm hh:mm" autocomplete="off">
+              <button type="button" class="reg-now" title="Preencher com o horário de agora">agora</button>
+            </span>
+          </label>
+        </div>
         <div class="obs-row">
           <div class="obs-list">${obsList(c.observations)}</div>
           <div class="obs-add">
@@ -219,6 +238,26 @@
     if (editBtn) editBtn.addEventListener("click", () => openCaseModal("edit", code));
     const delBtn = $(".case-icon-btn[data-del-case]", card);
     if (delBtn) delBtn.addEventListener("click", () => deleteCase(code));
+
+    // registro de execução: chamado + horário (salva sozinho ao sair do campo)
+    const chamadoInput = $(".reg-chamado", card);
+    const horarioInput = $(".reg-horario", card);
+    const nowBtn = $(".reg-now", card);
+    const saveReg = async (patch) => {
+      try {
+        const updated = await api(`/api/cases/${encodeURIComponent(code)}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
+        });
+        patchCaseLocal(code, updated);
+        toast("Registro salvo");
+      } catch (e) { toast("Erro ao salvar: " + e.message, true); }
+    };
+    if (chamadoInput) chamadoInput.addEventListener("change", () => saveReg({ chamado: chamadoInput.value.trim() }));
+    if (horarioInput) horarioInput.addEventListener("change", () => saveReg({ horario: horarioInput.value.trim() }));
+    if (nowBtn) nowBtn.addEventListener("click", () => {
+      horarioInput.value = nowStr();
+      saveReg({ horario: horarioInput.value });
+    });
 
     const updateMeta = (updated) => {
       const whoEl = $(".case-meta .who", card);
@@ -410,6 +449,7 @@
     return {
       id: s.id, filename: s.filename, uploaded_by: s.uploaded_by, created_at: s.created_at,
       code: c.code, estagio: c.estagio, estagio_num: c.estagio_num, frente: c.frente, status: c.status,
+      chamado: c.chamado, horario: c.horario,
     };
   }
   function cmpSlide(a, b) {
@@ -469,6 +509,10 @@
     prev.disabled = i === 0;
     next.disabled = i === slides.length - 1;
     const stCode = STATUS_CAP[s.status] || "nt";
+    const regBits = [
+      s.chamado ? "Chamado " + esc(s.chamado) : "",
+      s.horario ? esc(s.horario) : "",
+    ].filter(Boolean).join(" · ");
     const metaBits = [
       `<span class="cap-code">${esc(s.code)}</span>`,
       s.uploaded_by ? "enviado por " + esc(s.uploaded_by) : "",
@@ -480,6 +524,7 @@
         <span class="cap-tag">${esc(s.frente)}</span>
         <span class="cap-tag cap-status ${stCode}">${esc(s.status)}</span>
       </div>
+      ${regBits ? `<div class="cap-reg">${regBits}</div>` : ""}
       <div class="cap-meta">${metaBits}</div>`;
     const dots = $$(".track-dot", $("#carousel-track"));
     dots.forEach((d, di) => d.classList.toggle("active", di === i));
@@ -535,6 +580,8 @@
       form.pre_condicao.value = c.pre_condicao || "";
       form.passos.value = c.passos || "";
       form.resultado_esperado.value = c.resultado_esperado || "";
+      form.chamado.value = c.chamado || "";
+      form.horario.value = c.horario || "";
     } else {
       form.reset();
       codeEl.hidden = true;
@@ -559,6 +606,8 @@
       pre_condicao: form.pre_condicao.value.trim(),
       passos: form.passos.value.trim(),
       resultado_esperado: form.resultado_esperado.value.trim(),
+      chamado: form.chamado.value.trim(),
+      horario: form.horario.value.trim(),
     };
     if (!payload.estagio) { toast("Informe o estágio.", true); return; }
     if (!payload.resultado_esperado) { toast("Informe o resultado esperado.", true); return; }
