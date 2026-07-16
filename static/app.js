@@ -1005,7 +1005,7 @@
       syncingCode = true;
       diagramSource.value = code;
       syncingCode = false;
-      renderMermaidInto($("#diagram-preview"), code);
+      renderPreview(code);
     }, 300);
   }
 
@@ -1017,7 +1017,7 @@
     renderNodes(); renderEdges();
     const code = generateMermaid(builder);
     syncingCode = true; diagramSource.value = code; syncingCode = false;
-    renderMermaidInto($("#diagram-preview"), code);
+    renderPreview(code);
   }
 
   function starterState() {
@@ -1047,11 +1047,66 @@
       state = starterState();
     }
     const adv = $(".builder-advanced"); if (adv) adv.open = false;
+    closeNodePopover();
     setBuilderState(state);
     diagramModal.hidden = false;
     setTimeout(() => { try { diagramForm.titulo.focus(); } catch (e) {} }, 30);
   }
-  function closeDiagramModal() { diagramModal.hidden = true; editingDiagramId = null; }
+  function closeDiagramModal() { diagramModal.hidden = true; editingDiagramId = null; closeNodePopover(); }
+
+  // ---- clique-para-editar direto na pré-visualização ----
+  const nodePop = $("#node-popover");
+  let popNodeId = null;
+  let pendingSelectId = null;   // etapa a selecionar no popover após o próximo render
+
+  // renderiza o preview e (re)liga os cliques nas caixas
+  function renderPreview(code) {
+    renderMermaidInto($("#diagram-preview"), code).then(() => {
+      attachPreviewEditing();
+      if (pendingSelectId) {
+        const g = findNodeG(pendingSelectId);
+        if (g) openNodePopover(pendingSelectId, g);
+        pendingSelectId = null;
+      }
+    });
+  }
+
+  function nodeIdFromG(g) {
+    const m = /-flowchart-([A-Za-z0-9_]+)-\d+$/.exec(g.id || "");
+    return m ? m[1] : null;
+  }
+  function findNodeG(id) {
+    return $$("#diagram-preview svg g.node").find((g) => nodeIdFromG(g) === id) || null;
+  }
+  function attachPreviewEditing() {
+    const svg = $("#diagram-preview svg");
+    if (!svg) return;
+    $$("g.node", svg).forEach((g) => {
+      const id = nodeIdFromG(g);
+      if (!id) return;
+      g.addEventListener("click", (ev) => { ev.stopPropagation(); openNodePopover(id, g); });
+    });
+  }
+
+  function openNodePopover(id, g) {
+    const node = builder.nodes.find((n) => n.id === id);
+    if (!node) return;
+    popNodeId = id;
+    $("#mm-pop-label").value = node.label || "";
+    $("#mm-pop-shape").value = node.shape || "step";
+    nodePop.hidden = false;
+    const col = $(".diagram-preview-col");
+    const cr = col.getBoundingClientRect();
+    const gr = g.getBoundingClientRect();
+    let left = gr.left - cr.left + gr.width / 2 - nodePop.offsetWidth / 2;
+    let top = gr.bottom - cr.top + 8;
+    left = Math.max(6, Math.min(left, col.clientWidth - nodePop.offsetWidth - 6));
+    top = Math.max(6, Math.min(top, col.clientHeight - nodePop.offsetHeight - 6));
+    nodePop.style.left = left + "px";
+    nodePop.style.top = top + "px";
+    setTimeout(() => { try { const el = $("#mm-pop-label"); el.focus(); el.select(); } catch (e) {} }, 20);
+  }
+  function closeNodePopover() { if (nodePop) { nodePop.hidden = true; } popNodeId = null; }
 
   async function submitDiagramForm(e) {
     e.preventDefault();
@@ -1127,12 +1182,52 @@
     const state = parseMermaid(diagramSource.value);
     if (state.nodes.length) { builder = state; renderNodes(); renderEdges(); }
     clearTimeout(previewTimer);
-    previewTimer = setTimeout(() => renderMermaidInto($("#diagram-preview"), diagramSource.value), 300);
+    previewTimer = setTimeout(() => renderPreview(diagramSource.value), 300);
   });
+  // popover de edição direto no desenho
+  $("#mm-pop-label").addEventListener("input", (ev) => {
+    const node = builder.nodes.find((n) => n.id === popNodeId);
+    if (!node) return;
+    node.label = ev.target.value;
+    const inp = document.querySelector(`#nodes-list .builder-row[data-id="${popNodeId}"] .b-label`);
+    if (inp) inp.value = ev.target.value;
+    scheduleSync();
+  });
+  $("#mm-pop-shape").addEventListener("change", (ev) => {
+    const node = builder.nodes.find((n) => n.id === popNodeId);
+    if (!node) return;
+    node.shape = ev.target.value;
+    renderNodes(); scheduleSync();
+  });
+  $("#mm-pop-add").addEventListener("click", () => {
+    if (!popNodeId) return;
+    const id = newNodeId();
+    builder.nodes.push({ id, label: "Nova etapa", shape: "step" });
+    builder.edges.push({ id: "e" + (++builder.eSeq), from: popNodeId, to: id, label: "", dotted: false });
+    renderNodes(); renderEdges();
+    pendingSelectId = id;   // abre o popover já na nova etapa
+    scheduleSync();
+  });
+  $("#mm-pop-del").addEventListener("click", () => {
+    if (!popNodeId) return;
+    const id = popNodeId;
+    builder.nodes = builder.nodes.filter((n) => n.id !== id);
+    builder.edges = builder.edges.filter((e) => e.from !== id && e.to !== id);
+    closeNodePopover();
+    renderNodes(); renderEdges(); scheduleSync();
+  });
+  $("#mm-pop-close").addEventListener("click", closeNodePopover);
+  // clicar no fundo da pré-visualização fecha o popover (clique numa caixa não borbulha)
+  $("#diagram-preview").addEventListener("click", () => closeNodePopover());
+
   $("#diagram-close").addEventListener("click", closeDiagramModal);
   $("#diagram-cancel").addEventListener("click", closeDiagramModal);
   diagramModal.addEventListener("click", (e) => { if (e.target.id === "diagram-modal") closeDiagramModal(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !diagramModal.hidden) closeDiagramModal(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || diagramModal.hidden) return;
+    if (!nodePop.hidden) { closeNodePopover(); return; }   // Esc fecha o popover antes do modal
+    closeDiagramModal();
+  });
   // título/badge iniciais coerentes com o fluxo atual
   onFlowChangedForDiagrams();
 

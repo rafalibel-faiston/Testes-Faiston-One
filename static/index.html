@@ -329,10 +329,24 @@
             <textarea id="diagram-source" name="mermaid" spellcheck="false" placeholder="flowchart TD&#10;  A[Início] --> B[Fim]"></textarea>
           </details>
         </div>
-        <div class="diagram-editor-col">
-          <div class="diagram-editor-label"><span>Pré-visualização</span></div>
+        <div class="diagram-editor-col diagram-preview-col">
+          <div class="diagram-editor-label"><span>Pré-visualização</span><span class="preview-hint">clique numa caixa pra editar aqui</span></div>
           <div class="diagram-preview" id="diagram-preview">
             <div class="diagram-preview-empty">O desenho aparece aqui enquanto você monta as etapas.</div>
+          </div>
+          <div class="mm-pop" id="node-popover" hidden>
+            <input type="text" class="mm-pop-label" id="mm-pop-label" placeholder="texto da etapa">
+            <div class="mm-pop-row">
+              <select class="mm-pop-shape" id="mm-pop-shape">
+                <option value="step">Etapa</option>
+                <option value="decision">Decisão</option>
+              </select>
+              <button type="button" class="mm-pop-add" id="mm-pop-add" title="Criar a próxima etapa já ligada a esta">+ próxima</button>
+            </div>
+            <div class="mm-pop-row">
+              <button type="button" class="mm-pop-del" id="mm-pop-del">Excluir</button>
+              <button type="button" class="mm-pop-close" id="mm-pop-close">Fechar</button>
+            </div>
           </div>
         </div>
       </div>
