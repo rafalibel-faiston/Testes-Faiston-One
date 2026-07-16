@@ -664,8 +664,103 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 .note-text { font-size:13px; color:var(--text); line-height:1.55; white-space:pre-wrap; word-break:break-word; }
 .note-meta { font-size:10.5px; color:var(--text-3); margin-top:8px; padding-top:8px; border-top:1px solid var(--line); }
 
+/* ---------- view switch (Testes / Fluxos) ---------- */
+.view-switch {
+  display:inline-flex; gap:4px; margin-bottom:22px; padding:4px;
+  background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow-1);
+}
+.view-tab {
+  display:inline-flex; align-items:center; gap:8px; cursor:pointer;
+  border:none; background:transparent; color:var(--text-2);
+  border-radius:9px; padding:9px 16px; font-size:13px; font-weight:600; font-family:'Roboto',sans-serif;
+  transition:background .15s var(--ease), color .15s var(--ease), box-shadow .15s var(--ease);
+}
+.view-tab svg { color:var(--text-3); transition:color .15s var(--ease); }
+.view-tab:hover { color:var(--text); background:var(--surface-2); }
+.view-tab.active { color:#fff; background:var(--grad-primary); box-shadow:0 6px 16px -8px rgba(0,84,236,.5); }
+.view-tab.active svg { color:#fff; }
+#view-fluxos[hidden], #view-testes[hidden] { display:none; }
+
+/* ---------- diagramas (aba Fluxos) ---------- */
+.diagrams-head {
+  display:flex; align-items:flex-start; gap:18px; flex-wrap:wrap; margin-bottom:20px;
+}
+.diagrams-head-copy { flex:1; min-width:240px; }
+.diagrams-head-copy h2 { font-size:19px; font-weight:700; color:var(--text); margin-bottom:5px; }
+.diagrams-head-copy p { font-size:13px; color:var(--text-2); line-height:1.6; max-width:640px; }
+.diagrams-head .add-btn { flex-shrink:0; }
+
+#diagrams { display:flex; flex-direction:column; gap:18px; }
+.diagram {
+  background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--f-blue);
+  border-radius:var(--radius); padding:20px 22px;
+  transition:border-color .2s var(--ease), box-shadow .2s var(--ease);
+  animation:cardIn .5s var(--ease) both;
+}
+.diagram:hover { box-shadow:var(--shadow-2); border-color:var(--line-2); }
+.diagram.kind-ideal { border-left-color:var(--ok); }
+.diagram-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+.diagram-kind {
+  font-size:10.5px; font-weight:700; letter-spacing:.4px; text-transform:uppercase;
+  color:#fff; background:var(--grad-primary); border-radius:999px; padding:4px 12px;
+}
+.diagram.kind-ideal .diagram-kind { background:linear-gradient(120deg,#0d9d6c,#34d399); }
+.diagram-title { font-family:'Roboto Slab',serif; font-size:15px; font-weight:700; color:var(--text); }
+.diagram-actions { display:inline-flex; gap:6px; margin-left:auto; }
+.diagram-desc { font-size:13px; color:var(--text-2); line-height:1.55; margin-bottom:14px; }
+.diagram-canvas {
+  position:relative; overflow:auto; border:1px solid var(--line);
+  background:
+    linear-gradient(var(--surface-2), var(--surface-2)) padding-box,
+    radial-gradient(circle at 1px 1px, rgba(24,26,50,.06) 1px, transparent 0) padding-box;
+  background-size:auto, 18px 18px;
+  border-radius:12px; padding:18px; text-align:center;
+}
+.diagram-canvas svg { max-width:100%; height:auto; }
+.diagram-canvas .diagram-error {
+  color:var(--bad); font-size:12.5px; font-family:'Roboto Mono',monospace; text-align:left; white-space:pre-wrap;
+}
+.diagram-meta-foot {
+  font-size:11px; color:var(--text-3); margin-top:12px; padding-top:12px; border-top:1px solid var(--line);
+}
+.diagram-meta-foot .who { font-weight:600; color:var(--text-2); }
+
+/* ---------- editor de diagrama (modal) ---------- */
+.diagram-card { max-width:960px; }
+.diagram-meta.form-grid { grid-template-columns:2fr 1fr; }
+.diagram-editor { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.diagram-editor-col { display:flex; flex-direction:column; gap:6px; min-width:0; }
+.diagram-editor-label {
+  display:flex; align-items:center; justify-content:space-between;
+  font-size:10.5px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-3); font-weight:700;
+}
+.diagram-help { font-size:10px; font-weight:600; color:var(--f-blue); text-decoration:none; text-transform:none; letter-spacing:0; }
+.diagram-help:hover { text-decoration:underline; }
+#diagram-source {
+  font-family:'Roboto Mono',monospace; font-size:12.5px; line-height:1.55; color:var(--text);
+  background:var(--surface-2); border:1px solid var(--line-2); border-radius:9px;
+  padding:12px; resize:vertical; min-height:260px; white-space:pre; tab-size:2;
+  transition:border-color .15s var(--ease), box-shadow .15s var(--ease);
+}
+#diagram-source:focus { outline:none; border-color:var(--f-blue); box-shadow:0 0 0 3px rgba(0,84,236,.12); }
+.diagram-preview {
+  min-height:260px; overflow:auto; border:1px solid var(--line-2); border-radius:9px;
+  background:
+    linear-gradient(var(--surface-2), var(--surface-2)) padding-box,
+    radial-gradient(circle at 1px 1px, rgba(24,26,50,.06) 1px, transparent 0) padding-box;
+  background-size:auto, 18px 18px;
+  padding:14px; display:flex; align-items:center; justify-content:center;
+}
+.diagram-preview svg { max-width:100%; height:auto; }
+.diagram-preview-empty { color:var(--text-3); font-size:12.5px; font-style:italic; }
+.diagram-preview .diagram-error {
+  color:var(--bad); font-size:12px; font-family:'Roboto Mono',monospace; text-align:left; white-space:pre-wrap; align-self:flex-start;
+}
+
 /* ---------- responsive ---------- */
 @media (max-width:820px) {
+  .diagram-editor { grid-template-columns:1fr; }
+  .diagram-meta.form-grid { grid-template-columns:1fr; }
   .case-grid { grid-template-columns:1fr; }
   .chip-row { flex-wrap:wrap; }
   .chip-row-label { width:auto; }

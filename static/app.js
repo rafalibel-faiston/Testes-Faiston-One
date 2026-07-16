@@ -419,6 +419,7 @@
     if (busca) busca.value = "";
     render();
     loadNotes();
+    if (typeof onFlowChangedForDiagrams === "function") onFlowChangedForDiagrams();
   }
   $$(".flow-tab").forEach((t) => t.addEventListener("click", () => setFlow(t.dataset.flow)));
 
@@ -752,6 +753,210 @@
       updateNotesCount();
     } catch (err) { toast("Erro ao salvar ponto: " + err.message, true); }
   });
+
+  // ---------------- fluxos (diagramas Mermaid) ----------------
+  let currentView = "testes";        // "testes" | "fluxos"
+  let DIAGRAMS = [];
+  let diagramsLoaded = false;
+  const KIND_LABEL = { atual: "Como está hoje", ideal: "Como deveria funcionar" };
+  let mermaidSeq = 0;
+
+  // O Mermaid é carregado como módulo ES (CDN) e sinaliza quando pronto.
+  function whenMermaid() {
+    if (window.__mermaidReady && window.mermaid) return Promise.resolve(window.mermaid);
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error("Mermaid não carregou (sem conexão?)")), 8000);
+      document.addEventListener("mermaid-ready", () => { clearTimeout(t); resolve(window.mermaid); }, { once: true });
+    });
+  }
+
+  // Renderiza um código Mermaid dentro de um container. Mostra erro amigável se o
+  // desenho estiver inválido, sem quebrar o resto da tela.
+  async function renderMermaidInto(container, code) {
+    const src = (code || "").trim();
+    if (!src) { container.innerHTML = `<div class="diagram-preview-empty">Sem diagrama.</div>`; return; }
+    let mermaid;
+    try { mermaid = await whenMermaid(); }
+    catch (e) { container.innerHTML = `<div class="diagram-error">${esc(e.message)}</div>`; return; }
+    const id = "mmd-" + (++mermaidSeq);
+    try {
+      const { svg } = await mermaid.render(id, src);
+      container.innerHTML = svg;
+    } catch (err) {
+      const msg = (err && err.message ? err.message : String(err)).split("\n").slice(0, 6).join("\n");
+      container.innerHTML = `<div class="diagram-error">⚠ Erro no diagrama:\n${esc(msg)}</div>`;
+    }
+  }
+
+  function switchView(view) {
+    currentView = view;
+    $$(".view-tab").forEach((t) => {
+      const on = t.dataset.view === view;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    $("#view-testes").hidden = view !== "testes";
+    $("#view-fluxos").hidden = view !== "fluxos";
+    if (view === "fluxos") loadDiagrams();
+  }
+
+  function onFlowChangedForDiagrams() {
+    $("#diagrams-title").textContent = "Fluxos do Fluxo " + currentFlow;
+    $("#diagrams-empty-badge").textContent = "Fluxo " + currentFlow;
+    if (currentView === "fluxos") renderDiagrams();
+  }
+
+  async function loadDiagrams() {
+    if (!diagramsLoaded) $("#diagrams-loading").hidden = false;
+    try {
+      DIAGRAMS = await api("/api/diagramas");
+      diagramsLoaded = true;
+    } catch (e) {
+      $("#diagrams-loading").textContent = "Erro ao carregar diagramas: " + e.message;
+      return;
+    }
+    $("#diagrams-loading").hidden = true;
+    renderDiagrams();
+  }
+
+  function diagramCard(d) {
+    return `<article class="diagram kind-${esc(d.kind)}" data-id="${d.id}">
+      <div class="diagram-head">
+        <span class="diagram-kind">${esc(KIND_LABEL[d.kind] || d.kind)}</span>
+        <span class="diagram-title">${esc(d.titulo)}</span>
+        <span class="diagram-actions">
+          <button type="button" class="case-icon-btn diagram-edit" title="Editar diagrama" aria-label="Editar">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button type="button" class="case-icon-btn danger diagram-del" title="Excluir diagrama" aria-label="Excluir">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        </span>
+      </div>
+      ${d.descricao ? `<div class="diagram-desc">${esc(d.descricao)}</div>` : ""}
+      <div class="diagram-canvas" data-canvas="${d.id}"><div class="diagram-preview-empty">Renderizando…</div></div>
+      <div class="diagram-meta-foot">${d.atualizado_por ? `Atualizado por <span class="who">${esc(d.atualizado_por)}</span> · ` : ""}${fmtWhen(d.updated_at)}${d.seeded ? " · <span class=\"who\">modelo inicial</span>" : ""}</div>
+    </article>`;
+  }
+
+  function renderDiagrams() {
+    const list = DIAGRAMS.filter((d) => (d.fluxo || "C") === currentFlow)
+      .sort((a, b) => (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : (a.ordem || 0) - (b.ordem || 0)));
+    const emptyEl = $("#diagrams-empty");
+    const wrap = $("#diagrams");
+    if (!list.length) {
+      wrap.innerHTML = "";
+      emptyEl.hidden = false;
+      return;
+    }
+    emptyEl.hidden = true;
+    wrap.innerHTML = list.map(diagramCard).join("");
+    list.forEach((d) => {
+      const canvas = wrap.querySelector(`.diagram-canvas[data-canvas="${d.id}"]`);
+      if (canvas) renderMermaidInto(canvas, d.mermaid);
+    });
+    $$(".diagram-edit", wrap).forEach((btn) => {
+      btn.addEventListener("click", () => openDiagramModal("edit", btn.closest(".diagram").dataset.id));
+    });
+    $$(".diagram-del", wrap).forEach((btn) => {
+      btn.addEventListener("click", () => deleteDiagram(btn.closest(".diagram").dataset.id));
+    });
+  }
+
+  // ---- editor modal ----
+  let editingDiagramId = null;
+  const diagramModal = $("#diagram-modal");
+  const diagramForm = $("#diagram-form");
+  const diagramSource = $("#diagram-source");
+  let previewTimer = null;
+
+  function livePreview() {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => {
+      renderMermaidInto($("#diagram-preview"), diagramSource.value);
+    }, 350);
+  }
+
+  function openDiagramModal(mode, id) {
+    editingDiagramId = mode === "edit" ? Number(id) : null;
+    $("#diagram-modal-title").textContent = mode === "edit" ? "Editar diagrama" : "Novo diagrama";
+    $("#diagram-flow-label").textContent = "Fluxo " + currentFlow;
+    if (mode === "edit") {
+      const d = DIAGRAMS.find((x) => x.id === editingDiagramId);
+      if (!d) return;
+      diagramForm.titulo.value = d.titulo || "";
+      diagramForm.kind.value = d.kind || "atual";
+      diagramForm.descricao.value = d.descricao || "";
+      diagramSource.value = d.mermaid || "";
+    } else {
+      diagramForm.reset();
+      diagramForm.kind.value = "atual";
+      diagramSource.value = "flowchart TD\n  A[Início] --> B[Fim]";
+    }
+    renderMermaidInto($("#diagram-preview"), diagramSource.value);
+    diagramModal.hidden = false;
+    setTimeout(() => { try { diagramForm.titulo.focus(); } catch (e) {} }, 30);
+  }
+  function closeDiagramModal() { diagramModal.hidden = true; editingDiagramId = null; }
+
+  async function submitDiagramForm(e) {
+    e.preventDefault();
+    const payload = {
+      fluxo: currentFlow,
+      kind: diagramForm.kind.value,
+      titulo: diagramForm.titulo.value.trim(),
+      descricao: diagramForm.descricao.value.trim(),
+      mermaid: diagramSource.value.trim(),
+      atualizado_por: testerName() || undefined,
+    };
+    if (!payload.titulo) { toast("Informe o título.", true); return; }
+    if (!payload.mermaid) { toast("Informe o diagrama.", true); return; }
+    const saveBtn = $("#diagram-save");
+    saveBtn.disabled = true;
+    try {
+      if (editingDiagramId) {
+        await api(`/api/diagramas/${editingDiagramId}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        });
+        toast("Diagrama atualizado");
+      } else {
+        await api("/api/diagramas", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        });
+        toast("Diagrama criado");
+      }
+      await loadDiagrams();
+      closeDiagramModal();
+    } catch (err) {
+      toast("Erro ao salvar: " + err.message, true);
+    } finally {
+      saveBtn.disabled = false;
+    }
+  }
+
+  async function deleteDiagram(id) {
+    if (!confirm("Excluir este diagrama?")) return;
+    try {
+      await api(`/api/diagramas/${id}`, { method: "DELETE" });
+      DIAGRAMS = DIAGRAMS.filter((d) => String(d.id) !== String(id));
+      renderDiagrams();
+      toast("Diagrama excluído");
+    } catch (err) {
+      toast("Erro ao excluir: " + err.message, true);
+    }
+  }
+
+  $$(".view-tab").forEach((t) => t.addEventListener("click", () => switchView(t.dataset.view)));
+  $("#btn-add-diagram").addEventListener("click", () => openDiagramModal("create"));
+  $("#diagrams-empty-add").addEventListener("click", () => openDiagramModal("create"));
+  diagramForm.addEventListener("submit", submitDiagramForm);
+  diagramSource.addEventListener("input", livePreview);
+  $("#diagram-close").addEventListener("click", closeDiagramModal);
+  $("#diagram-cancel").addEventListener("click", closeDiagramModal);
+  diagramModal.addEventListener("click", (e) => { if (e.target.id === "diagram-modal") closeDiagramModal(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !diagramModal.hidden) closeDiagramModal(); });
+  // título/badge iniciais coerentes com o fluxo atual
+  onFlowChangedForDiagrams();
 
   // ---------------- tester name ----------------
   const testerInput = $("#input-tester");

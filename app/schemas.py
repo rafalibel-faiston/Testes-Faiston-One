@@ -121,3 +121,38 @@ class MeetingNoteUpdate(BaseModel):
     texto: Optional[str] = None
     estagio: Optional[str] = None
     resolvido: Optional[bool] = None
+
+
+class FlowDiagramOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    fluxo: str = "C"
+    kind: str = "atual"
+    titulo: str
+    descricao: Optional[str] = ""
+    mermaid: str
+    ordem: Optional[int] = 0
+    atualizado_por: Optional[str] = None
+    seeded: Optional[bool] = False
+    updated_at: Optional[datetime] = None
+
+
+class FlowDiagramCreate(BaseModel):
+    fluxo: str = "C"
+    kind: str = "atual"
+    titulo: str
+    descricao: Optional[str] = ""
+    mermaid: str
+    ordem: Optional[int] = 0
+    atualizado_por: Optional[str] = None
+
+
+class FlowDiagramUpdate(BaseModel):
+    fluxo: Optional[str] = None
+    kind: Optional[str] = None
+    titulo: Optional[str] = None
+    descricao: Optional[str] = None
+    mermaid: Optional[str] = None
+    ordem: Optional[int] = None
+    atualizado_por: Optional[str] = None

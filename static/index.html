@@ -46,6 +46,19 @@
     </button>
   </nav>
 
+  <div class="view-switch" role="tablist" aria-label="Alternar visão">
+    <button type="button" class="view-tab active" data-view="testes" role="tab" aria-selected="true">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      Casos de teste
+    </button>
+    <button type="button" class="view-tab" data-view="fluxos" role="tab" aria-selected="false">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1" transform="translate(0 0)"/><path d="M6 9v6M18 9v6M9 6h6"/></svg>
+      Fluxos (diagramas)
+    </button>
+  </div>
+
+  <div id="view-testes">
+
   <section class="hero">
     <div class="hero-progress">
       <div class="hero-progress-top">
@@ -123,6 +136,34 @@
     </div>
     <div id="cases"></div>
   </section>
+
+  </div><!-- /view-testes -->
+
+  <div id="view-fluxos" hidden>
+    <section class="diagrams-head">
+      <div class="diagrams-head-copy">
+        <h2 id="diagrams-title">Fluxos do Fluxo C</h2>
+        <p>Desenhe como cada fluxo está funcionando hoje e como deveria funcionar.
+        Clique em <b>Editar</b> num diagrama pra ajustar o desenho (Mermaid) com preview ao vivo.</p>
+      </div>
+      <button type="button" class="add-btn" id="btn-add-diagram">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Novo diagrama
+      </button>
+    </section>
+    <div id="diagrams-loading" class="loading">Carregando diagramas…</div>
+    <div id="diagrams-empty" class="flow-empty" hidden>
+      <div class="flow-empty-badge" id="diagrams-empty-badge">Fluxo A</div>
+      <h2>Nenhum diagrama ainda</h2>
+      <p>Este fluxo ainda não tem diagramas. Crie o primeiro pra desenhar como ele
+      funciona (ou deveria funcionar).</p>
+      <button type="button" class="add-btn" id="diagrams-empty-add">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Criar primeiro diagrama
+      </button>
+    </div>
+    <div id="diagrams"></div>
+  </div><!-- /view-fluxos -->
 
 </main>
 
@@ -235,8 +276,76 @@
   </div>
 </div>
 
+<div class="modal" id="diagram-modal" hidden aria-modal="true" role="dialog">
+  <div class="modal-card diagram-card">
+    <div class="modal-head">
+      <h3 id="diagram-modal-title">Novo diagrama</h3>
+      <span class="modal-code" id="diagram-flow-label">Fluxo C</span>
+      <button type="button" class="modal-close" id="diagram-close" aria-label="Fechar">✕</button>
+    </div>
+    <form id="diagram-form" class="modal-body">
+      <div class="form-grid diagram-meta">
+        <label class="fld fld-wide">Título
+          <input name="titulo" placeholder="ex.: Fluxo C — como deveria funcionar" required>
+        </label>
+        <label class="fld">Tipo
+          <select name="kind">
+            <option value="atual">Como está hoje</option>
+            <option value="ideal">Como deveria funcionar</option>
+          </select>
+        </label>
+      </div>
+      <label class="fld">Descrição da situação
+        <textarea name="descricao" rows="2" placeholder="Descreva a situação real que este diagrama representa"></textarea>
+      </label>
+      <div class="diagram-editor">
+        <div class="diagram-editor-col">
+          <div class="diagram-editor-label">
+            <span>Código do diagrama (Mermaid)</span>
+            <a href="https://mermaid.js.org/syntax/flowchart.html" target="_blank" rel="noopener" class="diagram-help">sintaxe ↗</a>
+          </div>
+          <textarea id="diagram-source" name="mermaid" spellcheck="false" placeholder="flowchart TD&#10;  A[Início] --> B[Fim]" required></textarea>
+        </div>
+        <div class="diagram-editor-col">
+          <div class="diagram-editor-label"><span>Pré-visualização</span></div>
+          <div class="diagram-preview" id="diagram-preview">
+            <div class="diagram-preview-empty">O desenho aparece aqui enquanto você digita.</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="diagram-cancel">Cancelar</button>
+        <button type="submit" class="btn-primary" id="diagram-save">Salvar diagrama</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div class="toast" id="toast" hidden></div>
 
+<script src="/static/vendor/mermaid.min.js"></script>
+<script>
+  (function () {
+    if (!window.mermaid) return;
+    window.mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: 'base',
+      fontFamily: "'Roboto', sans-serif",
+      themeVariables: {
+        primaryColor: '#eef1fc',
+        primaryTextColor: '#171a2e',
+        primaryBorderColor: '#0054ec',
+        lineColor: '#565b78',
+        secondaryColor: '#f3e6f6',
+        tertiaryColor: '#e6f8fc',
+        fontSize: '14px',
+      },
+    });
+    window.__mermaidReady = true;
+    document.dispatchEvent(new Event('mermaid-ready'));
+  })();
+</script>
 <script src="/static/app.js"></script>
 </body>
 </html>
