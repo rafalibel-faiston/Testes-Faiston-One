@@ -184,14 +184,46 @@ main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
 .chip.active.c-na   { background:linear-gradient(120deg,#6b7089,#9ca0ba); box-shadow:0 6px 16px -6px rgba(107,112,137,.35); }
 .chip.active.c-nt   { background:linear-gradient(120deg,#565b78,#8a8fad); }
 
-.search-row {
-  display:flex; align-items:center; gap:9px; margin-top:2px;
-  background:var(--surface-2); border:1px solid var(--line-2); border-radius:10px; padding:9px 13px;
+/* ---------- glow search (barra de busca com borda animada) ---------- */
+.glow-search {
+  position:relative; margin-top:6px; width:100%; max-width:380px;
+  border-radius:12px;
 }
-.search-ic { color:var(--text-3); flex-shrink:0; }
-.search-row input {
-  border:none; background:transparent; outline:none; flex:1; font-size:13px; color:var(--text); font-family:'Roboto',sans-serif;
+.glow-search-layer {
+  position:absolute; z-index:0; inset:-3px; overflow:hidden; border-radius:13px;
+  filter:blur(3px); pointer-events:none;
 }
+.glow-search-layer::before {
+  content:''; position:absolute; top:50%; left:50%; width:260px; height:260px;
+  transform:translate(-50%,-50%) rotate(0deg); transition:transform 2s;
+}
+.glow-search-layer.l1::before {
+  background:conic-gradient(#12132b, var(--f-blue-dark) 10%, #12132b 38%, #12132b 50%, var(--f-magenta) 62%, #12132b 86%);
+}
+.glow-search-layer.l2 { filter:blur(2.5px); inset:-2px; }
+.glow-search-layer.l2::before {
+  transform:translate(-50%,-50%) rotate(82deg);
+  background:conic-gradient(#12132b, var(--f-purple) 8%, #12132b 20%, #12132b 50%, var(--f-cyan) 62%, #12132b 72%);
+}
+.glow-search-layer.l3 { filter:blur(1px); inset:-1px; opacity:.95; }
+.glow-search-layer.l3::before {
+  transform:translate(-50%,-50%) rotate(70deg);
+  background:conic-gradient(#12132b, var(--f-blue) 6%, #12132b 16%, #12132b 50%, var(--f-pink) 60%, #12132b 66%);
+}
+.glow-search:hover .glow-search-layer::before { transform:translate(-50%,-50%) rotate(-120deg); }
+.glow-search:focus-within .glow-search-layer::before { transform:translate(-50%,-50%) rotate(300deg); transition-duration:3.5s; }
+
+.glow-search-pill {
+  position:relative; z-index:1;
+  display:flex; align-items:center; gap:10px;
+  background:#12132b; border-radius:10px; padding:10px 14px 10px 40px;
+}
+.glow-search-pill .search-ic { position:absolute; left:13px; flex-shrink:0; }
+.glow-search-pill input {
+  border:none; background:transparent; outline:none; flex:1; min-width:0;
+  font-size:13px; color:#fff; font-family:'Roboto',sans-serif;
+}
+.glow-search-pill input::placeholder { color:rgba(255,255,255,.4); }
 
 /* ---------- group heading ---------- */
 .grp-heading {

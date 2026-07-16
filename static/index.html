@@ -101,9 +101,27 @@
       <span class="chip-row-label">Estágio</span>
       <div class="chips chips-scroll" id="chips-estagio"></div>
     </div>
-    <div class="search-row">
-      <svg class="search-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-      <input type="text" id="f-busca" placeholder="Buscar por ID ou palavra-chave...">
+    <div class="glow-search" id="glow-search">
+      <div class="glow-search-layer l1"></div>
+      <div class="glow-search-layer l2"></div>
+      <div class="glow-search-layer l3"></div>
+      <div class="glow-search-pill">
+        <svg class="search-ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle stroke="url(#glow-search-grad)" r="8" cy="11" cx="11"></circle>
+          <line stroke="url(#glow-search-grad-l)" y2="16.65" y1="22" x2="16.65" x1="22"></line>
+          <defs>
+            <linearGradient gradientTransform="rotate(50)" id="glow-search-grad">
+              <stop stop-color="#00fafb" offset="0%"></stop>
+              <stop stop-color="#0054ec" offset="100%"></stop>
+            </linearGradient>
+            <linearGradient id="glow-search-grad-l">
+              <stop stop-color="#0054ec" offset="0%"></stop>
+              <stop stop-color="#2226c0" offset="100%"></stop>
+            </linearGradient>
+          </defs>
+        </svg>
+        <input type="text" id="f-busca" placeholder="Buscar por ID ou palavra-chave...">
+      </div>
     </div>
   </section>
 
