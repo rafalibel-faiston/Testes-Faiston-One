@@ -758,6 +758,7 @@
   let currentView = "testes";        // "testes" | "fluxos"
   let DIAGRAMS = [];
   let diagramsLoaded = false;
+  const expandedDiagrams = new Set();   // ids dos diagramas abertos (recolhidos por padrão)
   const KIND_LABEL = { atual: "Como está hoje", ideal: "Como deveria funcionar" };
   let mermaidSeq = 0;
 
@@ -820,8 +821,12 @@
   }
 
   function diagramCard(d) {
-    return `<article class="diagram kind-${esc(d.kind)}" data-id="${d.id}">
+    const open = expandedDiagrams.has(d.id);
+    return `<article class="diagram kind-${esc(d.kind)} ${open ? "" : "collapsed"}" data-id="${d.id}">
       <div class="diagram-head">
+        <button type="button" class="diagram-toggle" aria-label="Abrir/recolher" aria-expanded="${open ? "true" : "false"}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
         <span class="diagram-kind">${esc(KIND_LABEL[d.kind] || d.kind)}</span>
         <span class="diagram-title">${esc(d.titulo)}</span>
         <span class="diagram-actions">
@@ -833,10 +838,21 @@
           </button>
         </span>
       </div>
-      ${d.descricao ? `<div class="diagram-desc">${esc(d.descricao)}</div>` : ""}
-      <div class="diagram-canvas" data-canvas="${d.id}"><div class="diagram-preview-empty">Renderizando…</div></div>
-      <div class="diagram-meta-foot">${d.atualizado_por ? `Atualizado por <span class="who">${esc(d.atualizado_por)}</span> · ` : ""}${fmtWhen(d.updated_at)}${d.seeded ? " · <span class=\"who\">modelo inicial</span>" : ""}</div>
+      <div class="diagram-body">
+        ${d.descricao ? `<div class="diagram-desc">${esc(d.descricao)}</div>` : ""}
+        <div class="diagram-canvas" data-canvas="${d.id}"><div class="diagram-preview-empty">Renderizando…</div></div>
+        <div class="diagram-meta-foot">${d.atualizado_por ? `Atualizado por <span class="who">${esc(d.atualizado_por)}</span> · ` : ""}${fmtWhen(d.updated_at)}${d.seeded ? " · <span class=\"who\">modelo inicial</span>" : ""}</div>
+      </div>
     </article>`;
+  }
+
+  // renderiza o Mermaid de um card só quando ele está aberto (lazy)
+  function renderDiagramCanvas(d, wrap) {
+    const canvas = (wrap || document).querySelector(`.diagram-canvas[data-canvas="${d.id}"]`);
+    if (canvas && !canvas.dataset.rendered) {
+      canvas.dataset.rendered = "1";
+      renderMermaidInto(canvas, d.mermaid);
+    }
   }
 
   function renderDiagrams() {
@@ -851,15 +867,25 @@
     }
     emptyEl.hidden = true;
     wrap.innerHTML = list.map(diagramCard).join("");
-    list.forEach((d) => {
-      const canvas = wrap.querySelector(`.diagram-canvas[data-canvas="${d.id}"]`);
-      if (canvas) renderMermaidInto(canvas, d.mermaid);
+    // só desenha os que estão abertos
+    list.forEach((d) => { if (expandedDiagrams.has(d.id)) renderDiagramCanvas(d, wrap); });
+    // abrir/recolher pelo cabeçalho (menos os botões de ação)
+    $$(".diagram", wrap).forEach((art) => {
+      const id = Number(art.dataset.id);
+      const d = list.find((x) => x.id === id);
+      art.querySelector(".diagram-head").addEventListener("click", (ev) => {
+        if (ev.target.closest(".diagram-actions")) return;
+        const nowOpen = art.classList.toggle("collapsed") === false;
+        art.querySelector(".diagram-toggle").setAttribute("aria-expanded", nowOpen ? "true" : "false");
+        if (nowOpen) { expandedDiagrams.add(id); if (d) renderDiagramCanvas(d, wrap); }
+        else { expandedDiagrams.delete(id); }
+      });
     });
     $$(".diagram-edit", wrap).forEach((btn) => {
-      btn.addEventListener("click", () => openDiagramModal("edit", btn.closest(".diagram").dataset.id));
+      btn.addEventListener("click", (ev) => { ev.stopPropagation(); openDiagramModal("edit", btn.closest(".diagram").dataset.id); });
     });
     $$(".diagram-del", wrap).forEach((btn) => {
-      btn.addEventListener("click", () => deleteDiagram(btn.closest(".diagram").dataset.id));
+      btn.addEventListener("click", (ev) => { ev.stopPropagation(); deleteDiagram(btn.closest(".diagram").dataset.id); });
     });
   }
 
@@ -1127,11 +1153,13 @@
         await api(`/api/diagramas/${editingDiagramId}`, {
           method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
         });
+        expandedDiagrams.add(editingDiagramId);   // deixa aberto pra ver o resultado
         toast("Diagrama atualizado");
       } else {
-        await api("/api/diagramas", {
+        const created = await api("/api/diagramas", {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
         });
+        if (created && created.id) expandedDiagrams.add(created.id);
         toast("Diagrama criado");
       }
       await loadDiagrams();
