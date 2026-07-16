@@ -863,37 +863,191 @@
     });
   }
 
-  // ---- editor modal ----
+  // ---- editor modal (builder por formulário) ----
   let editingDiagramId = null;
   const diagramModal = $("#diagram-modal");
   const diagramForm = $("#diagram-form");
   const diagramSource = $("#diagram-source");
   let previewTimer = null;
+  let syncingCode = false;   // evita loop builder <-> código
+  let manualCode = false;    // usuário editou o código à mão (modo avançado)
+  // estado do builder: { dir, nodes:[{id,label,shape}], edges:[{id,from,to,label,dotted}] }
+  let builder = { dir: "TD", nodes: [], edges: [], nSeq: 0, eSeq: 0 };
 
-  function livePreview() {
+  function newNodeId() {
+    let id;
+    do { id = "n" + (++builder.nSeq); } while (builder.nodes.some((n) => n.id === id));
+    return id;
+  }
+
+  // --- gerar código Mermaid a partir do estado ---
+  function cleanLabel(s) { return (s || "").replace(/["|]/g, " ").replace(/\s+/g, " ").trim(); }
+  function generateMermaid(s) {
+    const lines = ["flowchart " + (s.dir || "TD")];
+    s.nodes.forEach((n) => {
+      const label = cleanLabel(n.label) || n.id;
+      lines.push(n.shape === "decision" ? `    ${n.id}{"${label}"}` : `    ${n.id}["${label}"]`);
+    });
+    s.edges.forEach((e) => {
+      if (!e.from || !e.to) return;
+      const lbl = cleanLabel(e.label);
+      if (e.dotted) lines.push(lbl ? `    ${e.from} -. ${lbl} .-> ${e.to}` : `    ${e.from} -.-> ${e.to}`);
+      else lines.push(lbl ? `    ${e.from} -->|${lbl}| ${e.to}` : `    ${e.from} --> ${e.to}`);
+    });
+    return lines.join("\n");
+  }
+
+  // --- interpretar código Mermaid simples de volta pro estado (best-effort) ---
+  function parseMermaid(code) {
+    const s = { dir: "TD", nodes: [], edges: [], nSeq: 0, eSeq: 0 };
+    const map = new Map();
+    const ensure = (id) => {
+      if (!map.has(id)) { const n = { id, label: id, shape: "step" }; map.set(id, n); s.nodes.push(n); }
+      return map.get(id);
+    };
+    // extrai definições de nó (inclusive inline numa aresta, ex.: A[x] --> B[y]),
+    // registra rótulo/forma e devolve a linha só com os ids (ex.: A --> B)
+    const extractNodes = (line) => line.replace(/([A-Za-z0-9_]+)\s*(\[|\{|\()\s*"?(.*?)"?\s*(\]|\}|\))/g, (full, id, open, label) => {
+      const n = ensure(id);
+      n.label = label;
+      n.shape = open === "{" ? "decision" : "step";
+      return id;
+    });
+    (code || "").split("\n").forEach((raw) => {
+      let line = raw.trim();
+      if (!line) return;
+      let m;
+      if ((m = line.match(/^(?:flowchart|graph)\s+(TD|TB|LR|RL|BT)/i))) {
+        s.dir = m[1].toUpperCase() === "TB" ? "TD" : m[1].toUpperCase();
+        return;
+      }
+      line = extractNodes(line);   // nós (inline ou soltos) já registrados; sobra "A --> B"
+      // arestas (checar variações com rótulo antes da simples)
+      if ((m = line.match(/^(\w+)\s*-\.\s*(.+?)\s*\.->\s*(\w+)/))) { ensure(m[1]); ensure(m[3]); s.edges.push({ id: "e" + (++s.eSeq), from: m[1], to: m[3], label: m[2], dotted: true }); return; }
+      if ((m = line.match(/^(\w+)\s*-\.->\s*(\w+)/))) { ensure(m[1]); ensure(m[2]); s.edges.push({ id: "e" + (++s.eSeq), from: m[1], to: m[2], label: "", dotted: true }); return; }
+      if ((m = line.match(/^(\w+)\s*-->\s*\|([^|]*)\|\s*(\w+)/))) { ensure(m[1]); ensure(m[3]); s.edges.push({ id: "e" + (++s.eSeq), from: m[1], to: m[3], label: m[2], dotted: false }); return; }
+      if ((m = line.match(/^(\w+)\s*--\s*(.+?)\s*-->\s*(\w+)/))) { ensure(m[1]); ensure(m[3]); s.edges.push({ id: "e" + (++s.eSeq), from: m[1], to: m[3], label: m[2], dotted: false }); return; }
+      if ((m = line.match(/^(\w+)\s*-->\s*(\w+)/))) { ensure(m[1]); ensure(m[2]); s.edges.push({ id: "e" + (++s.eSeq), from: m[1], to: m[2], label: "", dotted: false }); return; }
+    });
+    // nSeq alto o suficiente pra novos ids não colidirem
+    s.nodes.forEach((n) => { const mm = /^n(\d+)$/.exec(n.id); if (mm) s.nSeq = Math.max(s.nSeq, +mm[1]); });
+    return s;
+  }
+
+  // --- opções de <select> das etapas (usadas nas ligações) ---
+  function nodeOptions(selected) {
+    if (!builder.nodes.length) return `<option value="">— sem etapas —</option>`;
+    return builder.nodes.map((n, i) => {
+      const txt = `${i + 1}. ${cleanLabel(n.label) || n.id}`;
+      return `<option value="${n.id}" ${n.id === selected ? "selected" : ""}>${esc(txt)}</option>`;
+    }).join("");
+  }
+
+  function renderNodes() {
+    const el = $("#nodes-list");
+    if (!builder.nodes.length) { el.innerHTML = `<div class="builder-empty">Nenhuma etapa ainda. Clique em “+ Etapa”.</div>`; return; }
+    el.innerHTML = builder.nodes.map((n, i) => `
+      <div class="builder-row ${n.shape === "decision" ? "is-decision" : ""}" data-id="${n.id}">
+        <span class="b-num">${i + 1}</span>
+        <input type="text" class="b-label" value="${esc(n.label)}" placeholder="texto da etapa">
+        <select class="b-shape">
+          <option value="step" ${n.shape === "step" ? "selected" : ""}>Etapa</option>
+          <option value="decision" ${n.shape === "decision" ? "selected" : ""}>Decisão</option>
+        </select>
+        <button type="button" class="builder-del" title="Remover etapa" aria-label="Remover">×</button>
+      </div>`).join("");
+    $$(".builder-row", el).forEach((row) => {
+      const id = row.dataset.id;
+      const node = builder.nodes.find((n) => n.id === id);
+      row.querySelector(".b-label").addEventListener("input", (ev) => { node.label = ev.target.value; scheduleSync(); });
+      row.querySelector(".b-label").addEventListener("change", () => renderEdges());
+      row.querySelector(".b-shape").addEventListener("change", (ev) => { node.shape = ev.target.value; row.classList.toggle("is-decision", ev.target.value === "decision"); scheduleSync(); });
+      row.querySelector(".builder-del").addEventListener("click", () => {
+        builder.nodes = builder.nodes.filter((n) => n.id !== id);
+        builder.edges = builder.edges.filter((e) => e.from !== id && e.to !== id);
+        renderNodes(); renderEdges(); scheduleSync();
+      });
+    });
+  }
+
+  function renderEdges() {
+    const el = $("#edges-list");
+    if (!builder.edges.length) { el.innerHTML = `<div class="builder-empty">Nenhuma ligação ainda. Clique em “+ Ligação”.</div>`; return; }
+    el.innerHTML = builder.edges.map((e) => `
+      <div class="builder-row" data-eid="${e.id}">
+        <select class="b-from">${nodeOptions(e.from)}</select>
+        <span class="b-arrow">→</span>
+        <select class="b-to">${nodeOptions(e.to)}</select>
+        <input type="text" class="b-edge-label" value="${esc(e.label || "")}" placeholder="rótulo (ex.: Sim)">
+        <label class="b-dotted"><input type="checkbox" ${e.dotted ? "checked" : ""}> tracejada</label>
+        <button type="button" class="builder-del" title="Remover ligação" aria-label="Remover">×</button>
+      </div>`).join("");
+    $$(".builder-row", el).forEach((row) => {
+      const eid = row.dataset.eid;
+      const edge = builder.edges.find((x) => x.id === eid);
+      row.querySelector(".b-from").addEventListener("change", (ev) => { edge.from = ev.target.value; scheduleSync(); });
+      row.querySelector(".b-to").addEventListener("change", (ev) => { edge.to = ev.target.value; scheduleSync(); });
+      row.querySelector(".b-edge-label").addEventListener("input", (ev) => { edge.label = ev.target.value; scheduleSync(); });
+      row.querySelector(".b-dotted input").addEventListener("change", (ev) => { edge.dotted = ev.target.checked; scheduleSync(); });
+      row.querySelector(".builder-del").addEventListener("click", () => {
+        builder.edges = builder.edges.filter((x) => x.id !== eid);
+        renderEdges(); scheduleSync();
+      });
+    });
+  }
+
+  // gera o código a partir do builder, joga no textarea avançado e atualiza o preview
+  function scheduleSync() {
+    manualCode = false;
     clearTimeout(previewTimer);
     previewTimer = setTimeout(() => {
-      renderMermaidInto($("#diagram-preview"), diagramSource.value);
-    }, 350);
+      const code = generateMermaid(builder);
+      syncingCode = true;
+      diagramSource.value = code;
+      syncingCode = false;
+      renderMermaidInto($("#diagram-preview"), code);
+    }, 300);
+  }
+
+  function setBuilderState(state) {
+    builder = state;
+    const dirInput = diagramForm.querySelector(`input[name="builder-dir"][value="${builder.dir}"]`) ||
+                     diagramForm.querySelector('input[name="builder-dir"][value="TD"]');
+    if (dirInput) dirInput.checked = true;
+    renderNodes(); renderEdges();
+    const code = generateMermaid(builder);
+    syncingCode = true; diagramSource.value = code; syncingCode = false;
+    renderMermaidInto($("#diagram-preview"), code);
+  }
+
+  function starterState() {
+    return {
+      dir: "TD", nSeq: 2, eSeq: 1,
+      nodes: [{ id: "n1", label: "Início", shape: "step" }, { id: "n2", label: "Fim", shape: "step" }],
+      edges: [{ id: "e1", from: "n1", to: "n2", label: "", dotted: false }],
+    };
   }
 
   function openDiagramModal(mode, id) {
     editingDiagramId = mode === "edit" ? Number(id) : null;
     $("#diagram-modal-title").textContent = mode === "edit" ? "Editar diagrama" : "Novo diagrama";
     $("#diagram-flow-label").textContent = "Fluxo " + currentFlow;
+    let state;
     if (mode === "edit") {
       const d = DIAGRAMS.find((x) => x.id === editingDiagramId);
       if (!d) return;
       diagramForm.titulo.value = d.titulo || "";
       diagramForm.kind.value = d.kind || "atual";
       diagramForm.descricao.value = d.descricao || "";
-      diagramSource.value = d.mermaid || "";
+      state = parseMermaid(d.mermaid || "");
+      if (!state.nodes.length) { state = starterState(); diagramSource.value = d.mermaid || ""; }
     } else {
       diagramForm.reset();
       diagramForm.kind.value = "atual";
-      diagramSource.value = "flowchart TD\n  A[Início] --> B[Fim]";
+      state = starterState();
     }
-    renderMermaidInto($("#diagram-preview"), diagramSource.value);
+    const adv = $(".builder-advanced"); if (adv) adv.open = false;
+    setBuilderState(state);
     diagramModal.hidden = false;
     setTimeout(() => { try { diagramForm.titulo.focus(); } catch (e) {} }, 30);
   }
@@ -906,7 +1060,7 @@
       kind: diagramForm.kind.value,
       titulo: diagramForm.titulo.value.trim(),
       descricao: diagramForm.descricao.value.trim(),
-      mermaid: diagramSource.value.trim(),
+      mermaid: (manualCode ? diagramSource.value : generateMermaid(builder)).trim(),
       atualizado_por: testerName() || undefined,
     };
     if (!payload.titulo) { toast("Informe o título.", true); return; }
@@ -950,7 +1104,31 @@
   $("#btn-add-diagram").addEventListener("click", () => openDiagramModal("create"));
   $("#diagrams-empty-add").addEventListener("click", () => openDiagramModal("create"));
   diagramForm.addEventListener("submit", submitDiagramForm);
-  diagramSource.addEventListener("input", livePreview);
+  // builder: adicionar etapa / ligação
+  $("#add-node").addEventListener("click", () => {
+    builder.nodes.push({ id: newNodeId(), label: "Nova etapa", shape: "step" });
+    renderNodes(); renderEdges(); scheduleSync();
+  });
+  $("#add-edge").addEventListener("click", () => {
+    if (!builder.nodes.length) { toast("Adicione ao menos uma etapa primeiro.", true); return; }
+    const first = builder.nodes[0].id;
+    const second = (builder.nodes[1] || builder.nodes[0]).id;
+    builder.edges.push({ id: "e" + (++builder.eSeq), from: first, to: second, label: "", dotted: false });
+    renderEdges(); scheduleSync();
+  });
+  // builder: sentido (vertical/horizontal)
+  $$('input[name="builder-dir"]', diagramForm).forEach((r) => {
+    r.addEventListener("change", (ev) => { if (ev.target.checked) { builder.dir = ev.target.value; scheduleSync(); } });
+  });
+  // modo avançado: edição manual do código volta pro builder (best-effort)
+  diagramSource.addEventListener("input", () => {
+    if (syncingCode) return;
+    manualCode = true;
+    const state = parseMermaid(diagramSource.value);
+    if (state.nodes.length) { builder = state; renderNodes(); renderEdges(); }
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => renderMermaidInto($("#diagram-preview"), diagramSource.value), 300);
+  });
   $("#diagram-close").addEventListener("click", closeDiagramModal);
   $("#diagram-cancel").addEventListener("click", closeDiagramModal);
   diagramModal.addEventListener("click", (e) => { if (e.target.id === "diagram-modal") closeDiagramModal(); });

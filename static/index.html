@@ -300,16 +300,39 @@
       </label>
       <div class="diagram-editor">
         <div class="diagram-editor-col">
-          <div class="diagram-editor-label">
-            <span>Código do diagrama (Mermaid)</span>
-            <a href="https://mermaid.js.org/syntax/flowchart.html" target="_blank" rel="noopener" class="diagram-help">sintaxe ↗</a>
+          <div class="builder-toolbar">
+            <span class="builder-dir-label">Sentido</span>
+            <div class="builder-dir" id="builder-dir">
+              <label><input type="radio" name="builder-dir" value="TD" checked> Vertical ↓</label>
+              <label><input type="radio" name="builder-dir" value="LR"> Horizontal →</label>
+            </div>
           </div>
-          <textarea id="diagram-source" name="mermaid" spellcheck="false" placeholder="flowchart TD&#10;  A[Início] --> B[Fim]" required></textarea>
+
+          <div class="builder-section">
+            <div class="builder-section-head">
+              <h4>Etapas <span class="builder-hint-inline">(as caixas do fluxo)</span></h4>
+              <button type="button" class="builder-add" id="add-node">+ Etapa</button>
+            </div>
+            <div class="builder-list" id="nodes-list"></div>
+          </div>
+
+          <div class="builder-section">
+            <div class="builder-section-head">
+              <h4>Ligações <span class="builder-hint-inline">(as setas entre as etapas)</span></h4>
+              <button type="button" class="builder-add" id="add-edge">+ Ligação</button>
+            </div>
+            <div class="builder-list" id="edges-list"></div>
+          </div>
+
+          <details class="builder-advanced">
+            <summary>Modo avançado — código Mermaid <a href="https://mermaid.js.org/syntax/flowchart.html" target="_blank" rel="noopener" class="diagram-help">sintaxe ↗</a></summary>
+            <textarea id="diagram-source" name="mermaid" spellcheck="false" placeholder="flowchart TD&#10;  A[Início] --> B[Fim]"></textarea>
+          </details>
         </div>
         <div class="diagram-editor-col">
           <div class="diagram-editor-label"><span>Pré-visualização</span></div>
           <div class="diagram-preview" id="diagram-preview">
-            <div class="diagram-preview-empty">O desenho aparece aqui enquanto você digita.</div>
+            <div class="diagram-preview-empty">O desenho aparece aqui enquanto você monta as etapas.</div>
           </div>
         </div>
       </div>
