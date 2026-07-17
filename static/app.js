@@ -830,7 +830,11 @@
         <span class="diagram-kind">${esc(KIND_LABEL[d.kind] || d.kind)}</span>
         <span class="diagram-title">${esc(d.titulo)}</span>
         <span class="diagram-actions">
-          <button type="button" class="case-icon-btn diagram-edit" title="Editar diagrama" aria-label="Editar">
+          <button type="button" class="case-icon-btn diagram-inline-toggle" title="Editar direto no desenho" aria-label="Editar aqui" aria-pressed="false">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            <span class="inline-toggle-label">Editar aqui</span>
+          </button>
+          <button type="button" class="case-icon-btn diagram-edit" title="Editor completo (título, tipo, código)" aria-label="Editor completo">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
           <button type="button" class="case-icon-btn danger diagram-del" title="Excluir diagrama" aria-label="Excluir">
@@ -840,6 +844,17 @@
       </div>
       <div class="diagram-body">
         ${d.descricao ? `<div class="diagram-desc">${esc(d.descricao)}</div>` : ""}
+        <div class="inline-toolbar" data-toolbar="${d.id}" hidden>
+          <span class="inline-tb-hint">Clique numa caixa pra renomear · passe o mouse pra ver o <b>+</b> · clique numa seta pra tracejar ou inverter</span>
+          <span class="inline-tb-spacer"></span>
+          <div class="inline-dir" role="group" aria-label="Sentido do fluxo">
+            <button type="button" class="inline-dir-btn" data-dir="TD" title="Vertical">↓</button>
+            <button type="button" class="inline-dir-btn" data-dir="LR" title="Horizontal">→</button>
+          </div>
+          <button type="button" class="inline-add-node" title="Adicionar etapa solta">+ Etapa</button>
+          <span class="inline-save-state" aria-live="polite"></span>
+          <button type="button" class="inline-done">Concluir</button>
+        </div>
         <div class="diagram-canvas" data-canvas="${d.id}"><div class="diagram-preview-empty">Renderizando…</div></div>
         <div class="diagram-meta-foot">${d.atualizado_por ? `Atualizado por <span class="who">${esc(d.atualizado_por)}</span> · ` : ""}${fmtWhen(d.updated_at)}${d.seeded ? " · <span class=\"who\">modelo inicial</span>" : ""}</div>
       </div>
@@ -858,6 +873,9 @@
   function renderDiagrams() {
     const list = DIAGRAMS.filter((d) => (d.fluxo || "C") === currentFlow)
       .sort((a, b) => (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : (a.ordem || 0) - (b.ordem || 0)));
+    // cancela edições inline pendentes antes de recriar os cards
+    inlineState.forEach((st) => { if (st.saveTimer) clearTimeout(st.saveTimer); });
+    inlineState.clear();
     const emptyEl = $("#diagrams-empty");
     const wrap = $("#diagrams");
     if (!list.length) {
@@ -878,7 +896,24 @@
         const nowOpen = art.classList.toggle("collapsed") === false;
         art.querySelector(".diagram-toggle").setAttribute("aria-expanded", nowOpen ? "true" : "false");
         if (nowOpen) { expandedDiagrams.add(id); if (d) renderDiagramCanvas(d, wrap); }
-        else { expandedDiagrams.delete(id); }
+        else { expandedDiagrams.delete(id); if (art.classList.contains("editing")) exitInlineEdit(art); }
+      });
+    });
+    $$(".diagram-inline-toggle", wrap).forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const art = btn.closest(".diagram");
+        const id = Number(art.dataset.id);
+        const d = DIAGRAMS.find((x) => x.id === id);
+        if (!d) return;
+        // abrir o card se estiver recolhido antes de editar
+        if (art.classList.contains("collapsed")) {
+          art.classList.remove("collapsed");
+          art.querySelector(".diagram-toggle").setAttribute("aria-expanded", "true");
+          expandedDiagrams.add(id);
+        }
+        if (art.classList.contains("editing")) exitInlineEdit(art);
+        else enterInlineEdit(art, d);
       });
     });
     $$(".diagram-edit", wrap).forEach((btn) => {
@@ -900,10 +935,16 @@
   // estado do builder: { dir, nodes:[{id,label,shape}], edges:[{id,from,to,label,dotted}] }
   let builder = { dir: "TD", nodes: [], edges: [], nSeq: 0, eSeq: 0 };
 
-  function newNodeId() {
+  function newNodeId(state) {
+    const s = state || builder;
     let id;
-    do { id = "n" + (++builder.nSeq); } while (builder.nodes.some((n) => n.id === id));
+    do { id = "n" + (++s.nSeq); } while (s.nodes.some((n) => n.id === id));
     return id;
+  }
+
+  function newEdgeId(state) {
+    const s = state || builder;
+    return "e" + (++s.eSeq);
   }
 
   // --- gerar código Mermaid a partir do estado ---
@@ -1181,6 +1222,292 @@
     } catch (err) {
       toast("Erro ao excluir: " + err.message, true);
     }
+  }
+
+  // ---------------- edição inline direto no card (sem modal) ----------------
+  // Cada card guarda seu próprio estado de builder enquanto está em edição.
+  // As alterações regeram o Mermaid, redesenham o SVG e salvam sozinhas (debounce).
+  const inlineState = new Map();   // id do diagrama -> { d, state, saveTimer, renaming }
+
+  function enterInlineEdit(art, d) {
+    // sai de qualquer outro card em edição (um de cada vez, evita confusão)
+    $$(".diagram.editing").forEach((other) => { if (other !== art) exitInlineEdit(other); });
+    const state = parseMermaid(d.mermaid || "");
+    if (!state.nodes.length) { toast("Esse desenho é complexo demais pra editar aqui — use o editor completo.", true); return; }
+    const st = { d, state, saveTimer: null, dirty: false };
+    inlineState.set(d.id, st);
+    art.classList.add("editing");
+    const tb = art.querySelector(".inline-toolbar");
+    if (tb) { tb.hidden = false; wireInlineToolbar(art, st); }
+    const toggle = art.querySelector(".diagram-inline-toggle");
+    if (toggle) { toggle.setAttribute("aria-pressed", "true"); toggle.classList.add("active"); const lbl = toggle.querySelector(".inline-toggle-label"); if (lbl) lbl.textContent = "Editando"; }
+    syncInlineDirButtons(art, st);
+    renderInlineCanvas(art, st);
+  }
+
+  function exitInlineEdit(art) {
+    const id = Number(art.dataset.id);
+    const st = inlineState.get(id);
+    if (st && st.saveTimer) { clearTimeout(st.saveTimer); saveInline(art, st, true); }
+    inlineState.delete(id);
+    art.classList.remove("editing");
+    const tb = art.querySelector(".inline-toolbar");
+    if (tb) tb.hidden = true;
+    const toggle = art.querySelector(".diagram-inline-toggle");
+    if (toggle) { toggle.setAttribute("aria-pressed", "false"); toggle.classList.remove("active"); const lbl = toggle.querySelector(".inline-toggle-label"); if (lbl) lbl.textContent = "Editar aqui"; }
+    // volta ao desenho estático limpo
+    const canvas = art.querySelector(".diagram-canvas");
+    const d = DIAGRAMS.find((x) => x.id === id);
+    if (canvas && d) { canvas.dataset.rendered = "1"; renderMermaidInto(canvas, d.mermaid); }
+  }
+
+  function wireInlineToolbar(art, st) {
+    const tb = art.querySelector(".inline-toolbar");
+    if (!tb || tb.dataset.wired) return;
+    tb.dataset.wired = "1";
+    tb.addEventListener("click", (e) => e.stopPropagation());
+    $$(".inline-dir-btn", tb).forEach((b) => b.addEventListener("click", () => {
+      st.state.dir = b.dataset.dir;
+      syncInlineDirButtons(art, st);
+      commitInline(art, st);
+    }));
+    const addBtn = tb.querySelector(".inline-add-node");
+    if (addBtn) addBtn.addEventListener("click", () => {
+      const id = newNodeId(st.state);
+      st.state.nodes.push({ id, label: "Nova etapa", shape: "step" });
+      commitInline(art, st, id);
+    });
+    const doneBtn = tb.querySelector(".inline-done");
+    if (doneBtn) doneBtn.addEventListener("click", () => exitInlineEdit(art));
+  }
+
+  function syncInlineDirButtons(art, st) {
+    $$(".inline-dir-btn", art).forEach((b) => b.classList.toggle("active", b.dataset.dir === st.state.dir));
+  }
+
+  // regenera código, redesenha e agenda salvamento. focusNodeId: renomeia essa etapa após desenhar.
+  function commitInline(art, st, focusNodeId) {
+    st.dirty = true;
+    renderInlineCanvas(art, st, focusNodeId);
+    scheduleInlineSave(art, st);
+  }
+
+  function scheduleInlineSave(art, st) {
+    setSaveState(art, "saving");
+    if (st.saveTimer) clearTimeout(st.saveTimer);
+    st.saveTimer = setTimeout(() => saveInline(art, st), 650);
+  }
+
+  async function saveInline(art, st, silent) {
+    st.saveTimer = null;
+    const mermaid = generateMermaid(st.state).trim();
+    if (!mermaid) return;
+    try {
+      const updated = await api(`/api/diagramas/${st.d.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mermaid, atualizado_por: testerName() || undefined }),
+      });
+      st.d.mermaid = updated.mermaid;
+      st.d.updated_at = updated.updated_at;
+      st.d.atualizado_por = updated.atualizado_por;
+      st.d.seeded = updated.seeded;
+      const idx = DIAGRAMS.findIndex((x) => x.id === updated.id);
+      if (idx >= 0) DIAGRAMS[idx] = Object.assign(DIAGRAMS[idx], { mermaid: updated.mermaid, updated_at: updated.updated_at, atualizado_por: updated.atualizado_por, seeded: updated.seeded });
+      const foot = art.querySelector(".diagram-meta-foot");
+      if (foot) foot.innerHTML = `${updated.atualizado_por ? `Atualizado por <span class="who">${esc(updated.atualizado_por)}</span> · ` : ""}${fmtWhen(updated.updated_at)}`;
+      st.dirty = false;
+      if (!silent) setSaveState(art, "saved");
+    } catch (e) {
+      setSaveState(art, "error");
+      if (!silent) toast("Erro ao salvar: " + e.message, true);
+    }
+  }
+
+  function setSaveState(art, s) {
+    const el = art.querySelector(".inline-save-state");
+    if (!el) return;
+    el.className = "inline-save-state " + s;
+    el.textContent = s === "saving" ? "salvando…" : s === "saved" ? "salvo ✓" : s === "error" ? "erro ao salvar" : "";
+    if (s === "saved") { clearTimeout(setSaveState._t); setSaveState._t = setTimeout(() => { if (el.textContent === "salvo ✓") el.textContent = ""; }, 1600); }
+  }
+
+  // desenha o SVG editável e (re)constrói a camada de affordances por cima
+  function renderInlineCanvas(art, st, focusNodeId) {
+    const canvas = art.querySelector(".diagram-canvas");
+    if (!canvas) return;
+    canvas.dataset.rendered = "1";
+    const code = generateMermaid(st.state);
+    renderMermaidInto(canvas, code).then(() => {
+      buildInlineAffordances(art, st);
+      if (focusNodeId) startRename(art, st, focusNodeId);
+    });
+  }
+
+  function inlineNodeId(g) {
+    const m = /-flowchart-([A-Za-z0-9_]+)-\d+$/.exec(g.id || "");
+    return m ? m[1] : null;
+  }
+
+  function buildInlineAffordances(art, st) {
+    const canvas = art.querySelector(".diagram-canvas");
+    const svg = canvas.querySelector("svg");
+    if (!svg) return;
+    canvas.classList.add("inline-canvas");
+    // camada de overlay cobrindo exatamente o SVG
+    let fx = canvas.querySelector(".inline-fx");
+    if (fx) fx.remove();
+    fx = document.createElement("div");
+    fx.className = "inline-fx";
+    canvas.appendChild(fx);
+    fx.style.left = svg.offsetLeft + "px";
+    fx.style.top = svg.offsetTop + "px";
+    fx.style.width = svg.offsetWidth + "px";
+    fx.style.height = svg.offsetHeight + "px";
+    const fxRect = fx.getBoundingClientRect();
+
+    // ---- nós: renomear no clique + botões +, forma e excluir ----
+    $$("g.node", svg).forEach((g) => {
+      const nid = inlineNodeId(g);
+      const node = st.state.nodes.find((n) => n.id === nid);
+      if (!node) return;
+      g.classList.add("inline-node");
+      g.addEventListener("click", (ev) => {
+        if (ev.target.closest && ev.target.closest(".inline-node-fx")) return;
+        ev.stopPropagation();
+        startRename(art, st, nid);
+      });
+      const r = g.getBoundingClientRect();
+      const left = r.left - fxRect.left, top = r.top - fxRect.top;
+      const grp = document.createElement("div");
+      grp.className = "inline-node-fx";
+      grp.style.left = left + "px";
+      grp.style.top = top + "px";
+      grp.style.width = r.width + "px";
+      grp.style.height = r.height + "px";
+      grp.innerHTML =
+        `<button type="button" class="ifx ifx-add" title="Adicionar etapa ligada a esta">+</button>
+         <button type="button" class="ifx ifx-shape" title="Alternar etapa / decisão">◇</button>
+         <button type="button" class="ifx ifx-del" title="Excluir etapa">×</button>`;
+      fx.appendChild(grp);
+      // manter os botões visíveis enquanto o mouse está no nó ou no grupo
+      const show = () => grp.classList.add("hot");
+      const hide = () => grp.classList.remove("hot");
+      g.addEventListener("mouseenter", show); g.addEventListener("mouseleave", hide);
+      grp.addEventListener("mouseenter", show); grp.addEventListener("mouseleave", hide);
+      grp.querySelector(".ifx-add").addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const id = newNodeId(st.state);
+        st.state.nodes.push({ id, label: "Nova etapa", shape: "step" });
+        st.state.edges.push({ id: newEdgeId(st.state), from: nid, to: id, label: "", dotted: false });
+        commitInline(art, st, id);
+      });
+      grp.querySelector(".ifx-shape").addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        node.shape = node.shape === "decision" ? "step" : "decision";
+        commitInline(art, st);
+      });
+      grp.querySelector(".ifx-del").addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        st.state.nodes = st.state.nodes.filter((n) => n.id !== nid);
+        st.state.edges = st.state.edges.filter((e) => e.from !== nid && e.to !== nid);
+        commitInline(art, st);
+      });
+    });
+
+    // ---- arestas: clicar tracejа/solta; botão de inverter no meio ----
+    const edgePaths = $$(".edgePaths path.flowchart-link, .edgePaths path", svg);
+    const usedEdge = new Set();
+    edgePaths.forEach((path) => {
+      const edge = edgeForPath(path, st.state, usedEdge);
+      if (!edge) return;
+      path.classList.add("inline-edge");
+      path.style.cursor = "pointer";
+      // caminho invisível "gordo" pra facilitar o clique na seta fina
+      const hit = path.cloneNode();
+      hit.classList.add("inline-edge-hit");
+      hit.removeAttribute("id");
+      hit.style.stroke = "transparent";
+      hit.style.strokeWidth = "12px";
+      hit.style.fill = "none";
+      hit.style.pointerEvents = "stroke";
+      hit.style.cursor = "pointer";
+      path.parentNode.insertBefore(hit, path.nextSibling);
+      const toggleDashed = (ev) => { ev.stopPropagation(); edge.dotted = !edge.dotted; commitInline(art, st); };
+      hit.addEventListener("click", toggleDashed);
+      path.addEventListener("click", toggleDashed);
+      // botão de inverter, posicionado no meio da seta — só aparece ao passar o mouse nessa aresta
+      try {
+        const p = path.getPointAtLength(path.getTotalLength() / 2);
+        const sp = svg.createSVGPoint(); sp.x = p.x; sp.y = p.y;
+        const scr = sp.matrixTransform(path.getScreenCTM());
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ifx ifx-reverse";
+        btn.title = "Inverter o sentido da seta";
+        btn.textContent = "⇄";
+        btn.style.left = (scr.x - fxRect.left) + "px";
+        btn.style.top = (scr.y - fxRect.top) + "px";
+        btn.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          const t = edge.from; edge.from = edge.to; edge.to = t;
+          commitInline(art, st);
+        });
+        fx.appendChild(btn);
+        let hideT = null;
+        const showRev = () => { clearTimeout(hideT); btn.classList.add("hot"); };
+        const hideRev = () => { hideT = setTimeout(() => btn.classList.remove("hot"), 120); };
+        [hit, path].forEach((el) => { el.addEventListener("mouseenter", showRev); el.addEventListener("mouseleave", hideRev); });
+        btn.addEventListener("mouseenter", showRev); btn.addEventListener("mouseleave", hideRev);
+      } catch (e) { /* getPointAtLength pode falhar em curvas raras — segue sem o botão */ }
+    });
+  }
+
+  // casa um <path> de aresta renderizado com a aresta do estado (pelo id L_from_to_idx)
+  function edgeForPath(path, state, used) {
+    const m = /^L[_-](.+?)[_-](.+?)[_-]\d+$/.exec(path.id || "");
+    let from = null, to = null;
+    if (m) { from = m[1]; to = m[2]; }
+    let cands = state.edges;
+    if (from && to) cands = state.edges.filter((e) => e.from === from && e.to === to);
+    const pick = cands.find((e) => !used.has(e.id)) || cands[0];
+    if (pick) used.add(pick.id);
+    return pick || null;
+  }
+
+  // renomear uma etapa direto sobre a caixa (input flutuante, sem janelinha)
+  function startRename(art, st, nid) {
+    const canvas = art.querySelector(".diagram-canvas");
+    const fx = canvas.querySelector(".inline-fx");
+    const svg = canvas.querySelector("svg");
+    if (!fx || !svg) return;
+    const g = $$("g.node", svg).find((x) => inlineNodeId(x) === nid);
+    const node = st.state.nodes.find((n) => n.id === nid);
+    if (!g || !node) return;
+    fx.querySelector(".inline-rename")?.remove();
+    const fxRect = fx.getBoundingClientRect();
+    const r = g.getBoundingClientRect();
+    const inp = document.createElement("input");
+    inp.type = "text";
+    inp.className = "inline-rename";
+    inp.value = node.label || "";
+    inp.style.left = (r.left - fxRect.left - 6) + "px";
+    inp.style.top = (r.top - fxRect.top + r.height / 2 - 15) + "px";
+    inp.style.width = Math.max(120, r.width + 12) + "px";
+    fx.appendChild(inp);
+    setTimeout(() => { inp.focus(); inp.select(); }, 10);
+    let done = false;
+    const commit = (save) => {
+      if (done) return; done = true;
+      if (save) { node.label = inp.value; commitInline(art, st); }
+      else { inp.remove(); }
+    };
+    inp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); commit(true); }
+      else if (ev.key === "Escape") { ev.preventDefault(); commit(false); }
+      ev.stopPropagation();
+    });
+    inp.addEventListener("blur", () => commit(true));
+    inp.addEventListener("click", (ev) => ev.stopPropagation());
   }
 
   $$(".view-tab").forEach((t) => t.addEventListener("click", () => switchView(t.dataset.view)));

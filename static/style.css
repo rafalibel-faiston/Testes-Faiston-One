@@ -862,6 +862,96 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 .mm-pop-del:hover { color:var(--bad); border-color:var(--bad); background:var(--bad-bg); }
 .mm-pop-close:hover { background:var(--surface-3); }
 
+/* ---------- edição inline direto no card (aba Fluxos) ---------- */
+/* botão "Editar aqui" com rótulo */
+.diagram-inline-toggle { width:auto; gap:5px; padding:0 9px; }
+.diagram-inline-toggle .inline-toggle-label {
+  font-size:11px; font-weight:600; font-family:'Roboto',sans-serif; letter-spacing:.2px;
+}
+.diagram-inline-toggle.active {
+  color:#fff; border-color:transparent; background:var(--grad-primary);
+}
+.diagram-inline-toggle.active:hover { color:#fff; transform:translateY(-1px); }
+.diagram.editing { border-left-color:var(--f-blue); box-shadow:var(--shadow-2); }
+
+/* barra de edição inline */
+.inline-toolbar {
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;
+  background:var(--surface-2); border:1px solid var(--line-2); border-radius:10px; padding:8px 12px;
+  animation:toastIn .16s var(--ease);
+}
+.inline-tb-hint { font-size:11.5px; color:var(--text-3); line-height:1.4; }
+.inline-tb-hint b { color:var(--f-blue); }
+.inline-tb-spacer { flex:1 1 12px; }
+.inline-dir { display:inline-flex; border:1px solid var(--line-2); border-radius:8px; overflow:hidden; }
+.inline-dir-btn {
+  border:none; background:var(--surface); color:var(--text-2); cursor:pointer;
+  width:30px; height:28px; font-size:15px; line-height:1; transition:all .15s var(--ease);
+}
+.inline-dir-btn + .inline-dir-btn { border-left:1px solid var(--line-2); }
+.inline-dir-btn:hover { background:var(--surface-3); color:var(--f-blue); }
+.inline-dir-btn.active { background:var(--grad-primary); color:#fff; }
+.inline-add-node {
+  border:1px solid var(--f-blue); color:var(--f-blue); background:rgba(0,84,236,.06);
+  border-radius:8px; padding:5px 11px; font-size:12px; font-weight:600; font-family:'Roboto',sans-serif; cursor:pointer;
+  transition:background .15s var(--ease), transform .12s var(--ease);
+}
+.inline-add-node:hover { background:rgba(0,84,236,.12); transform:translateY(-1px); }
+.inline-done {
+  border:1px solid var(--line-2); background:var(--surface); color:var(--text-2);
+  border-radius:8px; padding:5px 12px; font-size:12px; font-weight:600; font-family:'Roboto',sans-serif; cursor:pointer;
+  transition:all .15s var(--ease);
+}
+.inline-done:hover { border-color:var(--f-blue); color:var(--f-blue); }
+.inline-save-state { font-size:11px; font-weight:600; color:var(--text-3); min-width:56px; text-align:right; }
+.inline-save-state.saving { color:var(--f-blue); }
+.inline-save-state.saved { color:var(--ok); }
+.inline-save-state.error { color:var(--bad); }
+
+/* camada de affordances sobre o desenho */
+.diagram-canvas.inline-canvas { cursor:default; }
+.diagram-canvas.inline-canvas svg g.node { cursor:text; }
+.diagram-canvas.inline-canvas svg g.node:hover .basic.label-container,
+.diagram-canvas.inline-canvas svg g.node:hover rect,
+.diagram-canvas.inline-canvas svg g.node:hover polygon,
+.diagram-canvas.inline-canvas svg g.node:hover circle {
+  stroke:var(--f-blue) !important; stroke-width:2.5px !important;
+  filter:drop-shadow(0 2px 6px rgba(0,84,236,.22));
+}
+.diagram-canvas.inline-canvas svg .inline-edge:hover { stroke:var(--f-blue) !important; }
+.inline-fx { position:absolute; z-index:4; pointer-events:none; }
+.inline-node-fx { position:absolute; pointer-events:none; }
+.ifx {
+  position:absolute; pointer-events:auto; cursor:pointer;
+  width:22px; height:22px; border-radius:50%; border:1px solid var(--line-2);
+  background:var(--surface); color:var(--text-2); font-size:14px; line-height:1;
+  display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow-1);
+  opacity:0; transform:scale(.8); transition:opacity .12s var(--ease), transform .12s var(--ease), background .15s, color .15s, border-color .15s;
+}
+.inline-node-fx.hot .ifx { opacity:1; transform:scale(1); }
+/* + fica sempre visível de leve pra dar a dica; realça no hover */
+.inline-node-fx .ifx-add { opacity:.55; transform:scale(1); }
+.inline-node-fx.hot .ifx-add { opacity:1; }
+.ifx-add { left:50%; bottom:-11px; margin-left:-11px; color:var(--f-blue); border-color:var(--f-blue); font-weight:700; }
+.ifx-add:hover { background:var(--f-blue); color:#fff; }
+.ifx-shape { left:-11px; top:50%; margin-top:-11px; font-size:12px; }
+.ifx-shape:hover { color:var(--f-blue); border-color:var(--f-blue); }
+.ifx-del { right:-11px; top:-11px; }
+.ifx-del:hover { color:var(--bad); border-color:var(--bad); background:var(--bad-bg); }
+.ifx-reverse {
+  position:absolute; z-index:5; pointer-events:auto; transform:translate(-50%,-50%) scale(.8); opacity:0;
+  width:24px; height:24px; font-size:13px; color:var(--f-blue); border-color:var(--f-blue);
+}
+.ifx-reverse.hot { opacity:1; transform:translate(-50%,-50%) scale(1); }
+.ifx-reverse:hover { opacity:1 !important; background:var(--f-blue); color:#fff; transform:translate(-50%,-50%) scale(1.1); }
+.inline-rename {
+  position:absolute; z-index:6; pointer-events:auto; box-sizing:border-box;
+  font-family:'Roboto',sans-serif; font-size:12.5px; font-weight:600; text-align:center; color:var(--text);
+  background:#fff; border:2px solid var(--f-blue); border-radius:7px; padding:5px 7px;
+  box-shadow:0 4px 14px rgba(0,84,236,.28);
+}
+.inline-rename:focus { outline:none; }
+
 .builder-advanced { margin-top:6px; }
 .builder-advanced summary {
   font-size:11.5px; color:var(--text-3); font-weight:600; cursor:pointer; padding:4px 0; user-select:none;
