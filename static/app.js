@@ -845,13 +845,14 @@
       <div class="diagram-body">
         ${d.descricao ? `<div class="diagram-desc">${esc(d.descricao)}</div>` : ""}
         <div class="inline-toolbar" data-toolbar="${d.id}" hidden>
-          <span class="inline-tb-hint">Clique numa caixa pra renomear · passe o mouse pra ver o <b>+</b> · clique numa seta pra tracejar, ou use <b>⇄</b> / <b>×</b> pra inverter ou excluir</span>
+          <span class="inline-tb-hint">Clique numa caixa pra renomear · <b>+</b> adiciona · <b>▭/◇/🔔</b> troca o tipo · clique na seta pra tracejar, <b>⇄</b>/<b>×</b> inverte ou exclui</span>
           <span class="inline-tb-spacer"></span>
           <div class="inline-dir" role="group" aria-label="Sentido do fluxo">
             <button type="button" class="inline-dir-btn" data-dir="TD" title="Vertical">↓</button>
             <button type="button" class="inline-dir-btn" data-dir="LR" title="Horizontal">→</button>
           </div>
           <button type="button" class="inline-add-node" title="Adicionar etapa solta">+ Etapa</button>
+          <button type="button" class="inline-add-notif" title="Adicionar notificação solta">🔔 Notificação</button>
           <span class="inline-save-state" aria-live="polite"></span>
           <button type="button" class="inline-done">Concluir</button>
         </div>
@@ -953,7 +954,9 @@
     const lines = ["flowchart " + (s.dir || "TD")];
     s.nodes.forEach((n) => {
       const label = cleanLabel(n.label) || n.id;
-      lines.push(n.shape === "decision" ? `    ${n.id}{"${label}"}` : `    ${n.id}["${label}"]`);
+      if (n.shape === "decision") lines.push(`    ${n.id}{"${label}"}`);
+      else if (n.shape === "notif") lines.push(`    ${n.id}(["🔔 ${label}"])`);
+      else lines.push(`    ${n.id}["${label}"]`);
     });
     s.edges.forEach((e) => {
       if (!e.from || !e.to) return;
@@ -961,6 +964,12 @@
       if (e.dotted) lines.push(lbl ? `    ${e.from} -. ${lbl} .-> ${e.to}` : `    ${e.from} -.-> ${e.to}`);
       else lines.push(lbl ? `    ${e.from} -->|${lbl}| ${e.to}` : `    ${e.from} --> ${e.to}`);
     });
+    // notificações ganham cor própria (âmbar) via classe
+    const notifIds = s.nodes.filter((n) => n.shape === "notif").map((n) => n.id);
+    if (notifIds.length) {
+      lines.push("    classDef notif fill:#fff7e6,stroke:#f59e0b,stroke-width:1.5px,color:#7c4a03;");
+      lines.push("    class " + notifIds.join(",") + " notif;");
+    }
     return lines.join("\n");
   }
 
@@ -973,13 +982,21 @@
       return map.get(id);
     };
     // extrai definições de nó (inclusive inline numa aresta, ex.: A[x] --> B[y]),
-    // registra rótulo/forma e devolve a linha só com os ids (ex.: A --> B)
-    const extractNodes = (line) => line.replace(/([A-Za-z0-9_]+)\s*(\[|\{|\()\s*"?(.*?)"?\s*(\]|\}|\))/g, (full, id, open, label) => {
-      const n = ensure(id);
-      n.label = label;
-      n.shape = open === "{" ? "decision" : "step";
-      return id;
-    });
+    // registra rótulo/forma e devolve a linha só com os ids (ex.: A --> B).
+    // ordem importa: o formato estádio ([...]) precisa sair antes de [...],
+    // senão o colchete interno seria lido como uma etapa comum.
+    const extractNodes = (line) => {
+      line = line.replace(/([A-Za-z0-9_]+)\(\[\s*"?(.*?)"?\s*\]\)/g, (full, id, label) => {
+        const n = ensure(id); n.shape = "notif"; n.label = label.replace(/^🔔\s*/, ""); return id;
+      });
+      line = line.replace(/([A-Za-z0-9_]+)\{\s*"?(.*?)"?\s*\}/g, (full, id, label) => {
+        const n = ensure(id); n.shape = "decision"; n.label = label; return id;
+      });
+      line = line.replace(/([A-Za-z0-9_]+)\[\s*"?(.*?)"?\s*\]/g, (full, id, label) => {
+        const n = ensure(id); n.shape = "step"; n.label = label; return id;
+      });
+      return line;
+    };
     (code || "").split("\n").forEach((raw) => {
       let line = raw.trim();
       if (!line) return;
@@ -1020,6 +1037,7 @@
         <select class="b-shape">
           <option value="step" ${n.shape === "step" ? "selected" : ""}>Etapa</option>
           <option value="decision" ${n.shape === "decision" ? "selected" : ""}>Decisão</option>
+          <option value="notif" ${n.shape === "notif" ? "selected" : ""}>Notificação</option>
         </select>
         <button type="button" class="builder-del" title="Remover etapa" aria-label="Remover">×</button>
       </div>`).join("");
@@ -1277,6 +1295,12 @@
       st.state.nodes.push({ id, label: "Nova etapa", shape: "step" });
       commitInline(art, st, id);
     });
+    const addNotif = tb.querySelector(".inline-add-notif");
+    if (addNotif) addNotif.addEventListener("click", () => {
+      const id = newNodeId(st.state);
+      st.state.nodes.push({ id, label: "Notifica alguém", shape: "notif" });
+      commitInline(art, st, id);
+    });
     const doneBtn = tb.querySelector(".inline-done");
     if (doneBtn) doneBtn.addEventListener("click", () => exitInlineEdit(art));
   }
@@ -1386,8 +1410,11 @@
       grp.style.height = r.height + "px";
       grp.innerHTML =
         `<button type="button" class="ifx ifx-add" title="Adicionar etapa ligada a esta">+</button>
-         <button type="button" class="ifx ifx-shape" title="Alternar etapa / decisão">◇</button>
+         <button type="button" class="ifx ifx-shape" title="Alternar tipo: etapa / decisão / notificação"></button>
          <button type="button" class="ifx ifx-del" title="Excluir etapa">×</button>`;
+      const SHAPE_GLYPH = { step: "▭", decision: "◇", notif: "🔔" };
+      const shapeBtn = grp.querySelector(".ifx-shape");
+      shapeBtn.textContent = SHAPE_GLYPH[node.shape] || "▭";
       fx.appendChild(grp);
       // manter os botões visíveis enquanto o mouse está no nó ou no grupo
       const show = () => grp.classList.add("hot");
@@ -1401,9 +1428,10 @@
         st.state.edges.push({ id: newEdgeId(st.state), from: nid, to: id, label: "", dotted: false });
         commitInline(art, st, id);
       });
-      grp.querySelector(".ifx-shape").addEventListener("click", (ev) => {
+      shapeBtn.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        node.shape = node.shape === "decision" ? "step" : "decision";
+        const order = ["step", "decision", "notif"];
+        node.shape = order[(order.indexOf(node.shape) + 1) % order.length];
         commitInline(art, st);
       });
       grp.querySelector(".ifx-del").addEventListener("click", (ev) => {

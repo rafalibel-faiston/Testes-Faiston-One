@@ -897,6 +897,12 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
   transition:background .15s var(--ease), transform .12s var(--ease);
 }
 .inline-add-node:hover { background:rgba(0,84,236,.12); transform:translateY(-1px); }
+.inline-add-notif {
+  border:1px solid #f59e0b; color:#b45309; background:rgba(245,158,11,.10);
+  border-radius:8px; padding:5px 11px; font-size:12px; font-weight:600; font-family:'Roboto',sans-serif; cursor:pointer;
+  transition:background .15s var(--ease), transform .12s var(--ease);
+}
+.inline-add-notif:hover { background:rgba(245,158,11,.20); transform:translateY(-1px); }
 .inline-done {
   border:1px solid var(--line-2); background:var(--surface); color:var(--text-2);
   border-radius:8px; padding:5px 12px; font-size:12px; font-weight:600; font-family:'Roboto',sans-serif; cursor:pointer;
