@@ -950,8 +950,14 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 .ifx-recipient:hover { color:#9333ea; border-color:#9333ea; background:rgba(147,51,234,.10); }
 
 /* arrastar pra ligar */
-.inline-drag-svg { position:absolute; left:0; top:0; pointer-events:none; z-index:7; overflow:visible; }
-.inline-drag-line { stroke:var(--f-blue); stroke-width:2.5; stroke-dasharray:5 4; stroke-linecap:round; }
+.inline-drag-line {
+  position:absolute; height:0; width:0; transform-origin:0 0; pointer-events:none; z-index:7;
+  border-top:2.5px dashed var(--f-blue);
+}
+.inline-drag-line::after {
+  content:""; position:absolute; right:-1px; top:-5px;
+  border:5px solid transparent; border-left-color:var(--f-blue); border-right:0;
+}
 body.inline-connecting { cursor:crosshair; }
 body.inline-connecting * { cursor:crosshair !important; }
 .diagram-canvas.inline-canvas svg g.node.inline-drop-target rect,

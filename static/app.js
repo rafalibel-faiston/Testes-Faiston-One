@@ -952,6 +952,11 @@
   function cleanLabel(s) { return (s || "").replace(/["|]/g, " ").replace(/\s+/g, " ").trim(); }
   // destinatários possíveis de uma notificação e a cor de cada um
   const NOTIF_RECIPIENTS = ["Técnico", "Operador", "Cliente", "Todos"];
+  // frase natural mostrada na caixa por destinatário
+  const NOTIF_PHRASE = {
+    "Técnico": "Notifica o técnico", "Operador": "Notifica o operador",
+    "Cliente": "Notifica o cliente", "Todos": "Notifica a todos",
+  };
   const NOTIF_CLASS = { "Técnico": "notifTec", "Operador": "notifOpr", "Cliente": "notifCli" };
   const NOTIF_CLASSDEF = {
     notif:    "classDef notif fill:#fff7e6,stroke:#f59e0b,stroke-width:1.5px,color:#7c4a03;",
@@ -966,8 +971,11 @@
       const label = cleanLabel(n.label) || n.id;
       if (n.shape === "decision") lines.push(`    ${n.id}{"${label}"}`);
       else if (n.shape === "notif") {
-        const to = cleanLabel(n.to);
-        const inner = to ? `🔔 ${to}: ${label}` : `🔔 ${label}`;
+        const phrase = NOTIF_PHRASE[n.to];
+        const msg = cleanLabel(n.label);
+        let inner;
+        if (phrase) inner = msg ? `🔔 ${phrase}: ${msg}` : `🔔 ${phrase}`;
+        else inner = `🔔 ${msg || "Notificação"}`;
         lines.push(`    ${n.id}(["${inner}"])`);
       } else lines.push(`    ${n.id}["${label}"]`);
     });
@@ -1005,9 +1013,14 @@
     const extractNodes = (line) => {
       line = line.replace(/([A-Za-z0-9_]+)\(\[\s*"?(.*?)"?\s*\]\)/g, (full, id, label) => {
         const n = ensure(id); n.shape = "notif";
-        const txt = label.replace(/^🔔\s*/, "");
-        const rec = /^(Técnico|Operador|Cliente|Todos)\s*:\s*(.*)$/.exec(txt);
-        if (rec) { n.to = rec[1]; n.label = rec[2]; } else { n.label = txt; }
+        const txt = label.replace(/^🔔\s*/, "").trim();
+        n.to = ""; n.label = txt;
+        for (const k of NOTIF_RECIPIENTS) {
+          const ph = NOTIF_PHRASE[k];
+          if (txt === ph) { n.to = k; n.label = ""; break; }
+          if (txt.startsWith(ph + ": ")) { n.to = k; n.label = txt.slice(ph.length + 2); break; }
+        }
+        if (n.label === "Notificação") n.label = "";
         return id;
       });
       line = line.replace(/([A-Za-z0-9_]+)\{\s*"?(.*?)"?\s*\}/g, (full, id, label) => {
@@ -1329,8 +1342,9 @@
     const addNotif = tb.querySelector(".inline-add-notif");
     if (addNotif) addNotif.addEventListener("click", () => {
       const id = newNodeId(st.state);
-      st.state.nodes.push({ id, label: "Notifica alguém", shape: "notif" });
-      commitInline(art, st, id);
+      // já entra endereçada ao técnico; o 👤 troca o destinatário
+      st.state.nodes.push({ id, label: "", shape: "notif", to: "Técnico" });
+      commitInline(art, st);
     });
     const doneBtn = tb.querySelector(".inline-done");
     if (doneBtn) doneBtn.addEventListener("click", () => exitInlineEdit(art));
@@ -1452,7 +1466,7 @@
         recBtn.type = "button";
         recBtn.className = "ifx ifx-recipient";
         recBtn.textContent = "👤";
-        recBtn.title = "Destinatário: " + (node.to || "ninguém definido") + " (clique pra trocar)";
+        recBtn.title = (node.to ? NOTIF_PHRASE[node.to] : "Sem destinatário") + " — clique pra trocar";
         grp.appendChild(recBtn);
         recBtn.addEventListener("click", (ev) => {
           ev.stopPropagation();
@@ -1558,19 +1572,19 @@
     if (!src) return;
     const nodeAt = (cx, cy) => nodes.find((n) => cx >= n.r.left && cx <= n.r.right && cy >= n.r.top && cy <= n.r.bottom);
 
-    // linha-fantasma que segue o cursor
-    const NS = "http://www.w3.org/2000/svg";
-    const line = document.createElementNS(NS, "svg");
-    line.setAttribute("class", "inline-drag-svg");
-    line.setAttribute("width", fxRect.width);
-    line.setAttribute("height", fxRect.height);
-    const seg = document.createElementNS(NS, "line");
-    seg.setAttribute("class", "inline-drag-line");
+    // linha-fantasma que segue o cursor. Um <div> girado (não um <svg> aninhado,
+    // que a regra global ".diagram-canvas svg { height:auto }" colapsava pra 0×0).
     const [sx, sy] = toLocal(src.r.left + src.r.width / 2, src.r.top + src.r.height / 2);
-    seg.setAttribute("x1", sx); seg.setAttribute("y1", sy);
-    seg.setAttribute("x2", sx); seg.setAttribute("y2", sy);
-    line.appendChild(seg);
+    const line = document.createElement("div");
+    line.className = "inline-drag-line";
+    line.style.left = sx + "px";
+    line.style.top = sy + "px";
     fx.appendChild(line);
+    const drawLine = (lx, ly) => {
+      const dx = lx - sx, dy = ly - sy;
+      line.style.width = Math.hypot(dx, dy) + "px";
+      line.style.transform = `rotate(${Math.atan2(dy, dx)}rad)`;
+    };
     document.body.classList.add("inline-connecting");
 
     let dragging = false, hovered = null;
@@ -1579,7 +1593,7 @@
       if (!dragging && Math.hypot(dx, dy) < 5) return;
       dragging = true;
       const [lx, ly] = toLocal(e.clientX, e.clientY);
-      seg.setAttribute("x2", lx); seg.setAttribute("y2", ly);
+      drawLine(lx, ly);
       const tgt = nodeAt(e.clientX, e.clientY);
       if (hovered && (!tgt || tgt.g !== hovered)) hovered.classList.remove("inline-drop-target");
       if (tgt && tgt.id !== sourceId) { tgt.g.classList.add("inline-drop-target"); hovered = tgt.g; }
