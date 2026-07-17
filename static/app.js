@@ -845,8 +845,9 @@
       <div class="diagram-body">
         ${d.descricao ? `<div class="diagram-desc">${esc(d.descricao)}</div>` : ""}
         <div class="inline-toolbar" data-toolbar="${d.id}" hidden>
-          <span class="inline-tb-hint">Renomear: clique na caixa · Ligar: <b>arraste o +</b> até outra caixa · <b>▭/◇/🔔</b> troca o tipo · <b>👤</b> destinatário · seta: clique traceja, <b>⇄</b>/<b>×</b> inverte ou exclui</span>
+          <span class="inline-tb-hint">Renomear: clique na caixa · Ligar: <b>arraste o +</b> · seta: clique traceja, <b>Aa</b> rotula (Sim/Não), <b>⇄</b>/<b>×</b> inverte/exclui · <b>Delete</b> apaga o que está sob o mouse</span>
           <span class="inline-tb-spacer"></span>
+          <button type="button" class="inline-undo" title="Desfazer (Ctrl+Z)" disabled>↶ Desfazer</button>
           <div class="inline-dir" role="group" aria-label="Sentido do fluxo">
             <button type="button" class="inline-dir-btn" data-dir="TD" title="Vertical">↓</button>
             <button type="button" class="inline-dir-btn" data-dir="LR" title="Horizontal">→</button>
@@ -1296,7 +1297,7 @@
     $$(".diagram.editing").forEach((other) => { if (other !== art) exitInlineEdit(other); });
     const state = parseMermaid(d.mermaid || "");
     if (!state.nodes.length) { toast("Esse desenho é complexo demais pra editar aqui — use o editor completo.", true); return; }
-    const st = { d, state, saveTimer: null, dirty: false };
+    const st = { d, state, saveTimer: null, dirty: false, history: [cloneState(state)], hoverNodeId: null, hoverEdgeId: null };
     inlineState.set(d.id, st);
     art.classList.add("editing");
     const tb = art.querySelector(".inline-toolbar");
@@ -1346,8 +1347,35 @@
       st.state.nodes.push({ id, label: "", shape: "notif", to: "Técnico" });
       commitInline(art, st);
     });
+    const undoBtn = tb.querySelector(".inline-undo");
+    if (undoBtn) undoBtn.addEventListener("click", () => undoInline(art, st));
     const doneBtn = tb.querySelector(".inline-done");
     if (doneBtn) doneBtn.addEventListener("click", () => exitInlineEdit(art));
+  }
+
+  // ---- histórico (desfazer) ----
+  const cloneState = (s) => JSON.parse(JSON.stringify(s));
+  function pushHistory(st) {
+    if (st._restoring) return;
+    st.history = st.history || [];
+    st.history.push(cloneState(st.state));
+    if (st.history.length > 60) st.history.shift();
+  }
+  function updateUndoBtn(art, st) {
+    const b = art.querySelector(".inline-undo");
+    if (b) b.disabled = !st.history || st.history.length < 2;
+  }
+  function undoInline(art, st) {
+    if (!st.history || st.history.length < 2) { toast("Nada pra desfazer"); return; }
+    st.history.pop();                                   // descarta o estado atual
+    st._restoring = true;
+    st.state = cloneState(st.history[st.history.length - 1]);
+    st._restoring = false;
+    st.dirty = true;
+    renderInlineCanvas(art, st);
+    scheduleInlineSave(art, st);
+    updateUndoBtn(art, st);
+    toast("Desfeito");
   }
 
   function syncInlineDirButtons(art, st) {
@@ -1357,6 +1385,8 @@
   // regenera código, redesenha e agenda salvamento. focusNodeId: renomeia essa etapa após desenhar.
   function commitInline(art, st, focusNodeId) {
     st.dirty = true;
+    pushHistory(st);
+    updateUndoBtn(art, st);
     renderInlineCanvas(art, st, focusNodeId);
     scheduleInlineSave(art, st);
   }
@@ -1476,9 +1506,10 @@
         });
       }
       fx.appendChild(grp);
-      // manter os botões visíveis enquanto o mouse está no nó ou no grupo
-      const show = () => grp.classList.add("hot");
-      const hide = () => grp.classList.remove("hot");
+      // manter os botões visíveis enquanto o mouse está no nó ou no grupo;
+      // e registrar qual caixa está sob o cursor (pra tecla Delete)
+      const show = () => { grp.classList.add("hot"); st.hoverNodeId = nid; };
+      const hide = () => { grp.classList.remove("hot"); if (st.hoverNodeId === nid) st.hoverNodeId = null; };
       g.addEventListener("mouseenter", show); g.addEventListener("mouseleave", hide);
       grp.addEventListener("mouseenter", show); grp.addEventListener("mouseleave", hide);
       // + : clique cria uma etapa ligada; arrastar até outra caixa liga nela
@@ -1519,22 +1550,28 @@
       hit.style.pointerEvents = "stroke";
       hit.style.cursor = "pointer";
       path.parentNode.insertBefore(hit, path.nextSibling);
-      const toggleDashed = (ev) => { ev.stopPropagation(); edge.dotted = !edge.dotted; commitInline(art, st); };
-      hit.addEventListener("click", toggleDashed);
-      path.addEventListener("click", toggleDashed);
-      // controles da seta no meio dela (inverter / excluir) — só aparecem ao passar o mouse nessa aresta
+      // controles da seta no meio dela (rótulo / inverter / excluir) — só aparecem ao passar o mouse nessa aresta
       try {
         const p = path.getPointAtLength(path.getTotalLength() / 2);
         const sp = svg.createSVGPoint(); sp.x = p.x; sp.y = p.y;
         const scr = sp.matrixTransform(path.getScreenCTM());
+        const lx = scr.x - fxRect.left, ly = scr.y - fxRect.top;
+        // 1 clique traceja/solta na hora; o rótulo fica no botão "Aa"
+        const onClick = (ev) => { ev.stopPropagation(); edge.dotted = !edge.dotted; commitInline(art, st); };
+        [hit, path].forEach((el) => el.addEventListener("click", onClick));
         const ctrls = document.createElement("div");
         ctrls.className = "inline-edge-fx";
-        ctrls.style.left = (scr.x - fxRect.left) + "px";
-        ctrls.style.top = (scr.y - fxRect.top) + "px";
+        ctrls.style.left = lx + "px";
+        ctrls.style.top = ly + "px";
         ctrls.innerHTML =
-          `<button type="button" class="ifx ifx-reverse" title="Inverter o sentido da seta">⇄</button>
+          `<button type="button" class="ifx ifx-edge-label" title="Rótulo da seta (ex.: Sim / Não)">Aa</button>
+           <button type="button" class="ifx ifx-reverse" title="Inverter o sentido da seta">⇄</button>
            <button type="button" class="ifx ifx-edge-del" title="Excluir esta ligação">×</button>`;
         fx.appendChild(ctrls);
+        ctrls.querySelector(".ifx-edge-label").addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          startEdgeLabelEdit(art, st, edge.id, lx, ly);
+        });
         ctrls.querySelector(".ifx-reverse").addEventListener("click", (ev) => {
           ev.stopPropagation();
           const t = edge.from; edge.from = edge.to; edge.to = t;
@@ -1546,8 +1583,8 @@
           commitInline(art, st);
         });
         let hideT = null;
-        const showRev = () => { clearTimeout(hideT); ctrls.classList.add("hot"); };
-        const hideRev = () => { hideT = setTimeout(() => ctrls.classList.remove("hot"), 120); };
+        const showRev = () => { clearTimeout(hideT); ctrls.classList.add("hot"); st.hoverEdgeId = edge.id; };
+        const hideRev = () => { hideT = setTimeout(() => ctrls.classList.remove("hot"), 120); if (st.hoverEdgeId === edge.id) st.hoverEdgeId = null; };
         [hit, path, ctrls].forEach((el) => { el.addEventListener("mouseenter", showRev); el.addEventListener("mouseleave", hideRev); });
       } catch (e) { /* getPointAtLength pode falhar em curvas raras — segue sem os controles */ }
     });
@@ -1678,6 +1715,67 @@
     inp.addEventListener("blur", () => commit(true));
     inp.addEventListener("click", (ev) => ev.stopPropagation());
   }
+
+  // rotular uma seta direto no meio dela (ex.: Sim / Não numa decisão)
+  function startEdgeLabelEdit(art, st, edgeId, lx, ly) {
+    const canvas = art.querySelector(".diagram-canvas");
+    const fx = canvas && canvas.querySelector(".inline-fx");
+    const edge = st.state.edges.find((e) => e.id === edgeId);
+    if (!fx || !edge) return;
+    fx.querySelector(".inline-rename")?.remove();
+    const inp = document.createElement("input");
+    inp.type = "text";
+    inp.className = "inline-rename inline-edge-input";
+    inp.value = edge.label || "";
+    inp.placeholder = "rótulo (ex.: Sim)";
+    inp.style.left = (lx - 55) + "px";
+    inp.style.top = (ly - 14) + "px";
+    inp.style.width = "110px";
+    fx.appendChild(inp);
+    setTimeout(() => { inp.focus(); inp.select(); }, 10);
+    let done = false;
+    const commit = (save) => {
+      if (done) return; done = true;
+      if (save) { edge.label = inp.value; commitInline(art, st); }
+      else { inp.remove(); }
+    };
+    inp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); commit(true); }
+      else if (ev.key === "Escape") { ev.preventDefault(); commit(false); }
+      ev.stopPropagation();
+    });
+    inp.addEventListener("blur", () => commit(true));
+    inp.addEventListener("click", (ev) => ev.stopPropagation());
+  }
+
+  // atalhos de teclado enquanto um card está em edição inline
+  document.addEventListener("keydown", (e) => {
+    const art = $(".diagram.editing");
+    if (!art) return;
+    const st = inlineState.get(Number(art.dataset.id));
+    if (!st) return;
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || "");
+    // Ctrl/Cmd+Z desfaz
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === "z" || e.key === "Z")) {
+      if (typing) return;   // deixa o desfazer nativo do campo de texto
+      e.preventDefault(); undoInline(art, st); return;
+    }
+    // Delete/Backspace apaga a caixa (ou a seta) sob o mouse
+    if ((e.key === "Delete" || e.key === "Backspace") && !typing) {
+      if (st.hoverNodeId) {
+        e.preventDefault();
+        const nid = st.hoverNodeId; st.hoverNodeId = null;
+        st.state.nodes = st.state.nodes.filter((n) => n.id !== nid);
+        st.state.edges = st.state.edges.filter((ed) => ed.from !== nid && ed.to !== nid);
+        commitInline(art, st);
+      } else if (st.hoverEdgeId) {
+        e.preventDefault();
+        const eid = st.hoverEdgeId; st.hoverEdgeId = null;
+        st.state.edges = st.state.edges.filter((ed) => ed.id !== eid);
+        commitInline(art, st);
+      }
+    }
+  });
 
   $$(".view-tab").forEach((t) => t.addEventListener("click", () => switchView(t.dataset.view)));
   $("#btn-add-diagram").addEventListener("click", () => openDiagramModal("create"));

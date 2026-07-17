@@ -911,6 +911,16 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
   transition:all .15s var(--ease);
 }
 .inline-done:hover { border-color:var(--f-blue); color:var(--f-blue); }
+.inline-undo {
+  border:1px solid var(--line-2); background:var(--surface); color:var(--text-2);
+  border-radius:8px; padding:5px 11px; font-size:12px; font-weight:600; font-family:'Roboto',sans-serif; cursor:pointer;
+  transition:all .15s var(--ease);
+}
+.inline-undo:hover:not(:disabled) { border-color:var(--f-blue); color:var(--f-blue); }
+.inline-undo:disabled { opacity:.45; cursor:default; }
+.ifx-edge-label { font-size:11px; font-weight:700; }
+.ifx-edge-label:hover { color:var(--f-blue); border-color:var(--f-blue); }
+.inline-edge-input { font-weight:500; text-align:left; }
 .inline-save-state { font-size:11px; font-weight:600; color:var(--text-3); min-width:56px; text-align:right; }
 .inline-save-state.saving { color:var(--f-blue); }
 .inline-save-state.saved { color:var(--ok); }
