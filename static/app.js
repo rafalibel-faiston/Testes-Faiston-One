@@ -1617,9 +1617,12 @@
       if (!tgt || tgt.id === sourceId) return;   // soltou no vazio (ou nela mesma): cancela
       const dup = st.state.edges.some((ed) => ed.from === sourceId && ed.to === tgt.id);
       if (dup) { toast("Essas caixas já estão ligadas."); return; }
-      st.state.edges.push({ id: newEdgeId(st.state), from: sourceId, to: tgt.id, label: "", dotted: false });
+      // ligação que envolve notificação nasce tracejada (aviso lateral, não fluxo principal)
+      const isNotif = (id) => { const n = st.state.nodes.find((x) => x.id === id); return n && n.shape === "notif"; };
+      const dotted = isNotif(sourceId) || isNotif(tgt.id);
+      st.state.edges.push({ id: newEdgeId(st.state), from: sourceId, to: tgt.id, label: "", dotted });
       commitInline(art, st);
-      toast("Ligação criada");
+      toast(dotted ? "Notificação ligada ao lado" : "Ligação criada");
     };
     document.addEventListener("mousemove", move);
     document.addEventListener("mouseup", up);
