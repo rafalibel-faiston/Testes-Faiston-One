@@ -938,12 +938,17 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 .ifx-shape:hover { color:var(--f-blue); border-color:var(--f-blue); }
 .ifx-del { right:-11px; top:-11px; }
 .ifx-del:hover { color:var(--bad); border-color:var(--bad); background:var(--bad-bg); }
-.ifx-reverse {
-  position:absolute; z-index:5; pointer-events:auto; transform:translate(-50%,-50%) scale(.8); opacity:0;
-  width:24px; height:24px; font-size:13px; color:var(--f-blue); border-color:var(--f-blue);
+/* controles no meio de uma seta (inverter / excluir) */
+.inline-edge-fx {
+  position:absolute; z-index:5; transform:translate(-50%,-50%) scale(.8);
+  display:flex; gap:5px; pointer-events:none; opacity:0;
+  transition:opacity .12s var(--ease), transform .12s var(--ease);
 }
-.ifx-reverse.hot { opacity:1; transform:translate(-50%,-50%) scale(1); }
-.ifx-reverse:hover { opacity:1 !important; background:var(--f-blue); color:#fff; transform:translate(-50%,-50%) scale(1.1); }
+.inline-edge-fx.hot { opacity:1; transform:translate(-50%,-50%) scale(1); pointer-events:auto; }
+.inline-edge-fx .ifx { position:static; pointer-events:auto; opacity:1; transform:none; width:23px; height:23px; }
+.ifx-reverse { font-size:13px; color:var(--f-blue); border-color:var(--f-blue); }
+.ifx-reverse:hover { background:var(--f-blue); color:#fff; }
+.ifx-edge-del:hover { color:var(--bad); border-color:var(--bad); background:var(--bad-bg); }
 .inline-rename {
   position:absolute; z-index:6; pointer-events:auto; box-sizing:border-box;
   font-family:'Roboto',sans-serif; font-size:12.5px; font-weight:600; text-align:center; color:var(--text);

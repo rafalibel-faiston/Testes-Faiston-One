@@ -845,7 +845,7 @@
       <div class="diagram-body">
         ${d.descricao ? `<div class="diagram-desc">${esc(d.descricao)}</div>` : ""}
         <div class="inline-toolbar" data-toolbar="${d.id}" hidden>
-          <span class="inline-tb-hint">Clique numa caixa pra renomear · passe o mouse pra ver o <b>+</b> · clique numa seta pra tracejar ou inverter</span>
+          <span class="inline-tb-hint">Clique numa caixa pra renomear · passe o mouse pra ver o <b>+</b> · clique numa seta pra tracejar, ou use <b>⇄</b> / <b>×</b> pra inverter ou excluir</span>
           <span class="inline-tb-spacer"></span>
           <div class="inline-dir" role="group" aria-label="Sentido do fluxo">
             <button type="button" class="inline-dir-btn" data-dir="TD" title="Vertical">↓</button>
@@ -1435,36 +1435,43 @@
       const toggleDashed = (ev) => { ev.stopPropagation(); edge.dotted = !edge.dotted; commitInline(art, st); };
       hit.addEventListener("click", toggleDashed);
       path.addEventListener("click", toggleDashed);
-      // botão de inverter, posicionado no meio da seta — só aparece ao passar o mouse nessa aresta
+      // controles da seta no meio dela (inverter / excluir) — só aparecem ao passar o mouse nessa aresta
       try {
         const p = path.getPointAtLength(path.getTotalLength() / 2);
         const sp = svg.createSVGPoint(); sp.x = p.x; sp.y = p.y;
         const scr = sp.matrixTransform(path.getScreenCTM());
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "ifx ifx-reverse";
-        btn.title = "Inverter o sentido da seta";
-        btn.textContent = "⇄";
-        btn.style.left = (scr.x - fxRect.left) + "px";
-        btn.style.top = (scr.y - fxRect.top) + "px";
-        btn.addEventListener("click", (ev) => {
+        const ctrls = document.createElement("div");
+        ctrls.className = "inline-edge-fx";
+        ctrls.style.left = (scr.x - fxRect.left) + "px";
+        ctrls.style.top = (scr.y - fxRect.top) + "px";
+        ctrls.innerHTML =
+          `<button type="button" class="ifx ifx-reverse" title="Inverter o sentido da seta">⇄</button>
+           <button type="button" class="ifx ifx-edge-del" title="Excluir esta ligação">×</button>`;
+        fx.appendChild(ctrls);
+        ctrls.querySelector(".ifx-reverse").addEventListener("click", (ev) => {
           ev.stopPropagation();
           const t = edge.from; edge.from = edge.to; edge.to = t;
           commitInline(art, st);
         });
-        fx.appendChild(btn);
+        ctrls.querySelector(".ifx-edge-del").addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          st.state.edges = st.state.edges.filter((x) => x.id !== edge.id);
+          commitInline(art, st);
+        });
         let hideT = null;
-        const showRev = () => { clearTimeout(hideT); btn.classList.add("hot"); };
-        const hideRev = () => { hideT = setTimeout(() => btn.classList.remove("hot"), 120); };
-        [hit, path].forEach((el) => { el.addEventListener("mouseenter", showRev); el.addEventListener("mouseleave", hideRev); });
-        btn.addEventListener("mouseenter", showRev); btn.addEventListener("mouseleave", hideRev);
-      } catch (e) { /* getPointAtLength pode falhar em curvas raras — segue sem o botão */ }
+        const showRev = () => { clearTimeout(hideT); ctrls.classList.add("hot"); };
+        const hideRev = () => { hideT = setTimeout(() => ctrls.classList.remove("hot"), 120); };
+        [hit, path, ctrls].forEach((el) => { el.addEventListener("mouseenter", showRev); el.addEventListener("mouseleave", hideRev); });
+      } catch (e) { /* getPointAtLength pode falhar em curvas raras — segue sem os controles */ }
     });
   }
 
-  // casa um <path> de aresta renderizado com a aresta do estado (pelo id L_from_to_idx)
+  // casa um <path> de aresta renderizado com a aresta do estado.
+  // o Mermaid expõe o par origem/destino em data-id (ex.: "L_B_B_0"); o id do
+  // elemento vem prefixado ("mmd-2-L_B_B_0"), então preferimos o data-id.
   function edgeForPath(path, state, used) {
-    const m = /^L[_-](.+?)[_-](.+?)[_-]\d+$/.exec(path.id || "");
+    const raw = path.getAttribute("data-id") || path.id || "";
+    const m = /L[_-](.+?)[_-](.+?)[_-]\d+$/.exec(raw);
     let from = null, to = null;
     if (m) { from = m[1]; to = m[2]; }
     let cands = state.edges;
