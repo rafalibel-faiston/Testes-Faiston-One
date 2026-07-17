@@ -845,7 +845,7 @@
       <div class="diagram-body">
         ${d.descricao ? `<div class="diagram-desc">${esc(d.descricao)}</div>` : ""}
         <div class="inline-toolbar" data-toolbar="${d.id}" hidden>
-          <span class="inline-tb-hint">Clique numa caixa pra renomear · <b>+</b> adiciona · <b>▭/◇/🔔</b> troca o tipo · clique na seta pra tracejar, <b>⇄</b>/<b>×</b> inverte ou exclui</span>
+          <span class="inline-tb-hint">Renomear: clique na caixa · Ligar: <b>arraste o +</b> até outra caixa · <b>▭/◇/🔔</b> troca o tipo · <b>👤</b> destinatário · seta: clique traceja, <b>⇄</b>/<b>×</b> inverte ou exclui</span>
           <span class="inline-tb-spacer"></span>
           <div class="inline-dir" role="group" aria-label="Sentido do fluxo">
             <button type="button" class="inline-dir-btn" data-dir="TD" title="Vertical">↓</button>
@@ -950,13 +950,26 @@
 
   // --- gerar código Mermaid a partir do estado ---
   function cleanLabel(s) { return (s || "").replace(/["|]/g, " ").replace(/\s+/g, " ").trim(); }
+  // destinatários possíveis de uma notificação e a cor de cada um
+  const NOTIF_RECIPIENTS = ["Técnico", "Operador", "Cliente", "Todos"];
+  const NOTIF_CLASS = { "Técnico": "notifTec", "Operador": "notifOpr", "Cliente": "notifCli" };
+  const NOTIF_CLASSDEF = {
+    notif:    "classDef notif fill:#fff7e6,stroke:#f59e0b,stroke-width:1.5px,color:#7c4a03;",
+    notifTec: "classDef notifTec fill:#e8f0ff,stroke:#0054ec,stroke-width:1.5px,color:#0b2e75;",
+    notifOpr: "classDef notifOpr fill:#f3e8ff,stroke:#9333ea,stroke-width:1.5px,color:#5b1699;",
+    notifCli: "classDef notifCli fill:#e7f8ef,stroke:#0d9d6c,stroke-width:1.5px,color:#075e40;",
+  };
+
   function generateMermaid(s) {
     const lines = ["flowchart " + (s.dir || "TD")];
     s.nodes.forEach((n) => {
       const label = cleanLabel(n.label) || n.id;
       if (n.shape === "decision") lines.push(`    ${n.id}{"${label}"}`);
-      else if (n.shape === "notif") lines.push(`    ${n.id}(["🔔 ${label}"])`);
-      else lines.push(`    ${n.id}["${label}"]`);
+      else if (n.shape === "notif") {
+        const to = cleanLabel(n.to);
+        const inner = to ? `🔔 ${to}: ${label}` : `🔔 ${label}`;
+        lines.push(`    ${n.id}(["${inner}"])`);
+      } else lines.push(`    ${n.id}["${label}"]`);
     });
     s.edges.forEach((e) => {
       if (!e.from || !e.to) return;
@@ -964,12 +977,16 @@
       if (e.dotted) lines.push(lbl ? `    ${e.from} -. ${lbl} .-> ${e.to}` : `    ${e.from} -.-> ${e.to}`);
       else lines.push(lbl ? `    ${e.from} -->|${lbl}| ${e.to}` : `    ${e.from} --> ${e.to}`);
     });
-    // notificações ganham cor própria (âmbar) via classe
-    const notifIds = s.nodes.filter((n) => n.shape === "notif").map((n) => n.id);
-    if (notifIds.length) {
-      lines.push("    classDef notif fill:#fff7e6,stroke:#f59e0b,stroke-width:1.5px,color:#7c4a03;");
-      lines.push("    class " + notifIds.join(",") + " notif;");
-    }
+    // notificações ganham cor por destinatário (âmbar quando sem destinatário)
+    const byClass = {};
+    s.nodes.filter((n) => n.shape === "notif").forEach((n) => {
+      const cls = NOTIF_CLASS[n.to] || "notif";
+      (byClass[cls] = byClass[cls] || []).push(n.id);
+    });
+    Object.keys(byClass).forEach((cls) => {
+      lines.push("    " + NOTIF_CLASSDEF[cls]);
+      lines.push("    class " + byClass[cls].join(",") + " " + cls + ";");
+    });
     return lines.join("\n");
   }
 
@@ -987,7 +1004,11 @@
     // senão o colchete interno seria lido como uma etapa comum.
     const extractNodes = (line) => {
       line = line.replace(/([A-Za-z0-9_]+)\(\[\s*"?(.*?)"?\s*\]\)/g, (full, id, label) => {
-        const n = ensure(id); n.shape = "notif"; n.label = label.replace(/^🔔\s*/, ""); return id;
+        const n = ensure(id); n.shape = "notif";
+        const txt = label.replace(/^🔔\s*/, "");
+        const rec = /^(Técnico|Operador|Cliente|Todos)\s*:\s*(.*)$/.exec(txt);
+        if (rec) { n.to = rec[1]; n.label = rec[2]; } else { n.label = txt; }
+        return id;
       });
       line = line.replace(/([A-Za-z0-9_]+)\{\s*"?(.*?)"?\s*\}/g, (full, id, label) => {
         const n = ensure(id); n.shape = "decision"; n.label = label; return id;
@@ -1031,13 +1052,17 @@
     const el = $("#nodes-list");
     if (!builder.nodes.length) { el.innerHTML = `<div class="builder-empty">Nenhuma etapa ainda. Clique em “+ Etapa”.</div>`; return; }
     el.innerHTML = builder.nodes.map((n, i) => `
-      <div class="builder-row ${n.shape === "decision" ? "is-decision" : ""}" data-id="${n.id}">
+      <div class="builder-row ${n.shape === "decision" ? "is-decision" : ""} ${n.shape === "notif" ? "is-notif" : ""}" data-id="${n.id}">
         <span class="b-num">${i + 1}</span>
         <input type="text" class="b-label" value="${esc(n.label)}" placeholder="texto da etapa">
         <select class="b-shape">
           <option value="step" ${n.shape === "step" ? "selected" : ""}>Etapa</option>
           <option value="decision" ${n.shape === "decision" ? "selected" : ""}>Decisão</option>
           <option value="notif" ${n.shape === "notif" ? "selected" : ""}>Notificação</option>
+        </select>
+        <select class="b-recipient" title="Destinatário da notificação">
+          <option value="" ${!n.to ? "selected" : ""}>— destinatário —</option>
+          ${NOTIF_RECIPIENTS.map((r) => `<option value="${r}" ${n.to === r ? "selected" : ""}>${r}</option>`).join("")}
         </select>
         <button type="button" class="builder-del" title="Remover etapa" aria-label="Remover">×</button>
       </div>`).join("");
@@ -1046,7 +1071,13 @@
       const node = builder.nodes.find((n) => n.id === id);
       row.querySelector(".b-label").addEventListener("input", (ev) => { node.label = ev.target.value; scheduleSync(); });
       row.querySelector(".b-label").addEventListener("change", () => renderEdges());
-      row.querySelector(".b-shape").addEventListener("change", (ev) => { node.shape = ev.target.value; row.classList.toggle("is-decision", ev.target.value === "decision"); scheduleSync(); });
+      row.querySelector(".b-shape").addEventListener("change", (ev) => {
+        node.shape = ev.target.value;
+        row.classList.toggle("is-decision", ev.target.value === "decision");
+        row.classList.toggle("is-notif", ev.target.value === "notif");
+        scheduleSync();
+      });
+      row.querySelector(".b-recipient").addEventListener("change", (ev) => { node.to = ev.target.value; scheduleSync(); });
       row.querySelector(".builder-del").addEventListener("click", () => {
         builder.nodes = builder.nodes.filter((n) => n.id !== id);
         builder.edges = builder.edges.filter((e) => e.from !== id && e.to !== id);
@@ -1409,24 +1440,38 @@
       grp.style.width = r.width + "px";
       grp.style.height = r.height + "px";
       grp.innerHTML =
-        `<button type="button" class="ifx ifx-add" title="Adicionar etapa ligada a esta">+</button>
+        `<button type="button" class="ifx ifx-add" title="Clique: nova etapa · Arraste até uma caixa pra ligar">+</button>
          <button type="button" class="ifx ifx-shape" title="Alternar tipo: etapa / decisão / notificação"></button>
          <button type="button" class="ifx ifx-del" title="Excluir etapa">×</button>`;
       const SHAPE_GLYPH = { step: "▭", decision: "◇", notif: "🔔" };
       const shapeBtn = grp.querySelector(".ifx-shape");
       shapeBtn.textContent = SHAPE_GLYPH[node.shape] || "▭";
+      // destinatário: só faz sentido em notificação
+      if (node.shape === "notif") {
+        const recBtn = document.createElement("button");
+        recBtn.type = "button";
+        recBtn.className = "ifx ifx-recipient";
+        recBtn.textContent = "👤";
+        recBtn.title = "Destinatário: " + (node.to || "ninguém definido") + " (clique pra trocar)";
+        grp.appendChild(recBtn);
+        recBtn.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          const order = ["", ...NOTIF_RECIPIENTS];
+          node.to = order[(order.indexOf(node.to || "") + 1) % order.length];
+          commitInline(art, st);
+        });
+      }
       fx.appendChild(grp);
       // manter os botões visíveis enquanto o mouse está no nó ou no grupo
       const show = () => grp.classList.add("hot");
       const hide = () => grp.classList.remove("hot");
       g.addEventListener("mouseenter", show); g.addEventListener("mouseleave", hide);
       grp.addEventListener("mouseenter", show); grp.addEventListener("mouseleave", hide);
-      grp.querySelector(".ifx-add").addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        const id = newNodeId(st.state);
-        st.state.nodes.push({ id, label: "Nova etapa", shape: "step" });
-        st.state.edges.push({ id: newEdgeId(st.state), from: nid, to: id, label: "", dotted: false });
-        commitInline(art, st, id);
+      // + : clique cria uma etapa ligada; arrastar até outra caixa liga nela
+      grp.querySelector(".ifx-add").addEventListener("mousedown", (ev) => {
+        if (ev.button !== 0) return;
+        ev.preventDefault(); ev.stopPropagation();
+        startConnectDrag(art, st, nid, ev);
       });
       shapeBtn.addEventListener("click", (ev) => {
         ev.stopPropagation();
@@ -1492,6 +1537,78 @@
         [hit, path, ctrls].forEach((el) => { el.addEventListener("mouseenter", showRev); el.addEventListener("mouseleave", hideRev); });
       } catch (e) { /* getPointAtLength pode falhar em curvas raras — segue sem os controles */ }
     });
+  }
+
+  // arrastar do "+" de uma caixa até outra pra criar a ligação.
+  // sem arrastar (só clique) mantém o atalho de criar uma etapa nova já ligada.
+  function startConnectDrag(art, st, sourceId, downEv) {
+    const canvas = art.querySelector(".diagram-canvas");
+    const fx = canvas && canvas.querySelector(".inline-fx");
+    const svg = canvas && canvas.querySelector("svg");
+    if (!fx || !svg) return;
+    const fxRect = fx.getBoundingClientRect();
+    const toLocal = (cx, cy) => [cx - fxRect.left, cy - fxRect.top];
+    // posições das caixas (fixas durante o arrasto)
+    const nodes = $$("g.node", svg).map((g) => {
+      const id = inlineNodeId(g); if (!id) return null;
+      const r = g.getBoundingClientRect();
+      return { id, g, r };
+    }).filter(Boolean);
+    const src = nodes.find((n) => n.id === sourceId);
+    if (!src) return;
+    const nodeAt = (cx, cy) => nodes.find((n) => cx >= n.r.left && cx <= n.r.right && cy >= n.r.top && cy <= n.r.bottom);
+
+    // linha-fantasma que segue o cursor
+    const NS = "http://www.w3.org/2000/svg";
+    const line = document.createElementNS(NS, "svg");
+    line.setAttribute("class", "inline-drag-svg");
+    line.setAttribute("width", fxRect.width);
+    line.setAttribute("height", fxRect.height);
+    const seg = document.createElementNS(NS, "line");
+    seg.setAttribute("class", "inline-drag-line");
+    const [sx, sy] = toLocal(src.r.left + src.r.width / 2, src.r.top + src.r.height / 2);
+    seg.setAttribute("x1", sx); seg.setAttribute("y1", sy);
+    seg.setAttribute("x2", sx); seg.setAttribute("y2", sy);
+    line.appendChild(seg);
+    fx.appendChild(line);
+    document.body.classList.add("inline-connecting");
+
+    let dragging = false, hovered = null;
+    const move = (e) => {
+      const dx = e.clientX - downEv.clientX, dy = e.clientY - downEv.clientY;
+      if (!dragging && Math.hypot(dx, dy) < 5) return;
+      dragging = true;
+      const [lx, ly] = toLocal(e.clientX, e.clientY);
+      seg.setAttribute("x2", lx); seg.setAttribute("y2", ly);
+      const tgt = nodeAt(e.clientX, e.clientY);
+      if (hovered && (!tgt || tgt.g !== hovered)) hovered.classList.remove("inline-drop-target");
+      if (tgt && tgt.id !== sourceId) { tgt.g.classList.add("inline-drop-target"); hovered = tgt.g; }
+      else hovered = tgt && tgt.id === sourceId ? hovered : null;
+    };
+    const up = (e) => {
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      document.body.classList.remove("inline-connecting");
+      if (hovered) hovered.classList.remove("inline-drop-target");
+      line.remove();
+      if (!dragging) {
+        // clique puro: cria etapa nova já ligada (atalho antigo)
+        const id = newNodeId(st.state);
+        st.state.nodes.push({ id, label: "Nova etapa", shape: "step" });
+        st.state.edges.push({ id: newEdgeId(st.state), from: sourceId, to: id, label: "", dotted: false });
+        commitInline(art, st, id);
+        return;
+      }
+      const tgt = nodeAt(e.clientX, e.clientY);
+      if (!tgt || tgt.id === sourceId) return;   // soltou no vazio (ou nela mesma): cancela
+      const dup = st.state.edges.some((ed) => ed.from === sourceId && ed.to === tgt.id);
+      if (dup) { toast("Essas caixas já estão ligadas."); return; }
+      st.state.edges.push({ id: newEdgeId(st.state), from: sourceId, to: tgt.id, label: "", dotted: false });
+      commitInline(art, st);
+      toast("Ligação criada");
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
   }
 
   // casa um <path> de aresta renderizado com a aresta do estado.

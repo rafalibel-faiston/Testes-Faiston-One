@@ -808,6 +808,8 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 }
 .builder-row .b-label { flex:1; }
 .builder-row .b-shape { flex-shrink:0; }
+.builder-row .b-recipient { flex-shrink:0; display:none; }
+.builder-row.is-notif .b-recipient { display:inline-block; }
 .builder-row .b-arrow { color:var(--text-3); flex-shrink:0; font-size:14px; }
 .builder-row .b-from, .builder-row .b-to { flex:1; max-width:38%; }
 .builder-row .b-edge-label { flex:1; min-width:60px; }
@@ -944,6 +946,20 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 .ifx-shape:hover { color:var(--f-blue); border-color:var(--f-blue); }
 .ifx-del { right:-11px; top:-11px; }
 .ifx-del:hover { color:var(--bad); border-color:var(--bad); background:var(--bad-bg); }
+.ifx-recipient { left:-11px; top:-11px; font-size:11px; }
+.ifx-recipient:hover { color:#9333ea; border-color:#9333ea; background:rgba(147,51,234,.10); }
+
+/* arrastar pra ligar */
+.inline-drag-svg { position:absolute; left:0; top:0; pointer-events:none; z-index:7; overflow:visible; }
+.inline-drag-line { stroke:var(--f-blue); stroke-width:2.5; stroke-dasharray:5 4; stroke-linecap:round; }
+body.inline-connecting { cursor:crosshair; }
+body.inline-connecting * { cursor:crosshair !important; }
+.diagram-canvas.inline-canvas svg g.node.inline-drop-target rect,
+.diagram-canvas.inline-canvas svg g.node.inline-drop-target polygon,
+.diagram-canvas.inline-canvas svg g.node.inline-drop-target circle {
+  stroke:var(--ok) !important; stroke-width:3px !important;
+  filter:drop-shadow(0 2px 8px rgba(13,157,108,.4));
+}
 /* controles no meio de uma seta (inverter / excluir) */
 .inline-edge-fx {
   position:absolute; z-index:5; transform:translate(-50%,-50%) scale(.8);
