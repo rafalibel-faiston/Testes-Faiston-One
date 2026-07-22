@@ -481,6 +481,23 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
   font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-3); font-weight:600;
   text-align:center; padding:8px 0; margin:2px 0; border-top:1px dashed var(--line-2);
 }
+.act-item.act-go { cursor:pointer; border-radius:8px; }
+.act-item.act-go:hover { background:var(--surface-2); }
+.act-item.act-go.is-new:hover { background:linear-gradient(90deg, rgba(253,17,164,.12), var(--surface-2)); }
+.act-item.act-go:focus-visible { outline:2px solid var(--f-blue); outline-offset:1px; }
+.act-goto {
+  flex-shrink:0; align-self:center; font-size:11px; font-weight:600; color:var(--f-blue);
+  opacity:0; transition:opacity .15s var(--ease); white-space:nowrap;
+}
+.act-item.act-go:hover .act-goto, .act-item.act-go:focus-visible .act-goto { opacity:1; }
+
+/* destaque ao chegar num card vindo das Novidades */
+.case-flash { animation:caseFlash 1.8s var(--ease); }
+@keyframes caseFlash {
+  0%   { box-shadow:0 0 0 3px rgba(0,84,236,.55), var(--shadow-2); }
+  60%  { box-shadow:0 0 0 3px rgba(0,84,236,.30), var(--shadow-2); }
+  100% { box-shadow:0 0 0 0 rgba(0,84,236,0); }
+}
 
 /* ---------- carrossel de evidências (modo apresentação) ---------- */
 .carousel {

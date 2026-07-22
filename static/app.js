@@ -1947,15 +1947,45 @@
         html += `<div class="act-divider">acima: novidades desde sua última visita · abaixo: já visto</div>`;
         divided = true;
       }
-      html += `<div class="act-item ${isNew ? "is-new" : ""}">
+      // eventos de caso (FC-...) levam ao card; os de diagrama (case_code "diagrama:ID") não
+      const goCode = a.case_code && !String(a.case_code).startsWith("diagrama:") ? a.case_code : "";
+      html += `<div class="act-item ${isNew ? "is-new" : ""} ${goCode ? "act-go" : ""}" ${goCode ? `data-go="${esc(goCode)}" role="button" tabindex="0" title="Ir para o teste ${esc(goCode)}"` : ""}>
         <span class="act-icon">${ACT_ICON[a.tipo] || "•"}</span>
         <div class="act-body">
           <div class="act-text">${esc(a.texto)}</div>
           <div class="act-meta">${a.autor ? esc(a.autor) + " · " : ""}${fmtWhen(a.created_at)}${isNew ? ' · <b class="act-new">novo</b>' : ""}</div>
         </div>
+        ${goCode ? '<span class="act-goto" aria-hidden="true">ver o teste →</span>' : ""}
       </div>`;
     });
     el.innerHTML = html;
+    $$(".act-item.act-go", el).forEach((item) => {
+      const go = () => goToCase(item.dataset.go);
+      item.addEventListener("click", go);
+      item.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+    });
+  }
+
+  // leva da trilha de novidades até o card do teste: garante o fluxo/sub-aba
+  // certos, limpa filtro que poderia esconder o card, rola até ele e destaca.
+  function goToCase(code) {
+    const c = findCase(code);
+    closeActivityModal();
+    if (c && caseFlow(c) !== currentFlow) setFlow(caseFlow(c));
+    switchView("testes");
+    if (activeFilters.status) {
+      activeFilters.status = "";
+      $$("#chips-status .chip").forEach((b) => b.classList.toggle("active", b.dataset.val === ""));
+      applyFilters();
+    }
+    setTimeout(() => {
+      const card = document.querySelector(`.case[data-code="${cssEscape(code)}"]`);
+      if (!card) { toast("Esse teste não está mais na lista (pode ter sido excluído)."); return; }
+      card.classList.remove("hidden");
+      card.scrollIntoView({ behavior: "smooth", block: "center" });
+      card.classList.add("case-flash");
+      setTimeout(() => card.classList.remove("case-flash"), 1800);
+    }, 80);
   }
 
   function openActivityModal() {
