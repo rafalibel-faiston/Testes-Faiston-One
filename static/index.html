@@ -129,26 +129,36 @@
   </section>
 
   <section class="toolbar" aria-label="Filtros">
-    <div class="chip-row">
-      <span class="chip-row-label">Grupo</span>
-      <div class="chips" id="chips-grupo"></div>
+    <div class="toolbar-bar">
+      <button type="button" class="filters-toggle" id="filters-toggle" aria-expanded="false" aria-controls="filters-body">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+        Filtros
+        <span class="filters-active-count" id="filters-active-count" hidden>0</span>
+        <svg class="filters-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="glow-search" id="glow-search">
+        <div class="glow-search-pill">
+          <svg class="search-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" id="f-busca" placeholder="Buscar por ID ou palavra-chave...">
+        </div>
+      </div>
     </div>
-    <div class="chip-row">
-      <span class="chip-row-label">Frente</span>
-      <div class="chips" id="chips-frente"></div>
-    </div>
-    <div class="chip-row">
-      <span class="chip-row-label">Status</span>
-      <div class="chips" id="chips-status"></div>
-    </div>
-    <div class="chip-row">
-      <span class="chip-row-label">Estágio</span>
-      <div class="chips chips-scroll" id="chips-estagio"></div>
-    </div>
-    <div class="glow-search" id="glow-search">
-      <div class="glow-search-pill">
-        <svg class="search-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-        <input type="text" id="f-busca" placeholder="Buscar por ID ou palavra-chave...">
+    <div class="filters-body" id="filters-body" hidden>
+      <div class="chip-row">
+        <span class="chip-row-label">Grupo</span>
+        <div class="chips" id="chips-grupo"></div>
+      </div>
+      <div class="chip-row">
+        <span class="chip-row-label">Frente</span>
+        <div class="chips" id="chips-frente"></div>
+      </div>
+      <div class="chip-row">
+        <span class="chip-row-label">Status</span>
+        <div class="chips" id="chips-status"></div>
+      </div>
+      <div class="chip-row">
+        <span class="chip-row-label">Estágio</span>
+        <div class="chips chips-scroll" id="chips-estagio"></div>
       </div>
     </div>
   </section>

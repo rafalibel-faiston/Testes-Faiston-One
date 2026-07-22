@@ -380,8 +380,23 @@
       card.classList.toggle("hidden", !ok);
     });
     syncStatTiles();
+    updateFiltersActiveCount();
   }
   $("#f-busca").addEventListener("input", applyFilters);
+
+  // filtros recolhíveis + contador de quantos estão ativos (aparece mesmo recolhido)
+  function updateFiltersActiveCount() {
+    const n = ["grupo", "estagio", "frente", "status"].filter((k) => activeFilters[k]).length;
+    const el = $("#filters-active-count");
+    if (el) { el.textContent = n; el.hidden = n === 0; }
+  }
+  const filtersToggle = $("#filters-toggle");
+  const filtersBody = $("#filters-body");
+  filtersToggle.addEventListener("click", () => {
+    const open = filtersBody.hidden;
+    filtersBody.hidden = !open;
+    filtersToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  });
 
   // ---------------- stats ----------------
   function updateStats() {
