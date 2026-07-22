@@ -86,6 +86,11 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Exportar Excel
       </button>
+      <button type="button" class="activity-btn" id="btn-activity">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Novidades
+        <span class="activity-count" id="activity-count" hidden>0</span>
+      </button>
       <span class="present-hint">Passa print a print, agrupado por estágio</span>
     </div>
   </section>
@@ -351,6 +356,21 @@
         <button type="submit" class="btn-primary" id="diagram-save">Salvar diagrama</button>
       </div>
     </form>
+  </div>
+</div>
+
+<div class="modal" id="activity-modal" hidden aria-modal="true" role="dialog">
+  <div class="modal-card notes-card">
+    <div class="modal-head">
+      <h3>Novidades</h3>
+      <span class="modal-code" id="activity-flow-label">Fluxo C</span>
+      <button type="button" class="modal-close" id="activity-close" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="notes-hint">Tudo que mudou neste fluxo — status, observações, prints, testes, pontos e diagramas —
+      do mais recente pro mais antigo. O que você ainda não tinha visto aparece marcado como <b>novo</b>.</p>
+      <div class="notes-list" id="activity-list"></div>
+    </div>
   </div>
 </div>
 

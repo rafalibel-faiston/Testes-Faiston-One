@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
+from ..activity import log as log_activity, snippet
 from ..database import get_db
 
 router = APIRouter(tags=["notes"])
@@ -26,6 +27,7 @@ def create_note(payload: schemas.MeetingNoteCreate, db: Session = Depends(get_db
         fluxo=payload.fluxo or "C", estagio=payload.estagio, texto=texto, autor=payload.autor
     )
     db.add(note)
+    log_activity(db, note.fluxo, "ponto", f'Ponto pra reunião: "{snippet(texto)}"', autor=payload.autor)
     db.commit()
     db.refresh(note)
     return note
@@ -44,6 +46,8 @@ def update_note(note_id: int, payload: schemas.MeetingNoteUpdate, db: Session = 
     if payload.estagio is not None:
         note.estagio = payload.estagio
     if payload.resolvido is not None:
+        if payload.resolvido and not note.resolvido:
+            log_activity(db, note.fluxo, "ponto", f'Ponto discutido: "{snippet(note.texto, 60)}"')
         note.resolvido = payload.resolvido
     db.commit()
     db.refresh(note)

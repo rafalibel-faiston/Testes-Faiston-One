@@ -81,6 +81,21 @@ class FlowDiagram(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
 
+class ActivityLog(Base):
+    """Trilha de atividades — cada mudança relevante (status, observação, print,
+    teste criado/editado, ponto de reunião, diagrama) vira um evento, pra quem
+    entra depois ver o que aconteceu desde a última visita sem se perder."""
+    __tablename__ = "activity_log"
+
+    id = Column(Integer, primary_key=True)
+    fluxo = Column(String, nullable=False, default="C", server_default="C")
+    tipo = Column(String, nullable=False)      # status / obs / print / teste / ponto / diagrama
+    texto = Column(Text, nullable=False)       # descrição legível do que aconteceu
+    autor = Column(String, nullable=True)
+    case_code = Column(String, nullable=True)  # caso relacionado, quando houver
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class Observation(Base):
     """Uma nota do historico de observacoes de um caso — cada uma com seu proprio autor,
     diferente do campo antigo `TestCase.observacao` (unico, qualquer um sobrescrevia)."""

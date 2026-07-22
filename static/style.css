@@ -454,6 +454,34 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 }
 .export-btn:hover { transform:translateY(-2px); background:rgba(13,157,108,.16); box-shadow:0 10px 22px -14px rgba(13,157,108,.5); }
 
+/* ---------- botão "Novidades" (trilha de atividades) ---------- */
+.activity-btn {
+  position:relative; display:inline-flex; align-items:center; gap:9px; cursor:pointer;
+  border:1px solid var(--f-magenta); color:#b1067a; background:rgba(253,17,164,.06);
+  border-radius:12px; padding:11px 18px; font-size:13.5px; font-weight:600; font-family:'Roboto',sans-serif;
+  transition:transform .14s var(--ease), box-shadow .18s var(--ease), background .15s var(--ease);
+}
+.activity-btn:hover { transform:translateY(-2px); background:rgba(253,17,164,.12); box-shadow:0 10px 22px -14px rgba(253,17,164,.5); }
+.activity-count {
+  min-width:19px; height:19px; padding:0 6px; border-radius:999px; background:var(--grad-warm); color:#fff;
+  font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;
+  box-shadow:0 2px 6px -1px rgba(253,17,164,.5);
+}
+
+/* ---------- lista de novidades ---------- */
+.act-item { display:flex; gap:11px; align-items:flex-start; padding:10px 4px; border-bottom:1px solid var(--line); }
+.act-item:last-child { border-bottom:none; }
+.act-item.is-new { background:linear-gradient(90deg, rgba(253,17,164,.06), transparent); border-radius:8px; }
+.act-icon { flex-shrink:0; font-size:15px; line-height:1.4; width:22px; text-align:center; }
+.act-body { flex:1; min-width:0; }
+.act-text { font-size:13px; color:var(--text); line-height:1.45; word-break:break-word; }
+.act-meta { font-size:10.5px; color:var(--text-3); margin-top:2px; }
+.act-new { color:#b1067a; text-transform:uppercase; letter-spacing:.4px; font-size:9.5px; }
+.act-divider {
+  font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-3); font-weight:600;
+  text-align:center; padding:8px 0; margin:2px 0; border-top:1px dashed var(--line-2);
+}
+
 /* ---------- carrossel de evidências (modo apresentação) ---------- */
 .carousel {
   position:fixed; inset:0; z-index:110; background:rgba(12,13,26,.92); backdrop-filter:blur(8px);

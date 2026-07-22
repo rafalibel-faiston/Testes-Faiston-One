@@ -148,6 +148,18 @@ class FlowDiagramCreate(BaseModel):
     atualizado_por: Optional[str] = None
 
 
+class ActivityOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    fluxo: str = "C"
+    tipo: str
+    texto: str
+    autor: Optional[str] = None
+    case_code: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
 class FlowDiagramUpdate(BaseModel):
     fluxo: Optional[str] = None
     kind: Optional[str] = None

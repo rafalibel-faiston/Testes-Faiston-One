@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 
 from .. import models, schemas
+from ..activity import log as log_activity, snippet
 from ..database import get_db
 
 router = APIRouter(tags=["cases"])
@@ -89,6 +90,7 @@ def create_case(payload: schemas.TestCaseCreate, db: Session = Depends(get_db)):
         active=True,
     )
     db.add(case)
+    log_activity(db, case.fluxo, "teste", f"Teste {code} criado ({case.estagio})", case_code=code)
     db.commit()
     db.refresh(case)
     return case
@@ -100,6 +102,7 @@ def delete_case(code: str, db: Session = Depends(get_db)):
     case = _get_case_or_404(db, code)
     case.active = False
     case.user_managed = True  # não deixa o seed re-sincronizar/reviver
+    log_activity(db, case.fluxo, "teste", f"Teste {code} excluído", case_code=code)
     db.commit()
     return {"deleted": code}
 
@@ -112,6 +115,7 @@ def get_case(code: str, db: Session = Depends(get_db)):
 @router.patch("/cases/{code}", response_model=schemas.TestCaseOut)
 def update_case(code: str, payload: schemas.TestCaseUpdate, db: Session = Depends(get_db)):
     case = _get_case_or_404(db, code)
+    old_status = case.status
     if payload.status is not None:
         if payload.status not in VALID_STATUSES:
             raise HTTPException(status_code=400, detail=f"Status inválido: {payload.status}")
@@ -134,6 +138,12 @@ def update_case(code: str, payload: schemas.TestCaseUpdate, db: Session = Depend
     if touched_descriptive:
         case.user_managed = True
 
+    if payload.status is not None and payload.status != old_status:
+        log_activity(db, case.fluxo, "status", f"{case.code} mudou para {payload.status}",
+                     autor=payload.testado_por or case.testado_por, case_code=case.code)
+    if touched_descriptive:
+        log_activity(db, case.fluxo, "teste", f"Teste {case.code} editado", case_code=case.code)
+
     db.commit()
     db.refresh(case)
     return case
@@ -148,6 +158,8 @@ def add_observation(code: str, payload: schemas.ObservationCreate, db: Session =
     if not texto:
         raise HTTPException(status_code=400, detail="Observação vazia.")
     db.add(models.Observation(test_case_id=case.id, autor=payload.autor, texto=texto))
+    log_activity(db, case.fluxo, "obs", f'Observação em {case.code}: "{snippet(texto)}"',
+                 autor=payload.autor, case_code=case.code)
     db.commit()
     db.refresh(case)
     return case
@@ -160,6 +172,8 @@ def delete_observation(observation_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Observação não encontrada")
     case = db.query(models.TestCase).filter(models.TestCase.id == obs.test_case_id).first()
     db.delete(obs)
+    if case:
+        log_activity(db, case.fluxo, "obs", f"Observação removida de {case.code}", case_code=case.code)
     db.commit()
     db.refresh(case)
     return case
@@ -189,6 +203,8 @@ async def upload_screenshot(
         uploaded_by=uploaded_by,
     )
     db.add(shot)
+    log_activity(db, case.fluxo, "print", f"Print anexado em {case.code}",
+                 autor=uploaded_by, case_code=case.code)
     db.commit()
     db.refresh(case)
     return case
@@ -209,6 +225,8 @@ def delete_screenshot(screenshot_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Print não encontrado")
     case = db.query(models.TestCase).filter(models.TestCase.id == shot.test_case_id).first()
     db.delete(shot)
+    if case:
+        log_activity(db, case.fluxo, "print", f"Print removido de {case.code}", case_code=case.code)
     db.commit()
     db.refresh(case)
     return case

@@ -429,6 +429,7 @@
     if (busca) busca.value = "";
     render();
     loadNotes();
+    loadActivities();
     if (typeof onFlowChangedForDiagrams === "function") onFlowChangedForDiagrams();
   }
   $$(".flow-tab").forEach((t) => t.addEventListener("click", () => setFlow(t.dataset.flow)));
@@ -1905,12 +1906,83 @@
   // título/badge iniciais coerentes com o fluxo atual
   onFlowChangedForDiagrams();
 
+  // ---------------- novidades (trilha de atividades) ----------------
+  // Cada mudança no fluxo vira um evento no servidor; aqui mostramos a trilha
+  // e destacamos o que é novo DESDE A ÚLTIMA VISITA deste navegador (guardamos
+  // o created_at mais recente já visto no localStorage, como o nome do testador).
+  let ACTIVITIES = [];
+  const activityModal = $("#activity-modal");
+  const ACT_SEEN_KEY = "fluxoc_activity_lastseen";
+
+  async function loadActivities() {
+    try {
+      ACTIVITIES = await api(`/api/atividades?fluxo=${encodeURIComponent(currentFlow)}`);
+    } catch (e) { ACTIVITIES = []; }
+    updateActivityCount();
+  }
+
+  function actSeen() { return localStorage.getItem(ACT_SEEN_KEY) || ""; }
+  function actIsNew(a, seen) { return (a.created_at || "") > seen; }
+
+  function updateActivityCount() {
+    const seen = actSeen();
+    const n = ACTIVITIES.filter((a) => actIsNew(a, seen)).length;
+    const el = $("#activity-count");
+    if (el) { el.textContent = n > 99 ? "99+" : n; el.hidden = n === 0; }
+  }
+
+  const ACT_ICON = { status: "◉", obs: "💬", print: "🖼️", teste: "🧪", ponto: "📋", diagrama: "🗺️" };
+
+  function renderActivityList(seenBefore) {
+    const el = $("#activity-list");
+    if (!ACTIVITIES.length) {
+      el.innerHTML = `<div class="notes-empty">Nenhuma atividade registrada ainda neste fluxo.</div>`;
+      return;
+    }
+    let html = "", divided = false, anyNew = false;
+    ACTIVITIES.forEach((a) => {
+      const isNew = actIsNew(a, seenBefore);
+      if (isNew) anyNew = true;
+      else if (anyNew && !divided) {
+        html += `<div class="act-divider">acima: novidades desde sua última visita · abaixo: já visto</div>`;
+        divided = true;
+      }
+      html += `<div class="act-item ${isNew ? "is-new" : ""}">
+        <span class="act-icon">${ACT_ICON[a.tipo] || "•"}</span>
+        <div class="act-body">
+          <div class="act-text">${esc(a.texto)}</div>
+          <div class="act-meta">${a.autor ? esc(a.autor) + " · " : ""}${fmtWhen(a.created_at)}${isNew ? ' · <b class="act-new">novo</b>' : ""}</div>
+        </div>
+      </div>`;
+    });
+    el.innerHTML = html;
+  }
+
+  function openActivityModal() {
+    $("#activity-flow-label").textContent = "Fluxo " + currentFlow;
+    const seenBefore = actSeen();
+    renderActivityList(seenBefore);
+    // abrir o painel "dá o visto": a próxima visita compara a partir daqui
+    if (ACTIVITIES.length && (ACTIVITIES[0].created_at || "") > seenBefore) {
+      localStorage.setItem(ACT_SEEN_KEY, ACTIVITIES[0].created_at);
+    }
+    updateActivityCount();
+    activityModal.hidden = false;
+  }
+  function closeActivityModal() { activityModal.hidden = true; }
+
+  $("#btn-activity").addEventListener("click", async () => { await loadActivities(); openActivityModal(); });
+  $("#activity-close").addEventListener("click", closeActivityModal);
+  activityModal.addEventListener("click", (e) => { if (e.target.id === "activity-modal") closeActivityModal(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !activityModal.hidden) closeActivityModal(); });
+
   // ---------------- tester name ----------------
   const testerInput = $("#input-tester");
   testerInput.value = localStorage.getItem(TESTER_KEY) || "";
   testerInput.addEventListener("change", () => localStorage.setItem(TESTER_KEY, testerInput.value.trim()));
 
   // ---------------- boot ----------------
+  loadActivities();
   loadCases().catch((e) => {
     $("#cases-loading").textContent = "Erro ao carregar casos: " + e.message;
   });

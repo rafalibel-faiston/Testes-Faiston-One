@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
+from ..activity import log as log_activity
 from ..database import get_db
 
 router = APIRouter(tags=["diagrams"])
@@ -44,6 +45,7 @@ def create_diagram(payload: schemas.FlowDiagramCreate, db: Session = Depends(get
         seeded=False,
     )
     db.add(diagram)
+    log_activity(db, diagram.fluxo, "diagrama", f'Diagrama "{titulo}" criado', autor=payload.atualizado_por)
     db.commit()
     db.refresh(diagram)
     return diagram
@@ -76,6 +78,31 @@ def update_diagram(diagram_id: int, payload: schemas.FlowDiagramUpdate, db: Sess
         diagram.atualizado_por = payload.atualizado_por
     # qualquer edição do time "assume" o diagrama — o seed nunca mais o toca
     diagram.seeded = False
+
+    # trilha de atividades: o editor salva sozinho a cada mexida, então uma
+    # sessão de edição vira UM evento só — não re-loga se o último evento deste
+    # diagrama foi há menos de 15 min. Comparação defensiva pra funcionar tanto
+    # no SQLite (created_at ingênuo) quanto no Postgres (com timezone).
+    from datetime import datetime, timezone, timedelta
+    ref = f"diagrama:{diagram.id}"
+    latest = (
+        db.query(models.ActivityLog)
+        .filter(models.ActivityLog.case_code == ref)
+        .order_by(models.ActivityLog.id.desc())
+        .first()
+    )
+    skip = False
+    if latest and latest.created_at:
+        try:
+            ca = latest.created_at
+            now = datetime.now(timezone.utc) if ca.tzinfo else datetime.utcnow()
+            skip = (now - ca) < timedelta(minutes=15)
+        except Exception:
+            skip = False
+    if not skip:
+        log_activity(db, diagram.fluxo, "diagrama", f'Diagrama "{diagram.titulo}" atualizado',
+                     autor=diagram.atualizado_por, case_code=ref)
+
     db.commit()
     db.refresh(diagram)
     return diagram
@@ -86,6 +113,7 @@ def delete_diagram(diagram_id: int, db: Session = Depends(get_db)):
     diagram = db.query(models.FlowDiagram).filter(models.FlowDiagram.id == diagram_id).first()
     if not diagram:
         raise HTTPException(status_code=404, detail="Diagrama não encontrado")
+    log_activity(db, diagram.fluxo, "diagrama", f'Diagrama "{diagram.titulo}" excluído')
     db.delete(diagram)
     db.commit()
     return {"deleted": diagram_id}
