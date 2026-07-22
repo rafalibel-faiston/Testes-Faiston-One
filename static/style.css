@@ -172,13 +172,33 @@ main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
 .stat.warn.active { border-color:var(--warn); background:var(--warn-bg); }
 .stat.na.active   { border-color:var(--na);   background:var(--na-bg); }
 
-/* ---------- toolbar: chips instead of <select> ---------- */
+/* ---------- toolbar: barra compacta + filtros recolhíveis ---------- */
 .toolbar {
-  display:flex; flex-direction:column; gap:12px;
   background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
-  padding:16px 18px; margin-bottom:22px;
-  box-shadow:var(--shadow-1);
+  padding:10px 14px; margin-bottom:18px; box-shadow:var(--shadow-1);
 }
+.toolbar-bar { display:flex; align-items:center; gap:12px; }
+.filters-toggle {
+  flex-shrink:0; display:inline-flex; align-items:center; gap:8px; cursor:pointer;
+  border:1px solid var(--line-2); background:var(--surface-2); color:var(--text-2);
+  border-radius:9px; padding:8px 13px; font-size:12.5px; font-weight:600; font-family:'Roboto',sans-serif;
+  transition:border-color .15s var(--ease), background .15s var(--ease), color .15s var(--ease);
+}
+.filters-toggle:hover { border-color:var(--f-blue); color:var(--f-blue); }
+.filters-toggle[aria-expanded="true"] { border-color:var(--f-blue); color:var(--f-blue); background:rgba(0,84,236,.06); }
+.filters-toggle .filters-chevron { transition:transform .18s var(--ease); }
+.filters-toggle[aria-expanded="true"] .filters-chevron { transform:rotate(180deg); }
+.filters-active-count {
+  min-width:17px; height:17px; padding:0 5px; border-radius:999px; background:var(--grad-primary); color:#fff;
+  font-size:10.5px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;
+}
+.filters-active-count[hidden] { display:none; }
+.filters-body {
+  display:flex; flex-direction:column; gap:9px;
+  margin-top:12px; padding-top:12px; border-top:1px solid var(--line);
+  animation:toastIn .16s var(--ease);
+}
+.filters-body[hidden] { display:none; }
 .chip-row { display:flex; align-items:center; gap:10px; }
 .chip-row-label {
   flex-shrink:0; width:56px; font-size:10px; text-transform:uppercase; letter-spacing:.8px;
@@ -207,7 +227,7 @@ main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
 
 /* ---------- glow search (barra de busca com anel sutil animado) ---------- */
 .glow-search {
-  position:relative; margin-top:2px; width:100%; max-width:380px;
+  position:relative; flex:1; width:100%; max-width:420px; margin-left:auto;
   border-radius:11px; padding:1px; overflow:hidden; isolation:isolate;
 }
 .glow-search::before {
