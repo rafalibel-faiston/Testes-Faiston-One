@@ -893,18 +893,35 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 .inline-dir-btn + .inline-dir-btn { border-left:1px solid var(--line-2); }
 .inline-dir-btn:hover { background:var(--surface-3); color:var(--f-blue); }
 .inline-dir-btn.active { background:var(--grad-primary); color:#fff; }
+/* paleta de formatos: cada botão mostra o desenho da caixa que adiciona */
+.inline-palette { display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.inline-palette-label {
+  font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--text-3);
+}
+.palette-btn {
+  display:inline-flex; align-items:center; gap:6px;
+  border-radius:8px; padding:4px 11px 4px 7px; font-size:12px; font-weight:600;
+  font-family:'Roboto',sans-serif; cursor:pointer;
+  transition:background .15s var(--ease), transform .12s var(--ease), box-shadow .15s var(--ease);
+}
+.palette-btn svg { display:block; flex-shrink:0; }
+.palette-btn:hover { transform:translateY(-1px); box-shadow:var(--shadow-1); }
 .inline-add-node {
   border:1px solid var(--f-blue); color:var(--f-blue); background:rgba(0,84,236,.06);
-  border-radius:8px; padding:5px 11px; font-size:12px; font-weight:600; font-family:'Roboto',sans-serif; cursor:pointer;
-  transition:background .15s var(--ease), transform .12s var(--ease);
 }
-.inline-add-node:hover { background:rgba(0,84,236,.12); transform:translateY(-1px); }
+.inline-add-node:hover { background:rgba(0,84,236,.12); }
+.inline-add-botao {
+  border:1px solid #0284c7; color:#075985; background:rgba(2,132,199,.08);
+}
+.inline-add-botao:hover { background:rgba(2,132,199,.16); }
+.inline-add-decision {
+  border:1px solid var(--f-purple); color:var(--f-purple); background:rgba(150,10,156,.06);
+}
+.inline-add-decision:hover { background:rgba(150,10,156,.12); }
 .inline-add-notif {
   border:1px solid #f59e0b; color:#b45309; background:rgba(245,158,11,.10);
-  border-radius:8px; padding:5px 11px; font-size:12px; font-weight:600; font-family:'Roboto',sans-serif; cursor:pointer;
-  transition:background .15s var(--ease), transform .12s var(--ease);
 }
-.inline-add-notif:hover { background:rgba(245,158,11,.20); transform:translateY(-1px); }
+.inline-add-notif:hover { background:rgba(245,158,11,.20); }
 .inline-done {
   border:1px solid var(--line-2); background:var(--surface); color:var(--text-2);
   border-radius:8px; padding:5px 12px; font-size:12px; font-weight:600; font-family:'Roboto',sans-serif; cursor:pointer;

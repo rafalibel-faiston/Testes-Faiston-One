@@ -852,8 +852,25 @@
             <button type="button" class="inline-dir-btn" data-dir="TD" title="Vertical">↓</button>
             <button type="button" class="inline-dir-btn" data-dir="LR" title="Horizontal">→</button>
           </div>
-          <button type="button" class="inline-add-node" title="Adicionar etapa solta">+ Etapa</button>
-          <button type="button" class="inline-add-notif" title="Adicionar notificação solta">🔔 Notificação</button>
+          <div class="inline-palette" role="group" aria-label="Adicionar caixa">
+            <span class="inline-palette-label">Adicionar:</span>
+            <button type="button" class="inline-add-node palette-btn" title="Etapa — caixa retangular do fluxo">
+              <svg viewBox="0 0 34 20" width="30" height="18" aria-hidden="true"><rect x="2" y="4" width="30" height="12" rx="2.5" fill="rgba(0,84,236,.10)" stroke="#0054ec" stroke-width="1.6"/></svg>
+              <span>Etapa</span>
+            </button>
+            <button type="button" class="inline-add-botao palette-btn" title="Botão — ação/botão dentro do sistema">
+              <svg viewBox="0 0 34 20" width="30" height="18" aria-hidden="true"><rect x="2" y="4" width="30" height="12" rx="4.5" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.6"/></svg>
+              <span>Botão</span>
+            </button>
+            <button type="button" class="inline-add-decision palette-btn" title="Decisão — losango com saídas Sim / Não">
+              <svg viewBox="0 0 34 20" width="30" height="18" aria-hidden="true"><polygon points="17,2 32,10 17,18 2,10" fill="rgba(150,10,156,.10)" stroke="#960a9c" stroke-width="1.6"/></svg>
+              <span>Decisão</span>
+            </button>
+            <button type="button" class="inline-add-notif palette-btn" title="Notificação — aviso (push / WhatsApp)">
+              <svg viewBox="0 0 34 20" width="30" height="18" aria-hidden="true"><rect x="2" y="4" width="30" height="12" rx="6" fill="rgba(245,158,11,.14)" stroke="#f59e0b" stroke-width="1.6"/></svg>
+              <span>🔔 Notificação</span>
+            </button>
+          </div>
           <span class="inline-save-state" aria-live="polite"></span>
           <button type="button" class="inline-done">Concluir</button>
         </div>
@@ -971,6 +988,7 @@
     s.nodes.forEach((n) => {
       const label = cleanLabel(n.label) || n.id;
       if (n.shape === "decision") lines.push(`    ${n.id}{"${label}"}`);
+      else if (n.shape === "botao") lines.push(`    ${n.id}("${label}")`);
       else if (n.shape === "notif") {
         const phrase = NOTIF_PHRASE[n.to];
         const msg = cleanLabel(n.label);
@@ -996,6 +1014,12 @@
       lines.push("    " + NOTIF_CLASSDEF[cls]);
       lines.push("    class " + byClass[cls].join(",") + " " + cls + ";");
     });
+    // botões do sistema ganham cor própria (ciano) pra se distinguir das etapas
+    const botaoIds = s.nodes.filter((n) => n.shape === "botao").map((n) => n.id);
+    if (botaoIds.length) {
+      lines.push("    classDef botao fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#075985;");
+      lines.push("    class " + botaoIds.join(",") + " botao;");
+    }
     return lines.join("\n");
   }
 
@@ -1023,6 +1047,11 @@
         }
         if (n.label === "Notificação") n.label = "";
         return id;
+      });
+      // botão: (...) — precisa vir depois do estádio ([...]) e antes de [...],
+      // senão o parêntese externo do estádio seria lido como botão
+      line = line.replace(/([A-Za-z0-9_]+)\(\s*"?(.*?)"?\s*\)/g, (full, id, label) => {
+        const n = ensure(id); n.shape = "botao"; n.label = label; return id;
       });
       line = line.replace(/([A-Za-z0-9_]+)\{\s*"?(.*?)"?\s*\}/g, (full, id, label) => {
         const n = ensure(id); n.shape = "decision"; n.label = label; return id;
@@ -1071,6 +1100,7 @@
         <input type="text" class="b-label" value="${esc(n.label)}" placeholder="texto da etapa">
         <select class="b-shape">
           <option value="step" ${n.shape === "step" ? "selected" : ""}>Etapa</option>
+          <option value="botao" ${n.shape === "botao" ? "selected" : ""}>Botão</option>
           <option value="decision" ${n.shape === "decision" ? "selected" : ""}>Decisão</option>
           <option value="notif" ${n.shape === "notif" ? "selected" : ""}>Notificação</option>
         </select>
@@ -1340,6 +1370,18 @@
       st.state.nodes.push({ id, label: "Nova etapa", shape: "step" });
       commitInline(art, st, id);
     });
+    const addBotao = tb.querySelector(".inline-add-botao");
+    if (addBotao) addBotao.addEventListener("click", () => {
+      const id = newNodeId(st.state);
+      st.state.nodes.push({ id, label: "Botão", shape: "botao" });
+      commitInline(art, st, id);
+    });
+    const addDecision = tb.querySelector(".inline-add-decision");
+    if (addDecision) addDecision.addEventListener("click", () => {
+      const id = newNodeId(st.state);
+      st.state.nodes.push({ id, label: "Decisão?", shape: "decision" });
+      commitInline(art, st, id);
+    });
     const addNotif = tb.querySelector(".inline-add-notif");
     if (addNotif) addNotif.addEventListener("click", () => {
       const id = newNodeId(st.state);
@@ -1487,7 +1529,7 @@
         `<button type="button" class="ifx ifx-add" title="Clique: nova etapa · Arraste até uma caixa pra ligar">+</button>
          <button type="button" class="ifx ifx-shape" title="Alternar tipo: etapa / decisão / notificação"></button>
          <button type="button" class="ifx ifx-del" title="Excluir etapa">×</button>`;
-      const SHAPE_GLYPH = { step: "▭", decision: "◇", notif: "🔔" };
+      const SHAPE_GLYPH = { step: "▭", botao: "▢", decision: "◇", notif: "🔔" };
       const shapeBtn = grp.querySelector(".ifx-shape");
       shapeBtn.textContent = SHAPE_GLYPH[node.shape] || "▭";
       // destinatário: só faz sentido em notificação
@@ -1520,7 +1562,7 @@
       });
       shapeBtn.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        const order = ["step", "decision", "notif"];
+        const order = ["step", "botao", "decision", "notif"];
         node.shape = order[(order.indexOf(node.shape) + 1) % order.length];
         commitInline(art, st);
       });
