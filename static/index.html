@@ -22,12 +22,45 @@
       <h1>Fluxo C <span class="dim">— Console de Teste</span></h1>
       <p class="sub">Operador (web) × App do técnico · NEXO Despacho</p>
     </div>
+    <div class="perfil-box">
+      <label>Entrando como</label>
+      <button type="button" class="perfil-chip" id="perfil-chip" title="Trocar perfil">
+        <span class="perfil-dot" id="perfil-dot"></span>
+        <span id="perfil-name">—</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+    </div>
     <div class="whoami">
       <label for="input-tester">Testando como</label>
       <input id="input-tester" type="text" placeholder="seu nome" autocomplete="off">
     </div>
   </div>
 </header>
+
+<div class="modal" id="perfil-modal" hidden aria-modal="true" role="dialog">
+  <div class="modal-card perfil-card">
+    <div class="modal-head">
+      <h3>Quem está entrando?</h3>
+      <button type="button" class="modal-close" id="perfil-modal-close" aria-label="Fechar" hidden>✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="notes-hint">Escolha o time. O painel de <b>Novidades</b> guarda, por time, o que
+      cada um já viu — assim a LP vê só o que mudou desde a última vez que a LP olhou, e a Faiston o dela.</p>
+      <div class="perfil-choices">
+        <button type="button" class="perfil-choice" data-perfil="LP">
+          <span class="perfil-choice-dot lp"></span>
+          <span class="perfil-choice-name">LP Digital</span>
+          <span class="perfil-choice-sub">Time que desenvolve o NEXO</span>
+        </button>
+        <button type="button" class="perfil-choice" data-perfil="Faiston">
+          <span class="perfil-choice-dot fai"></span>
+          <span class="perfil-choice-name">Faiston</span>
+          <span class="perfil-choice-sub">Cliente que valida os testes</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <main>
 
@@ -60,19 +93,12 @@
   <div id="view-testes">
 
   <section class="hero">
-    <div class="hero-progress">
-      <div class="hero-progress-top">
-        <span class="hero-progress-label">Progresso da execução</span>
-        <span class="hero-progress-pct" id="hero-pct">0%</span>
-      </div>
-      <div class="pbar"><div class="pbar-fill" id="pbar-fill"></div></div>
-    </div>
-    <div class="stat-strip" id="stat-strip">
-      <div class="stat" data-k="Não testado"><span class="stat-n" id="stat-nt">0</span><span class="stat-l">Não testado</span></div>
-      <div class="stat ok" data-k="Aprovado"><span class="stat-n" id="stat-ok">0</span><span class="stat-l">Aprovado</span></div>
-      <div class="stat bad" data-k="Reprovado"><span class="stat-n" id="stat-bad">0</span><span class="stat-l">Reprovado</span></div>
-      <div class="stat warn" data-k="Bloqueado"><span class="stat-n" id="stat-warn">0</span><span class="stat-l">Bloqueado</span></div>
-      <div class="stat na" data-k="N/A"><span class="stat-n" id="stat-na">0</span><span class="stat-l">N/A</span></div>
+    <div class="stat-strip" id="stat-strip" role="group" aria-label="Filtrar por status">
+      <button type="button" class="stat" data-k="Não testado" title="Filtrar: Não testado"><span class="stat-n" id="stat-nt">0</span><span class="stat-l">Não testado</span></button>
+      <button type="button" class="stat ok" data-k="Aprovado" title="Filtrar: Aprovado"><span class="stat-n" id="stat-ok">0</span><span class="stat-l">Aprovado</span></button>
+      <button type="button" class="stat bad" data-k="Reprovado" title="Filtrar: Reprovado"><span class="stat-n" id="stat-bad">0</span><span class="stat-l">Reprovado</span></button>
+      <button type="button" class="stat warn" data-k="Bloqueado" title="Filtrar: Bloqueado"><span class="stat-n" id="stat-warn">0</span><span class="stat-l">Bloqueado</span></button>
+      <button type="button" class="stat na" data-k="N/A" title="Filtrar: N/A"><span class="stat-n" id="stat-na">0</span><span class="stat-l">N/A</span></button>
     </div>
     <div class="hero-actions">
       <button type="button" class="add-btn" id="btn-add-case">
@@ -92,6 +118,11 @@
       <button type="button" class="export-btn" id="btn-export">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Exportar Excel
+      </button>
+      <button type="button" class="activity-btn" id="btn-activity">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Novidades
+        <span class="activity-count" id="activity-count" hidden>0</span>
       </button>
       <span class="present-hint">Passa print a print, agrupado por estágio</span>
     </div>
@@ -358,6 +389,21 @@
         <button type="submit" class="btn-primary" id="diagram-save">Salvar diagrama</button>
       </div>
     </form>
+  </div>
+</div>
+
+<div class="modal" id="activity-modal" hidden aria-modal="true" role="dialog">
+  <div class="modal-card notes-card">
+    <div class="modal-head">
+      <h3>Novidades</h3>
+      <span class="modal-code" id="activity-flow-label">Fluxo C</span>
+      <button type="button" class="modal-close" id="activity-close" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="notes-hint">Tudo que mudou neste fluxo — status, observações, prints, testes, pontos e diagramas —
+      do mais recente pro mais antigo. O que você ainda não tinha visto aparece marcado como <b>novo</b>.</p>
+      <div class="notes-list" id="activity-list"></div>
+    </div>
   </div>
 </div>
 

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, LargeBinary, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, Text, LargeBinary, DateTime, ForeignKey, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func, expression
 
@@ -78,6 +78,36 @@ class FlowDiagram(Base):
     # assim que o time edita, vira False e o seed nunca mais mexe nele.
     seeded = Column(Boolean, nullable=False, default=False, server_default=expression.false())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
+class ActivityLog(Base):
+    """Trilha de atividades — cada mudança relevante (status, observação, print,
+    teste criado/editado, ponto de reunião, diagrama) vira um evento, pra quem
+    entra depois ver o que aconteceu desde a última visita sem se perder."""
+    __tablename__ = "activity_log"
+
+    id = Column(Integer, primary_key=True)
+    fluxo = Column(String, nullable=False, default="C", server_default="C")
+    tipo = Column(String, nullable=False)      # status / obs / print / teste / ponto / diagrama
+    texto = Column(Text, nullable=False)       # descrição legível do que aconteceu
+    autor = Column(String, nullable=True)
+    case_code = Column(String, nullable=True)  # caso relacionado, quando houver
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class TeamView(Base):
+    """Marca de 'até onde este time já viu as Novidades', por perfil e fluxo.
+    Guarda o id do último evento visto (monotônico) em vez de um horário — evita
+    qualquer problema de fuso e é o 'login da LP/Faiston': se uma pessoa da LP
+    abre as Novidades, marca como visto pra LP toda, em qualquer computador."""
+    __tablename__ = "team_views"
+    __table_args__ = (UniqueConstraint("perfil", "fluxo", name="uq_team_view_perfil_fluxo"),)
+
+    id = Column(Integer, primary_key=True)
+    perfil = Column(String, nullable=False)     # "LP" / "Faiston"
+    fluxo = Column(String, nullable=False, default="C", server_default="C")
+    last_seen_id = Column(Integer, nullable=False, default=0, server_default="0")
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
 

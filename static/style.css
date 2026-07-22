@@ -105,6 +105,37 @@ h1,h2,h3 { font-family:'Roboto Slab',serif; }
 }
 .whoami input:focus { outline:none; border-color:var(--f-blue); box-shadow:0 0 0 3px rgba(0,84,236,.12); }
 
+/* ---------- perfil (LP Digital / Faiston) ---------- */
+.perfil-box { display:flex; flex-direction:column; gap:4px; }
+.perfil-box label { font-size:9.5px; text-transform:uppercase; letter-spacing:1px; color:var(--text-3); font-weight:600; }
+.perfil-chip {
+  display:inline-flex; align-items:center; gap:8px; cursor:pointer;
+  background:var(--surface-2); border:1px solid var(--line-2); color:var(--text);
+  border-radius:8px; padding:7px 11px; font-size:13px; font-weight:600; font-family:'Roboto',sans-serif;
+  transition:border-color .15s var(--ease), box-shadow .15s var(--ease);
+}
+.perfil-chip:hover { border-color:var(--f-blue); box-shadow:0 0 0 3px rgba(0,84,236,.10); }
+.perfil-chip svg { color:var(--text-3); }
+.perfil-dot { width:9px; height:9px; border-radius:50%; background:var(--text-3); flex-shrink:0; }
+.perfil-dot.lp  { background:var(--f-blue); }
+.perfil-dot.fai { background:var(--f-magenta); }
+
+.perfil-card { max-width:480px; }
+.perfil-choices { display:flex; gap:12px; flex-wrap:wrap; }
+.perfil-choice {
+  flex:1; min-width:180px; cursor:pointer; text-align:left;
+  display:flex; flex-direction:column; gap:3px;
+  background:var(--surface-2); border:1px solid var(--line-2); border-radius:var(--radius);
+  padding:16px; font-family:'Roboto',sans-serif;
+  transition:transform .14s var(--ease), box-shadow .18s var(--ease), border-color .18s var(--ease);
+}
+.perfil-choice:hover { transform:translateY(-2px); box-shadow:var(--shadow-2); border-color:var(--f-blue); }
+.perfil-choice-dot { width:12px; height:12px; border-radius:50%; margin-bottom:4px; }
+.perfil-choice-dot.lp  { background:var(--f-blue); }
+.perfil-choice-dot.fai { background:var(--f-magenta); }
+.perfil-choice-name { font-family:'Roboto Slab',serif; font-size:16px; font-weight:700; color:var(--text); }
+.perfil-choice-sub { font-size:11.5px; color:var(--text-3); }
+
 /* ---------- main layout ---------- */
 main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
 
@@ -119,29 +150,13 @@ main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
   content:''; position:absolute; inset:0; opacity:.06; pointer-events:none;
   background:var(--grad-mix);
 }
-.hero-progress-top { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px; position:relative; }
-.hero-progress-label { font-size:12.5px; color:var(--text-3); text-transform:uppercase; letter-spacing:1px; font-weight:600; }
-.hero-progress-pct {
-  font-family:'Roboto Slab',serif; font-size:30px; font-weight:800;
-  background:var(--grad-primary); -webkit-background-clip:text; background-clip:text; color:transparent;
-}
-.pbar { height:11px; border-radius:999px; background:var(--surface-3); overflow:hidden; position:relative; }
-.pbar-fill {
-  height:100%; width:0%; border-radius:inherit; position:relative; overflow:hidden;
-  background:var(--grad-primary);
-  transition:width .6s var(--ease);
-}
-.pbar-fill::after {
-  content:''; position:absolute; inset:0;
-  background:linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
-  width:60px; animation:shimmer 2.2s linear infinite;
-}
-@keyframes shimmer { from { transform:translateX(-80px);} to { transform:translateX(240px);} }
-
-.stat-strip { display:flex; gap:10px; margin-top:22px; flex-wrap:wrap; position:relative; }
+/* KPIs clicáveis — cada card filtra a lista pelo status dele */
+.stat-strip { display:flex; gap:10px; flex-wrap:wrap; position:relative; }
 .stat {
   flex:1; min-width:110px; background:var(--surface-2); border:1px solid var(--line);
-  border-radius:var(--radius); padding:12px 16px; transition:transform .18s var(--ease), box-shadow .18s var(--ease), border-color .18s var(--ease);
+  border-radius:var(--radius); padding:12px 16px; cursor:pointer; text-align:left;
+  font-family:'Roboto',sans-serif; -webkit-appearance:none; appearance:none;
+  transition:transform .18s var(--ease), box-shadow .18s var(--ease), border-color .18s var(--ease), background .18s var(--ease);
 }
 .stat:hover { transform:translateY(-3px); box-shadow:var(--shadow-1); border-color:var(--line-2); }
 .stat-n { display:block; font-family:'Roboto Slab',serif; font-size:24px; font-weight:700; color:var(--text-2); }
@@ -150,6 +165,12 @@ main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
 .stat.bad .stat-n { color:var(--bad); }
 .stat.warn .stat-n { color:var(--warn); }
 .stat.na .stat-n { color:var(--na); }
+.stat.active { background:var(--surface); border-color:var(--text-2); box-shadow:var(--shadow-2); }
+.stat.active .stat-l { color:var(--text-2); font-weight:700; }
+.stat.ok.active   { border-color:var(--ok);   background:var(--ok-bg); }
+.stat.bad.active  { border-color:var(--bad);  background:var(--bad-bg); }
+.stat.warn.active { border-color:var(--warn); background:var(--warn-bg); }
+.stat.na.active   { border-color:var(--na);   background:var(--na-bg); }
 
 /* ---------- toolbar: chips instead of <select> ---------- */
 .toolbar {
@@ -463,6 +484,52 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
   transition:transform .14s var(--ease), box-shadow .18s var(--ease), background .15s var(--ease);
 }
 .export-btn:hover { transform:translateY(-2px); background:rgba(13,157,108,.16); box-shadow:0 10px 22px -14px rgba(13,157,108,.5); }
+
+/* ---------- botão "Novidades" (trilha de atividades) ---------- */
+.activity-btn {
+  position:relative; display:inline-flex; align-items:center; gap:9px; cursor:pointer;
+  border:1px solid var(--f-magenta); color:#b1067a; background:rgba(253,17,164,.06);
+  border-radius:12px; padding:11px 18px; font-size:13.5px; font-weight:600; font-family:'Roboto',sans-serif;
+  transition:transform .14s var(--ease), box-shadow .18s var(--ease), background .15s var(--ease);
+}
+.activity-btn:hover { transform:translateY(-2px); background:rgba(253,17,164,.12); box-shadow:0 10px 22px -14px rgba(253,17,164,.5); }
+.activity-count {
+  min-width:19px; height:19px; padding:0 6px; border-radius:999px; background:var(--grad-warm); color:#fff;
+  font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;
+  box-shadow:0 2px 6px -1px rgba(253,17,164,.5);
+}
+.activity-count[hidden] { display:none; }
+
+/* ---------- lista de novidades ---------- */
+.act-item { display:flex; gap:11px; align-items:flex-start; padding:10px 4px; border-bottom:1px solid var(--line); }
+.act-item:last-child { border-bottom:none; }
+.act-item.is-new { background:linear-gradient(90deg, rgba(253,17,164,.06), transparent); border-radius:8px; }
+.act-icon { flex-shrink:0; font-size:15px; line-height:1.4; width:22px; text-align:center; }
+.act-body { flex:1; min-width:0; }
+.act-text { font-size:13px; color:var(--text); line-height:1.45; word-break:break-word; }
+.act-meta { font-size:10.5px; color:var(--text-3); margin-top:2px; }
+.act-new { color:#b1067a; text-transform:uppercase; letter-spacing:.4px; font-size:9.5px; }
+.act-divider {
+  font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-3); font-weight:600;
+  text-align:center; padding:8px 0; margin:2px 0; border-top:1px dashed var(--line-2);
+}
+.act-item.act-go { cursor:pointer; border-radius:8px; }
+.act-item.act-go:hover { background:var(--surface-2); }
+.act-item.act-go.is-new:hover { background:linear-gradient(90deg, rgba(253,17,164,.12), var(--surface-2)); }
+.act-item.act-go:focus-visible { outline:2px solid var(--f-blue); outline-offset:1px; }
+.act-goto {
+  flex-shrink:0; align-self:center; font-size:11px; font-weight:600; color:var(--f-blue);
+  opacity:0; transition:opacity .15s var(--ease); white-space:nowrap;
+}
+.act-item.act-go:hover .act-goto, .act-item.act-go:focus-visible .act-goto { opacity:1; }
+
+/* destaque ao chegar num card vindo das Novidades */
+.case-flash { animation:caseFlash 1.8s var(--ease); }
+@keyframes caseFlash {
+  0%   { box-shadow:0 0 0 3px rgba(0,84,236,.55), var(--shadow-2); }
+  60%  { box-shadow:0 0 0 3px rgba(0,84,236,.30), var(--shadow-2); }
+  100% { box-shadow:0 0 0 0 rgba(0,84,236,0); }
+}
 
 /* ---------- carrossel de evidências (modo apresentação) ---------- */
 .carousel {
