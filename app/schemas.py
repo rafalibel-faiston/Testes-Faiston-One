@@ -160,6 +160,18 @@ class ActivityOut(BaseModel):
     created_at: Optional[datetime] = None
 
 
+class TeamViewOut(BaseModel):
+    perfil: str
+    fluxo: str = "C"
+    last_seen_id: int = 0
+
+
+class TeamViewMark(BaseModel):
+    perfil: str
+    fluxo: str = "C"
+    last_seen_id: int
+
+
 class FlowDiagramUpdate(BaseModel):
     fluxo: Optional[str] = None
     kind: Optional[str] = None

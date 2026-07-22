@@ -1906,34 +1906,69 @@
   // título/badge iniciais coerentes com o fluxo atual
   onFlowChangedForDiagrams();
 
+  // ---------------- perfil (LP Digital / Faiston) ----------------
+  const PERFIL_KEY = "fluxoc_perfil";
+  const PERFIL_LABEL = { LP: "LP Digital", Faiston: "Faiston" };
+  let PERFIL = localStorage.getItem(PERFIL_KEY) || "";
+  const perfilModal = $("#perfil-modal");
+
+  function applyPerfilChip() {
+    const nameEl = $("#perfil-name"), dot = $("#perfil-dot");
+    if (nameEl) nameEl.textContent = PERFIL ? PERFIL_LABEL[PERFIL] : "escolher";
+    if (dot) dot.className = "perfil-dot" + (PERFIL ? (PERFIL === "LP" ? " lp" : " fai") : "");
+  }
+  function openPerfilGate(dismissable) {
+    $("#perfil-modal-close").hidden = !dismissable;
+    perfilModal.dataset.dismissable = dismissable ? "1" : "";
+    perfilModal.hidden = false;
+  }
+  function closePerfilGate() { perfilModal.hidden = true; }
+  function setPerfil(p) {
+    PERFIL = p;
+    localStorage.setItem(PERFIL_KEY, p);
+    applyPerfilChip();
+    closePerfilGate();
+    loadActivities();   // recarrega o "visto" do time escolhido
+  }
+  $$(".perfil-choice").forEach((b) => b.addEventListener("click", () => setPerfil(b.dataset.perfil)));
+  $("#perfil-chip").addEventListener("click", () => openPerfilGate(true));
+  $("#perfil-modal-close").addEventListener("click", closePerfilGate);
+  perfilModal.addEventListener("click", (e) => {
+    if (e.target.id === "perfil-modal" && perfilModal.dataset.dismissable) closePerfilGate();
+  });
+
   // ---------------- novidades (trilha de atividades) ----------------
-  // Cada mudança no fluxo vira um evento no servidor; aqui mostramos a trilha
-  // e destacamos o que é novo DESDE A ÚLTIMA VISITA deste navegador (guardamos
-  // o created_at mais recente já visto no localStorage, como o nome do testador).
+  // Cada mudança vira um evento no servidor. O "novo" é por TIME (perfil): o
+  // servidor guarda até que id de evento cada perfil já viu — o "login" da LP /
+  // Faiston — então vale pra todo o time, em qualquer computador.
   let ACTIVITIES = [];
+  let LAST_SEEN_ID = 0;
   const activityModal = $("#activity-modal");
-  const ACT_SEEN_KEY = "fluxoc_activity_lastseen";
 
   async function loadActivities() {
+    if (!PERFIL) { const el = $("#activity-count"); if (el) el.hidden = true; return; }
     try {
-      ACTIVITIES = await api(`/api/atividades?fluxo=${encodeURIComponent(currentFlow)}`);
-    } catch (e) { ACTIVITIES = []; }
+      const [acts, seen] = await Promise.all([
+        api(`/api/atividades?fluxo=${encodeURIComponent(currentFlow)}`),
+        api(`/api/atividades/visto?perfil=${encodeURIComponent(PERFIL)}&fluxo=${encodeURIComponent(currentFlow)}`),
+      ]);
+      ACTIVITIES = acts;
+      LAST_SEEN_ID = (seen && seen.last_seen_id) || 0;
+    } catch (e) { ACTIVITIES = []; LAST_SEEN_ID = 0; }
     updateActivityCount();
   }
 
-  function actSeen() { return localStorage.getItem(ACT_SEEN_KEY) || ""; }
-  function actIsNew(a, seen) { return (a.created_at || "") > seen; }
+  function actIsNew(a) { return a.id > LAST_SEEN_ID; }
 
   function updateActivityCount() {
-    const seen = actSeen();
-    const n = ACTIVITIES.filter((a) => actIsNew(a, seen)).length;
+    const n = ACTIVITIES.filter(actIsNew).length;
     const el = $("#activity-count");
     if (el) { el.textContent = n > 99 ? "99+" : n; el.hidden = n === 0; }
   }
 
   const ACT_ICON = { status: "◉", obs: "💬", print: "🖼️", teste: "🧪", ponto: "📋", diagrama: "🗺️" };
 
-  function renderActivityList(seenBefore) {
+  function renderActivityList(boundary) {
     const el = $("#activity-list");
     if (!ACTIVITIES.length) {
       el.innerHTML = `<div class="notes-empty">Nenhuma atividade registrada ainda neste fluxo.</div>`;
@@ -1941,10 +1976,10 @@
     }
     let html = "", divided = false, anyNew = false;
     ACTIVITIES.forEach((a) => {
-      const isNew = actIsNew(a, seenBefore);
+      const isNew = a.id > boundary;
       if (isNew) anyNew = true;
       else if (anyNew && !divided) {
-        html += `<div class="act-divider">acima: novidades desde sua última visita · abaixo: já visto</div>`;
+        html += `<div class="act-divider">acima: novo pra ${esc(PERFIL_LABEL[PERFIL] || "você")} · abaixo: já visto</div>`;
         divided = true;
       }
       // eventos de caso (FC-...) levam ao card; os de diagrama (case_code "diagrama:ID") não
@@ -1988,23 +2023,40 @@
     }, 80);
   }
 
+  async function markSeen() {
+    if (!PERFIL || !ACTIVITIES.length) return;
+    const maxId = ACTIVITIES.reduce((m, a) => Math.max(m, a.id), 0);
+    if (maxId <= LAST_SEEN_ID) return;
+    try {
+      await api("/api/atividades/visto", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ perfil: PERFIL, fluxo: currentFlow, last_seen_id: maxId }),
+      });
+      LAST_SEEN_ID = maxId;   // marca visto pro time todo; badge zera
+      updateActivityCount();
+    } catch (e) {}
+  }
+
   function openActivityModal() {
-    $("#activity-flow-label").textContent = "Fluxo " + currentFlow;
-    const seenBefore = actSeen();
-    renderActivityList(seenBefore);
-    // abrir o painel "dá o visto": a próxima visita compara a partir daqui
-    if (ACTIVITIES.length && (ACTIVITIES[0].created_at || "") > seenBefore) {
-      localStorage.setItem(ACT_SEEN_KEY, ACTIVITIES[0].created_at);
-    }
-    updateActivityCount();
+    $("#activity-flow-label").textContent = "Fluxo " + currentFlow + " · " + (PERFIL_LABEL[PERFIL] || "");
+    const boundary = LAST_SEEN_ID;       // fronteira do que era novo ao abrir
+    renderActivityList(boundary);
+    markSeen();                          // dá o "visto" pro time no servidor
     activityModal.hidden = false;
   }
   function closeActivityModal() { activityModal.hidden = true; }
 
-  $("#btn-activity").addEventListener("click", async () => { await loadActivities(); openActivityModal(); });
+  $("#btn-activity").addEventListener("click", async () => {
+    if (!PERFIL) { openPerfilGate(true); return; }
+    await loadActivities(); openActivityModal();
+  });
   $("#activity-close").addEventListener("click", closeActivityModal);
   activityModal.addEventListener("click", (e) => { if (e.target.id === "activity-modal") closeActivityModal(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !activityModal.hidden) closeActivityModal(); });
+
+  // na entrada: aplica o chip e, se ninguém escolheu ainda, força a escolha do perfil
+  applyPerfilChip();
+  if (!PERFIL) openPerfilGate(false);
 
   // ---------------- tester name ----------------
   const testerInput = $("#input-tester");

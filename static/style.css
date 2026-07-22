@@ -105,6 +105,37 @@ h1,h2,h3 { font-family:'Roboto Slab',serif; }
 }
 .whoami input:focus { outline:none; border-color:var(--f-blue); box-shadow:0 0 0 3px rgba(0,84,236,.12); }
 
+/* ---------- perfil (LP Digital / Faiston) ---------- */
+.perfil-box { display:flex; flex-direction:column; gap:4px; }
+.perfil-box label { font-size:9.5px; text-transform:uppercase; letter-spacing:1px; color:var(--text-3); font-weight:600; }
+.perfil-chip {
+  display:inline-flex; align-items:center; gap:8px; cursor:pointer;
+  background:var(--surface-2); border:1px solid var(--line-2); color:var(--text);
+  border-radius:8px; padding:7px 11px; font-size:13px; font-weight:600; font-family:'Roboto',sans-serif;
+  transition:border-color .15s var(--ease), box-shadow .15s var(--ease);
+}
+.perfil-chip:hover { border-color:var(--f-blue); box-shadow:0 0 0 3px rgba(0,84,236,.10); }
+.perfil-chip svg { color:var(--text-3); }
+.perfil-dot { width:9px; height:9px; border-radius:50%; background:var(--text-3); flex-shrink:0; }
+.perfil-dot.lp  { background:var(--f-blue); }
+.perfil-dot.fai { background:var(--f-magenta); }
+
+.perfil-card { max-width:480px; }
+.perfil-choices { display:flex; gap:12px; flex-wrap:wrap; }
+.perfil-choice {
+  flex:1; min-width:180px; cursor:pointer; text-align:left;
+  display:flex; flex-direction:column; gap:3px;
+  background:var(--surface-2); border:1px solid var(--line-2); border-radius:var(--radius);
+  padding:16px; font-family:'Roboto',sans-serif;
+  transition:transform .14s var(--ease), box-shadow .18s var(--ease), border-color .18s var(--ease);
+}
+.perfil-choice:hover { transform:translateY(-2px); box-shadow:var(--shadow-2); border-color:var(--f-blue); }
+.perfil-choice-dot { width:12px; height:12px; border-radius:50%; margin-bottom:4px; }
+.perfil-choice-dot.lp  { background:var(--f-blue); }
+.perfil-choice-dot.fai { background:var(--f-magenta); }
+.perfil-choice-name { font-family:'Roboto Slab',serif; font-size:16px; font-weight:700; color:var(--text); }
+.perfil-choice-sub { font-size:11.5px; color:var(--text-3); }
+
 /* ---------- main layout ---------- */
 main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
 
@@ -467,6 +498,7 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
   font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;
   box-shadow:0 2px 6px -1px rgba(253,17,164,.5);
 }
+.activity-count[hidden] { display:none; }
 
 /* ---------- lista de novidades ---------- */
 .act-item { display:flex; gap:11px; align-items:flex-start; padding:10px 4px; border-bottom:1px solid var(--line); }

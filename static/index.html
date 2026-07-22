@@ -22,12 +22,45 @@
       <h1>Fluxo C <span class="dim">— Console de Teste</span></h1>
       <p class="sub">Operador (web) × App do técnico · NEXO Despacho</p>
     </div>
+    <div class="perfil-box">
+      <label>Entrando como</label>
+      <button type="button" class="perfil-chip" id="perfil-chip" title="Trocar perfil">
+        <span class="perfil-dot" id="perfil-dot"></span>
+        <span id="perfil-name">—</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+    </div>
     <div class="whoami">
       <label for="input-tester">Testando como</label>
       <input id="input-tester" type="text" placeholder="seu nome" autocomplete="off">
     </div>
   </div>
 </header>
+
+<div class="modal" id="perfil-modal" hidden aria-modal="true" role="dialog">
+  <div class="modal-card perfil-card">
+    <div class="modal-head">
+      <h3>Quem está entrando?</h3>
+      <button type="button" class="modal-close" id="perfil-modal-close" aria-label="Fechar" hidden>✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="notes-hint">Escolha o time. O painel de <b>Novidades</b> guarda, por time, o que
+      cada um já viu — assim a LP vê só o que mudou desde a última vez que a LP olhou, e a Faiston o dela.</p>
+      <div class="perfil-choices">
+        <button type="button" class="perfil-choice" data-perfil="LP">
+          <span class="perfil-choice-dot lp"></span>
+          <span class="perfil-choice-name">LP Digital</span>
+          <span class="perfil-choice-sub">Time que desenvolve o NEXO</span>
+        </button>
+        <button type="button" class="perfil-choice" data-perfil="Faiston">
+          <span class="perfil-choice-dot fai"></span>
+          <span class="perfil-choice-name">Faiston</span>
+          <span class="perfil-choice-sub">Cliente que valida os testes</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <main>
 
