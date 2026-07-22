@@ -379,6 +379,7 @@
       if (q && !card.dataset.search.includes(q)) ok = false;
       card.classList.toggle("hidden", !ok);
     });
+    syncStatTiles();
   }
   $("#f-busca").addEventListener("input", applyFilters);
 
@@ -392,13 +393,22 @@
     $("#stat-bad").textContent = counts["Reprovado"];
     $("#stat-warn").textContent = counts["Bloqueado"];
     $("#stat-na").textContent = counts["N/A"];
-    const total = flowCases.length;
-    const executado = total - counts["Não testado"];
-    const pct = total ? Math.round((executado / total) * 100) : 0;
-    $("#hero-pct").textContent = pct + "%";
-    $("#pbar-fill").style.width = pct + "%";
     updatePresentCount();
   }
+
+  // KPIs clicáveis: cada card de status filtra a lista (clicar de novo limpa).
+  // Mantém os chips de Status em sincronia — são duas faces do mesmo filtro.
+  function syncStatTiles() {
+    $$("#stat-strip .stat").forEach((t) => t.classList.toggle("active", t.dataset.k === activeFilters.status));
+  }
+  $$("#stat-strip .stat").forEach((tile) => {
+    tile.addEventListener("click", () => {
+      const k = tile.dataset.k;
+      activeFilters.status = activeFilters.status === k ? "" : k;
+      $$("#chips-status .chip").forEach((b) => b.classList.toggle("active", b.dataset.val === activeFilters.status));
+      applyFilters();
+    });
+  });
 
   // ---------------- flow tabs (Fluxo A / B / C) ----------------
   // Hoje todo o conteúdo é do Fluxo C. Fluxo A e B ficam separados como abas

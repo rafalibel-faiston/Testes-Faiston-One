@@ -60,19 +60,12 @@
   <div id="view-testes">
 
   <section class="hero">
-    <div class="hero-progress">
-      <div class="hero-progress-top">
-        <span class="hero-progress-label">Progresso da execução</span>
-        <span class="hero-progress-pct" id="hero-pct">0%</span>
-      </div>
-      <div class="pbar"><div class="pbar-fill" id="pbar-fill"></div></div>
-    </div>
-    <div class="stat-strip" id="stat-strip">
-      <div class="stat" data-k="Não testado"><span class="stat-n" id="stat-nt">0</span><span class="stat-l">Não testado</span></div>
-      <div class="stat ok" data-k="Aprovado"><span class="stat-n" id="stat-ok">0</span><span class="stat-l">Aprovado</span></div>
-      <div class="stat bad" data-k="Reprovado"><span class="stat-n" id="stat-bad">0</span><span class="stat-l">Reprovado</span></div>
-      <div class="stat warn" data-k="Bloqueado"><span class="stat-n" id="stat-warn">0</span><span class="stat-l">Bloqueado</span></div>
-      <div class="stat na" data-k="N/A"><span class="stat-n" id="stat-na">0</span><span class="stat-l">N/A</span></div>
+    <div class="stat-strip" id="stat-strip" role="group" aria-label="Filtrar por status">
+      <button type="button" class="stat" data-k="Não testado" title="Filtrar: Não testado"><span class="stat-n" id="stat-nt">0</span><span class="stat-l">Não testado</span></button>
+      <button type="button" class="stat ok" data-k="Aprovado" title="Filtrar: Aprovado"><span class="stat-n" id="stat-ok">0</span><span class="stat-l">Aprovado</span></button>
+      <button type="button" class="stat bad" data-k="Reprovado" title="Filtrar: Reprovado"><span class="stat-n" id="stat-bad">0</span><span class="stat-l">Reprovado</span></button>
+      <button type="button" class="stat warn" data-k="Bloqueado" title="Filtrar: Bloqueado"><span class="stat-n" id="stat-warn">0</span><span class="stat-l">Bloqueado</span></button>
+      <button type="button" class="stat na" data-k="N/A" title="Filtrar: N/A"><span class="stat-n" id="stat-na">0</span><span class="stat-l">N/A</span></button>
     </div>
     <div class="hero-actions">
       <button type="button" class="add-btn" id="btn-add-case">
