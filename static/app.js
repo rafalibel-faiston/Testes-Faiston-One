@@ -419,6 +419,7 @@
     if (busca) busca.value = "";
     render();
     loadNotes();
+    if (typeof onFlowChangedForDiagrams === "function") onFlowChangedForDiagrams();
   }
   $$(".flow-tab").forEach((t) => t.addEventListener("click", () => setFlow(t.dataset.flow)));
 
@@ -752,6 +753,1105 @@
       updateNotesCount();
     } catch (err) { toast("Erro ao salvar ponto: " + err.message, true); }
   });
+
+  // ---------------- fluxos (diagramas Mermaid) ----------------
+  let currentView = "testes";        // "testes" | "fluxos"
+  let DIAGRAMS = [];
+  let diagramsLoaded = false;
+  const expandedDiagrams = new Set();   // ids dos diagramas abertos (recolhidos por padrão)
+  const KIND_LABEL = { atual: "Como está hoje", ideal: "Como deveria funcionar" };
+  let mermaidSeq = 0;
+
+  // O Mermaid é carregado como módulo ES (CDN) e sinaliza quando pronto.
+  function whenMermaid() {
+    if (window.__mermaidReady && window.mermaid) return Promise.resolve(window.mermaid);
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error("Mermaid não carregou (sem conexão?)")), 8000);
+      document.addEventListener("mermaid-ready", () => { clearTimeout(t); resolve(window.mermaid); }, { once: true });
+    });
+  }
+
+  // Renderiza um código Mermaid dentro de um container. Mostra erro amigável se o
+  // desenho estiver inválido, sem quebrar o resto da tela.
+  async function renderMermaidInto(container, code) {
+    const src = (code || "").trim();
+    if (!src) { container.innerHTML = `<div class="diagram-preview-empty">Sem diagrama.</div>`; return; }
+    let mermaid;
+    try { mermaid = await whenMermaid(); }
+    catch (e) { container.innerHTML = `<div class="diagram-error">${esc(e.message)}</div>`; return; }
+    const id = "mmd-" + (++mermaidSeq);
+    try {
+      const { svg } = await mermaid.render(id, src);
+      container.innerHTML = svg;
+    } catch (err) {
+      const msg = (err && err.message ? err.message : String(err)).split("\n").slice(0, 6).join("\n");
+      container.innerHTML = `<div class="diagram-error">⚠ Erro no diagrama:\n${esc(msg)}</div>`;
+    }
+  }
+
+  function switchView(view) {
+    currentView = view;
+    $$(".view-tab").forEach((t) => {
+      const on = t.dataset.view === view;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    $("#view-testes").hidden = view !== "testes";
+    $("#view-fluxos").hidden = view !== "fluxos";
+    if (view === "fluxos") loadDiagrams();
+  }
+
+  function onFlowChangedForDiagrams() {
+    $("#diagrams-title").textContent = "Fluxos do Fluxo " + currentFlow;
+    $("#diagrams-empty-badge").textContent = "Fluxo " + currentFlow;
+    if (currentView === "fluxos") renderDiagrams();
+  }
+
+  async function loadDiagrams() {
+    if (!diagramsLoaded) $("#diagrams-loading").hidden = false;
+    try {
+      DIAGRAMS = await api("/api/diagramas");
+      diagramsLoaded = true;
+    } catch (e) {
+      $("#diagrams-loading").textContent = "Erro ao carregar diagramas: " + e.message;
+      return;
+    }
+    $("#diagrams-loading").hidden = true;
+    renderDiagrams();
+  }
+
+  function diagramCard(d) {
+    const open = expandedDiagrams.has(d.id);
+    return `<article class="diagram kind-${esc(d.kind)} ${open ? "" : "collapsed"}" data-id="${d.id}">
+      <div class="diagram-head">
+        <button type="button" class="diagram-toggle" aria-label="Abrir/recolher" aria-expanded="${open ? "true" : "false"}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        <span class="diagram-kind">${esc(KIND_LABEL[d.kind] || d.kind)}</span>
+        <span class="diagram-title">${esc(d.titulo)}</span>
+        <span class="diagram-actions">
+          <button type="button" class="case-icon-btn diagram-inline-toggle" title="Editar direto no desenho" aria-label="Editar aqui" aria-pressed="false">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            <span class="inline-toggle-label">Editar aqui</span>
+          </button>
+          <button type="button" class="case-icon-btn diagram-edit" title="Editor completo (título, tipo, código)" aria-label="Editor completo">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button type="button" class="case-icon-btn danger diagram-del" title="Excluir diagrama" aria-label="Excluir">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        </span>
+      </div>
+      <div class="diagram-body">
+        ${d.descricao ? `<div class="diagram-desc">${esc(d.descricao)}</div>` : ""}
+        <div class="inline-toolbar" data-toolbar="${d.id}" hidden>
+          <span class="inline-tb-hint">Renomear: clique na caixa · Ligar: <b>arraste o +</b> · seta: clique traceja, <b>Aa</b> rotula (Sim/Não), <b>⇄</b>/<b>×</b> inverte/exclui · <b>Delete</b> apaga o que está sob o mouse</span>
+          <span class="inline-tb-spacer"></span>
+          <button type="button" class="inline-undo" title="Desfazer (Ctrl+Z)" disabled>↶ Desfazer</button>
+          <div class="inline-dir" role="group" aria-label="Sentido do fluxo">
+            <button type="button" class="inline-dir-btn" data-dir="TD" title="Vertical">↓</button>
+            <button type="button" class="inline-dir-btn" data-dir="LR" title="Horizontal">→</button>
+          </div>
+          <button type="button" class="inline-add-node" title="Adicionar etapa solta">+ Etapa</button>
+          <button type="button" class="inline-add-notif" title="Adicionar notificação solta">🔔 Notificação</button>
+          <span class="inline-save-state" aria-live="polite"></span>
+          <button type="button" class="inline-done">Concluir</button>
+        </div>
+        <div class="diagram-canvas" data-canvas="${d.id}"><div class="diagram-preview-empty">Renderizando…</div></div>
+        <div class="diagram-meta-foot">${d.atualizado_por ? `Atualizado por <span class="who">${esc(d.atualizado_por)}</span> · ` : ""}${fmtWhen(d.updated_at)}${d.seeded ? " · <span class=\"who\">modelo inicial</span>" : ""}</div>
+      </div>
+    </article>`;
+  }
+
+  // renderiza o Mermaid de um card só quando ele está aberto (lazy)
+  function renderDiagramCanvas(d, wrap) {
+    const canvas = (wrap || document).querySelector(`.diagram-canvas[data-canvas="${d.id}"]`);
+    if (canvas && !canvas.dataset.rendered) {
+      canvas.dataset.rendered = "1";
+      renderMermaidInto(canvas, d.mermaid);
+    }
+  }
+
+  function renderDiagrams() {
+    const list = DIAGRAMS.filter((d) => (d.fluxo || "C") === currentFlow)
+      .sort((a, b) => (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : (a.ordem || 0) - (b.ordem || 0)));
+    // cancela edições inline pendentes antes de recriar os cards
+    inlineState.forEach((st) => { if (st.saveTimer) clearTimeout(st.saveTimer); });
+    inlineState.clear();
+    const emptyEl = $("#diagrams-empty");
+    const wrap = $("#diagrams");
+    if (!list.length) {
+      wrap.innerHTML = "";
+      emptyEl.hidden = false;
+      return;
+    }
+    emptyEl.hidden = true;
+    wrap.innerHTML = list.map(diagramCard).join("");
+    // só desenha os que estão abertos
+    list.forEach((d) => { if (expandedDiagrams.has(d.id)) renderDiagramCanvas(d, wrap); });
+    // abrir/recolher pelo cabeçalho (menos os botões de ação)
+    $$(".diagram", wrap).forEach((art) => {
+      const id = Number(art.dataset.id);
+      const d = list.find((x) => x.id === id);
+      art.querySelector(".diagram-head").addEventListener("click", (ev) => {
+        if (ev.target.closest(".diagram-actions")) return;
+        const nowOpen = art.classList.toggle("collapsed") === false;
+        art.querySelector(".diagram-toggle").setAttribute("aria-expanded", nowOpen ? "true" : "false");
+        if (nowOpen) { expandedDiagrams.add(id); if (d) renderDiagramCanvas(d, wrap); }
+        else { expandedDiagrams.delete(id); if (art.classList.contains("editing")) exitInlineEdit(art); }
+      });
+    });
+    $$(".diagram-inline-toggle", wrap).forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const art = btn.closest(".diagram");
+        const id = Number(art.dataset.id);
+        const d = DIAGRAMS.find((x) => x.id === id);
+        if (!d) return;
+        // abrir o card se estiver recolhido antes de editar
+        if (art.classList.contains("collapsed")) {
+          art.classList.remove("collapsed");
+          art.querySelector(".diagram-toggle").setAttribute("aria-expanded", "true");
+          expandedDiagrams.add(id);
+        }
+        if (art.classList.contains("editing")) exitInlineEdit(art);
+        else enterInlineEdit(art, d);
+      });
+    });
+    $$(".diagram-edit", wrap).forEach((btn) => {
+      btn.addEventListener("click", (ev) => { ev.stopPropagation(); openDiagramModal("edit", btn.closest(".diagram").dataset.id); });
+    });
+    $$(".diagram-del", wrap).forEach((btn) => {
+      btn.addEventListener("click", (ev) => { ev.stopPropagation(); deleteDiagram(btn.closest(".diagram").dataset.id); });
+    });
+  }
+
+  // ---- editor modal (builder por formulário) ----
+  let editingDiagramId = null;
+  const diagramModal = $("#diagram-modal");
+  const diagramForm = $("#diagram-form");
+  const diagramSource = $("#diagram-source");
+  let previewTimer = null;
+  let syncingCode = false;   // evita loop builder <-> código
+  let manualCode = false;    // usuário editou o código à mão (modo avançado)
+  // estado do builder: { dir, nodes:[{id,label,shape}], edges:[{id,from,to,label,dotted}] }
+  let builder = { dir: "TD", nodes: [], edges: [], nSeq: 0, eSeq: 0 };
+
+  function newNodeId(state) {
+    const s = state || builder;
+    let id;
+    do { id = "n" + (++s.nSeq); } while (s.nodes.some((n) => n.id === id));
+    return id;
+  }
+
+  function newEdgeId(state) {
+    const s = state || builder;
+    return "e" + (++s.eSeq);
+  }
+
+  // --- gerar código Mermaid a partir do estado ---
+  function cleanLabel(s) { return (s || "").replace(/["|]/g, " ").replace(/\s+/g, " ").trim(); }
+  // destinatários possíveis de uma notificação e a cor de cada um
+  const NOTIF_RECIPIENTS = ["Técnico", "Operador", "Cliente", "Todos"];
+  // frase natural mostrada na caixa por destinatário
+  const NOTIF_PHRASE = {
+    "Técnico": "Notifica o técnico", "Operador": "Notifica o operador",
+    "Cliente": "Notifica o cliente", "Todos": "Notifica a todos",
+  };
+  const NOTIF_CLASS = { "Técnico": "notifTec", "Operador": "notifOpr", "Cliente": "notifCli" };
+  const NOTIF_CLASSDEF = {
+    notif:    "classDef notif fill:#fff7e6,stroke:#f59e0b,stroke-width:1.5px,color:#7c4a03;",
+    notifTec: "classDef notifTec fill:#e8f0ff,stroke:#0054ec,stroke-width:1.5px,color:#0b2e75;",
+    notifOpr: "classDef notifOpr fill:#f3e8ff,stroke:#9333ea,stroke-width:1.5px,color:#5b1699;",
+    notifCli: "classDef notifCli fill:#e7f8ef,stroke:#0d9d6c,stroke-width:1.5px,color:#075e40;",
+  };
+
+  function generateMermaid(s) {
+    const lines = ["flowchart " + (s.dir || "TD")];
+    s.nodes.forEach((n) => {
+      const label = cleanLabel(n.label) || n.id;
+      if (n.shape === "decision") lines.push(`    ${n.id}{"${label}"}`);
+      else if (n.shape === "notif") {
+        const phrase = NOTIF_PHRASE[n.to];
+        const msg = cleanLabel(n.label);
+        let inner;
+        if (phrase) inner = msg ? `🔔 ${phrase}: ${msg}` : `🔔 ${phrase}`;
+        else inner = `🔔 ${msg || "Notificação"}`;
+        lines.push(`    ${n.id}(["${inner}"])`);
+      } else lines.push(`    ${n.id}["${label}"]`);
+    });
+    s.edges.forEach((e) => {
+      if (!e.from || !e.to) return;
+      const lbl = cleanLabel(e.label);
+      if (e.dotted) lines.push(lbl ? `    ${e.from} -. ${lbl} .-> ${e.to}` : `    ${e.from} -.-> ${e.to}`);
+      else lines.push(lbl ? `    ${e.from} -->|${lbl}| ${e.to}` : `    ${e.from} --> ${e.to}`);
+    });
+    // notificações ganham cor por destinatário (âmbar quando sem destinatário)
+    const byClass = {};
+    s.nodes.filter((n) => n.shape === "notif").forEach((n) => {
+      const cls = NOTIF_CLASS[n.to] || "notif";
+      (byClass[cls] = byClass[cls] || []).push(n.id);
+    });
+    Object.keys(byClass).forEach((cls) => {
+      lines.push("    " + NOTIF_CLASSDEF[cls]);
+      lines.push("    class " + byClass[cls].join(",") + " " + cls + ";");
+    });
+    return lines.join("\n");
+  }
+
+  // --- interpretar código Mermaid simples de volta pro estado (best-effort) ---
+  function parseMermaid(code) {
+    const s = { dir: "TD", nodes: [], edges: [], nSeq: 0, eSeq: 0 };
+    const map = new Map();
+    const ensure = (id) => {
+      if (!map.has(id)) { const n = { id, label: id, shape: "step" }; map.set(id, n); s.nodes.push(n); }
+      return map.get(id);
+    };
+    // extrai definições de nó (inclusive inline numa aresta, ex.: A[x] --> B[y]),
+    // registra rótulo/forma e devolve a linha só com os ids (ex.: A --> B).
+    // ordem importa: o formato estádio ([...]) precisa sair antes de [...],
+    // senão o colchete interno seria lido como uma etapa comum.
+    const extractNodes = (line) => {
+      line = line.replace(/([A-Za-z0-9_]+)\(\[\s*"?(.*?)"?\s*\]\)/g, (full, id, label) => {
+        const n = ensure(id); n.shape = "notif";
+        const txt = label.replace(/^🔔\s*/, "").trim();
+        n.to = ""; n.label = txt;
+        for (const k of NOTIF_RECIPIENTS) {
+          const ph = NOTIF_PHRASE[k];
+          if (txt === ph) { n.to = k; n.label = ""; break; }
+          if (txt.startsWith(ph + ": ")) { n.to = k; n.label = txt.slice(ph.length + 2); break; }
+        }
+        if (n.label === "Notificação") n.label = "";
+        return id;
+      });
+      line = line.replace(/([A-Za-z0-9_]+)\{\s*"?(.*?)"?\s*\}/g, (full, id, label) => {
+        const n = ensure(id); n.shape = "decision"; n.label = label; return id;
+      });
+      line = line.replace(/([A-Za-z0-9_]+)\[\s*"?(.*?)"?\s*\]/g, (full, id, label) => {
+        const n = ensure(id); n.shape = "step"; n.label = label; return id;
+      });
+      return line;
+    };
+    (code || "").split("\n").forEach((raw) => {
+      let line = raw.trim();
+      if (!line) return;
+      let m;
+      if ((m = line.match(/^(?:flowchart|graph)\s+(TD|TB|LR|RL|BT)/i))) {
+        s.dir = m[1].toUpperCase() === "TB" ? "TD" : m[1].toUpperCase();
+        return;
+      }
+      line = extractNodes(line);   // nós (inline ou soltos) já registrados; sobra "A --> B"
+      // arestas (checar variações com rótulo antes da simples)
+      if ((m = line.match(/^(\w+)\s*-\.\s*(.+?)\s*\.->\s*(\w+)/))) { ensure(m[1]); ensure(m[3]); s.edges.push({ id: "e" + (++s.eSeq), from: m[1], to: m[3], label: m[2], dotted: true }); return; }
+      if ((m = line.match(/^(\w+)\s*-\.->\s*(\w+)/))) { ensure(m[1]); ensure(m[2]); s.edges.push({ id: "e" + (++s.eSeq), from: m[1], to: m[2], label: "", dotted: true }); return; }
+      if ((m = line.match(/^(\w+)\s*-->\s*\|([^|]*)\|\s*(\w+)/))) { ensure(m[1]); ensure(m[3]); s.edges.push({ id: "e" + (++s.eSeq), from: m[1], to: m[3], label: m[2], dotted: false }); return; }
+      if ((m = line.match(/^(\w+)\s*--\s*(.+?)\s*-->\s*(\w+)/))) { ensure(m[1]); ensure(m[3]); s.edges.push({ id: "e" + (++s.eSeq), from: m[1], to: m[3], label: m[2], dotted: false }); return; }
+      if ((m = line.match(/^(\w+)\s*-->\s*(\w+)/))) { ensure(m[1]); ensure(m[2]); s.edges.push({ id: "e" + (++s.eSeq), from: m[1], to: m[2], label: "", dotted: false }); return; }
+    });
+    // nSeq alto o suficiente pra novos ids não colidirem
+    s.nodes.forEach((n) => { const mm = /^n(\d+)$/.exec(n.id); if (mm) s.nSeq = Math.max(s.nSeq, +mm[1]); });
+    return s;
+  }
+
+  // --- opções de <select> das etapas (usadas nas ligações) ---
+  function nodeOptions(selected) {
+    if (!builder.nodes.length) return `<option value="">— sem etapas —</option>`;
+    return builder.nodes.map((n, i) => {
+      const txt = `${i + 1}. ${cleanLabel(n.label) || n.id}`;
+      return `<option value="${n.id}" ${n.id === selected ? "selected" : ""}>${esc(txt)}</option>`;
+    }).join("");
+  }
+
+  function renderNodes() {
+    const el = $("#nodes-list");
+    if (!builder.nodes.length) { el.innerHTML = `<div class="builder-empty">Nenhuma etapa ainda. Clique em “+ Etapa”.</div>`; return; }
+    el.innerHTML = builder.nodes.map((n, i) => `
+      <div class="builder-row ${n.shape === "decision" ? "is-decision" : ""} ${n.shape === "notif" ? "is-notif" : ""}" data-id="${n.id}">
+        <span class="b-num">${i + 1}</span>
+        <input type="text" class="b-label" value="${esc(n.label)}" placeholder="texto da etapa">
+        <select class="b-shape">
+          <option value="step" ${n.shape === "step" ? "selected" : ""}>Etapa</option>
+          <option value="decision" ${n.shape === "decision" ? "selected" : ""}>Decisão</option>
+          <option value="notif" ${n.shape === "notif" ? "selected" : ""}>Notificação</option>
+        </select>
+        <select class="b-recipient" title="Destinatário da notificação">
+          <option value="" ${!n.to ? "selected" : ""}>— destinatário —</option>
+          ${NOTIF_RECIPIENTS.map((r) => `<option value="${r}" ${n.to === r ? "selected" : ""}>${r}</option>`).join("")}
+        </select>
+        <button type="button" class="builder-del" title="Remover etapa" aria-label="Remover">×</button>
+      </div>`).join("");
+    $$(".builder-row", el).forEach((row) => {
+      const id = row.dataset.id;
+      const node = builder.nodes.find((n) => n.id === id);
+      row.querySelector(".b-label").addEventListener("input", (ev) => { node.label = ev.target.value; scheduleSync(); });
+      row.querySelector(".b-label").addEventListener("change", () => renderEdges());
+      row.querySelector(".b-shape").addEventListener("change", (ev) => {
+        node.shape = ev.target.value;
+        row.classList.toggle("is-decision", ev.target.value === "decision");
+        row.classList.toggle("is-notif", ev.target.value === "notif");
+        scheduleSync();
+      });
+      row.querySelector(".b-recipient").addEventListener("change", (ev) => { node.to = ev.target.value; scheduleSync(); });
+      row.querySelector(".builder-del").addEventListener("click", () => {
+        builder.nodes = builder.nodes.filter((n) => n.id !== id);
+        builder.edges = builder.edges.filter((e) => e.from !== id && e.to !== id);
+        renderNodes(); renderEdges(); scheduleSync();
+      });
+    });
+  }
+
+  function renderEdges() {
+    const el = $("#edges-list");
+    if (!builder.edges.length) { el.innerHTML = `<div class="builder-empty">Nenhuma ligação ainda. Clique em “+ Ligação”.</div>`; return; }
+    el.innerHTML = builder.edges.map((e) => `
+      <div class="builder-row" data-eid="${e.id}">
+        <select class="b-from">${nodeOptions(e.from)}</select>
+        <span class="b-arrow">→</span>
+        <select class="b-to">${nodeOptions(e.to)}</select>
+        <input type="text" class="b-edge-label" value="${esc(e.label || "")}" placeholder="rótulo (ex.: Sim)">
+        <label class="b-dotted"><input type="checkbox" ${e.dotted ? "checked" : ""}> tracejada</label>
+        <button type="button" class="builder-del" title="Remover ligação" aria-label="Remover">×</button>
+      </div>`).join("");
+    $$(".builder-row", el).forEach((row) => {
+      const eid = row.dataset.eid;
+      const edge = builder.edges.find((x) => x.id === eid);
+      row.querySelector(".b-from").addEventListener("change", (ev) => { edge.from = ev.target.value; scheduleSync(); });
+      row.querySelector(".b-to").addEventListener("change", (ev) => { edge.to = ev.target.value; scheduleSync(); });
+      row.querySelector(".b-edge-label").addEventListener("input", (ev) => { edge.label = ev.target.value; scheduleSync(); });
+      row.querySelector(".b-dotted input").addEventListener("change", (ev) => { edge.dotted = ev.target.checked; scheduleSync(); });
+      row.querySelector(".builder-del").addEventListener("click", () => {
+        builder.edges = builder.edges.filter((x) => x.id !== eid);
+        renderEdges(); scheduleSync();
+      });
+    });
+  }
+
+  // gera o código a partir do builder, joga no textarea avançado e atualiza o preview
+  function scheduleSync() {
+    manualCode = false;
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => {
+      const code = generateMermaid(builder);
+      syncingCode = true;
+      diagramSource.value = code;
+      syncingCode = false;
+      renderPreview(code);
+    }, 300);
+  }
+
+  function setBuilderState(state) {
+    builder = state;
+    const dirInput = diagramForm.querySelector(`input[name="builder-dir"][value="${builder.dir}"]`) ||
+                     diagramForm.querySelector('input[name="builder-dir"][value="TD"]');
+    if (dirInput) dirInput.checked = true;
+    renderNodes(); renderEdges();
+    const code = generateMermaid(builder);
+    syncingCode = true; diagramSource.value = code; syncingCode = false;
+    renderPreview(code);
+  }
+
+  function starterState() {
+    return {
+      dir: "TD", nSeq: 2, eSeq: 1,
+      nodes: [{ id: "n1", label: "Início", shape: "step" }, { id: "n2", label: "Fim", shape: "step" }],
+      edges: [{ id: "e1", from: "n1", to: "n2", label: "", dotted: false }],
+    };
+  }
+
+  function openDiagramModal(mode, id) {
+    editingDiagramId = mode === "edit" ? Number(id) : null;
+    $("#diagram-modal-title").textContent = mode === "edit" ? "Editar diagrama" : "Novo diagrama";
+    $("#diagram-flow-label").textContent = "Fluxo " + currentFlow;
+    let state;
+    if (mode === "edit") {
+      const d = DIAGRAMS.find((x) => x.id === editingDiagramId);
+      if (!d) return;
+      diagramForm.titulo.value = d.titulo || "";
+      diagramForm.kind.value = d.kind || "atual";
+      diagramForm.descricao.value = d.descricao || "";
+      state = parseMermaid(d.mermaid || "");
+      if (!state.nodes.length) { state = starterState(); diagramSource.value = d.mermaid || ""; }
+    } else {
+      diagramForm.reset();
+      diagramForm.kind.value = "atual";
+      state = starterState();
+    }
+    const adv = $(".builder-advanced"); if (adv) adv.open = false;
+    closeNodePopover();
+    setBuilderState(state);
+    diagramModal.hidden = false;
+    setTimeout(() => { try { diagramForm.titulo.focus(); } catch (e) {} }, 30);
+  }
+  function closeDiagramModal() { diagramModal.hidden = true; editingDiagramId = null; closeNodePopover(); }
+
+  // ---- clique-para-editar direto na pré-visualização ----
+  const nodePop = $("#node-popover");
+  let popNodeId = null;
+  let pendingSelectId = null;   // etapa a selecionar no popover após o próximo render
+
+  // renderiza o preview e (re)liga os cliques nas caixas
+  function renderPreview(code) {
+    renderMermaidInto($("#diagram-preview"), code).then(() => {
+      attachPreviewEditing();
+      if (pendingSelectId) {
+        const g = findNodeG(pendingSelectId);
+        if (g) openNodePopover(pendingSelectId, g);
+        pendingSelectId = null;
+      }
+    });
+  }
+
+  function nodeIdFromG(g) {
+    const m = /-flowchart-([A-Za-z0-9_]+)-\d+$/.exec(g.id || "");
+    return m ? m[1] : null;
+  }
+  function findNodeG(id) {
+    return $$("#diagram-preview svg g.node").find((g) => nodeIdFromG(g) === id) || null;
+  }
+  function attachPreviewEditing() {
+    const svg = $("#diagram-preview svg");
+    if (!svg) return;
+    $$("g.node", svg).forEach((g) => {
+      const id = nodeIdFromG(g);
+      if (!id) return;
+      g.addEventListener("click", (ev) => { ev.stopPropagation(); openNodePopover(id, g); });
+    });
+  }
+
+  function openNodePopover(id, g) {
+    const node = builder.nodes.find((n) => n.id === id);
+    if (!node) return;
+    popNodeId = id;
+    $("#mm-pop-label").value = node.label || "";
+    $("#mm-pop-shape").value = node.shape || "step";
+    nodePop.hidden = false;
+    const col = $(".diagram-preview-col");
+    const cr = col.getBoundingClientRect();
+    const gr = g.getBoundingClientRect();
+    let left = gr.left - cr.left + gr.width / 2 - nodePop.offsetWidth / 2;
+    let top = gr.bottom - cr.top + 8;
+    left = Math.max(6, Math.min(left, col.clientWidth - nodePop.offsetWidth - 6));
+    top = Math.max(6, Math.min(top, col.clientHeight - nodePop.offsetHeight - 6));
+    nodePop.style.left = left + "px";
+    nodePop.style.top = top + "px";
+    setTimeout(() => { try { const el = $("#mm-pop-label"); el.focus(); el.select(); } catch (e) {} }, 20);
+  }
+  function closeNodePopover() { if (nodePop) { nodePop.hidden = true; } popNodeId = null; }
+
+  async function submitDiagramForm(e) {
+    e.preventDefault();
+    const payload = {
+      fluxo: currentFlow,
+      kind: diagramForm.kind.value,
+      titulo: diagramForm.titulo.value.trim(),
+      descricao: diagramForm.descricao.value.trim(),
+      mermaid: (manualCode ? diagramSource.value : generateMermaid(builder)).trim(),
+      atualizado_por: testerName() || undefined,
+    };
+    if (!payload.titulo) { toast("Informe o título.", true); return; }
+    if (!payload.mermaid) { toast("Informe o diagrama.", true); return; }
+    const saveBtn = $("#diagram-save");
+    saveBtn.disabled = true;
+    try {
+      if (editingDiagramId) {
+        await api(`/api/diagramas/${editingDiagramId}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        });
+        expandedDiagrams.add(editingDiagramId);   // deixa aberto pra ver o resultado
+        toast("Diagrama atualizado");
+      } else {
+        const created = await api("/api/diagramas", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        });
+        if (created && created.id) expandedDiagrams.add(created.id);
+        toast("Diagrama criado");
+      }
+      await loadDiagrams();
+      closeDiagramModal();
+    } catch (err) {
+      toast("Erro ao salvar: " + err.message, true);
+    } finally {
+      saveBtn.disabled = false;
+    }
+  }
+
+  async function deleteDiagram(id) {
+    if (!confirm("Excluir este diagrama?")) return;
+    try {
+      await api(`/api/diagramas/${id}`, { method: "DELETE" });
+      DIAGRAMS = DIAGRAMS.filter((d) => String(d.id) !== String(id));
+      renderDiagrams();
+      toast("Diagrama excluído");
+    } catch (err) {
+      toast("Erro ao excluir: " + err.message, true);
+    }
+  }
+
+  // ---------------- edição inline direto no card (sem modal) ----------------
+  // Cada card guarda seu próprio estado de builder enquanto está em edição.
+  // As alterações regeram o Mermaid, redesenham o SVG e salvam sozinhas (debounce).
+  const inlineState = new Map();   // id do diagrama -> { d, state, saveTimer, renaming }
+
+  function enterInlineEdit(art, d) {
+    // sai de qualquer outro card em edição (um de cada vez, evita confusão)
+    $$(".diagram.editing").forEach((other) => { if (other !== art) exitInlineEdit(other); });
+    const state = parseMermaid(d.mermaid || "");
+    if (!state.nodes.length) { toast("Esse desenho é complexo demais pra editar aqui — use o editor completo.", true); return; }
+    const st = { d, state, saveTimer: null, dirty: false, history: [cloneState(state)], hoverNodeId: null, hoverEdgeId: null };
+    inlineState.set(d.id, st);
+    art.classList.add("editing");
+    const tb = art.querySelector(".inline-toolbar");
+    if (tb) { tb.hidden = false; wireInlineToolbar(art, st); }
+    const toggle = art.querySelector(".diagram-inline-toggle");
+    if (toggle) { toggle.setAttribute("aria-pressed", "true"); toggle.classList.add("active"); const lbl = toggle.querySelector(".inline-toggle-label"); if (lbl) lbl.textContent = "Editando"; }
+    syncInlineDirButtons(art, st);
+    renderInlineCanvas(art, st);
+  }
+
+  function exitInlineEdit(art) {
+    const id = Number(art.dataset.id);
+    const st = inlineState.get(id);
+    if (st && st.saveTimer) { clearTimeout(st.saveTimer); saveInline(art, st, true); }
+    inlineState.delete(id);
+    art.classList.remove("editing");
+    const tb = art.querySelector(".inline-toolbar");
+    if (tb) tb.hidden = true;
+    const toggle = art.querySelector(".diagram-inline-toggle");
+    if (toggle) { toggle.setAttribute("aria-pressed", "false"); toggle.classList.remove("active"); const lbl = toggle.querySelector(".inline-toggle-label"); if (lbl) lbl.textContent = "Editar aqui"; }
+    // volta ao desenho estático limpo
+    const canvas = art.querySelector(".diagram-canvas");
+    const d = DIAGRAMS.find((x) => x.id === id);
+    if (canvas && d) { canvas.dataset.rendered = "1"; renderMermaidInto(canvas, d.mermaid); }
+  }
+
+  function wireInlineToolbar(art, st) {
+    const tb = art.querySelector(".inline-toolbar");
+    if (!tb || tb.dataset.wired) return;
+    tb.dataset.wired = "1";
+    tb.addEventListener("click", (e) => e.stopPropagation());
+    $$(".inline-dir-btn", tb).forEach((b) => b.addEventListener("click", () => {
+      st.state.dir = b.dataset.dir;
+      syncInlineDirButtons(art, st);
+      commitInline(art, st);
+    }));
+    const addBtn = tb.querySelector(".inline-add-node");
+    if (addBtn) addBtn.addEventListener("click", () => {
+      const id = newNodeId(st.state);
+      st.state.nodes.push({ id, label: "Nova etapa", shape: "step" });
+      commitInline(art, st, id);
+    });
+    const addNotif = tb.querySelector(".inline-add-notif");
+    if (addNotif) addNotif.addEventListener("click", () => {
+      const id = newNodeId(st.state);
+      // já entra endereçada ao técnico; o 👤 troca o destinatário
+      st.state.nodes.push({ id, label: "", shape: "notif", to: "Técnico" });
+      commitInline(art, st);
+    });
+    const undoBtn = tb.querySelector(".inline-undo");
+    if (undoBtn) undoBtn.addEventListener("click", () => undoInline(art, st));
+    const doneBtn = tb.querySelector(".inline-done");
+    if (doneBtn) doneBtn.addEventListener("click", () => exitInlineEdit(art));
+  }
+
+  // ---- histórico (desfazer) ----
+  const cloneState = (s) => JSON.parse(JSON.stringify(s));
+  function pushHistory(st) {
+    if (st._restoring) return;
+    st.history = st.history || [];
+    st.history.push(cloneState(st.state));
+    if (st.history.length > 60) st.history.shift();
+  }
+  function updateUndoBtn(art, st) {
+    const b = art.querySelector(".inline-undo");
+    if (b) b.disabled = !st.history || st.history.length < 2;
+  }
+  function undoInline(art, st) {
+    if (!st.history || st.history.length < 2) { toast("Nada pra desfazer"); return; }
+    st.history.pop();                                   // descarta o estado atual
+    st._restoring = true;
+    st.state = cloneState(st.history[st.history.length - 1]);
+    st._restoring = false;
+    st.dirty = true;
+    renderInlineCanvas(art, st);
+    scheduleInlineSave(art, st);
+    updateUndoBtn(art, st);
+    toast("Desfeito");
+  }
+
+  function syncInlineDirButtons(art, st) {
+    $$(".inline-dir-btn", art).forEach((b) => b.classList.toggle("active", b.dataset.dir === st.state.dir));
+  }
+
+  // regenera código, redesenha e agenda salvamento. focusNodeId: renomeia essa etapa após desenhar.
+  function commitInline(art, st, focusNodeId) {
+    st.dirty = true;
+    pushHistory(st);
+    updateUndoBtn(art, st);
+    renderInlineCanvas(art, st, focusNodeId);
+    scheduleInlineSave(art, st);
+  }
+
+  function scheduleInlineSave(art, st) {
+    setSaveState(art, "saving");
+    if (st.saveTimer) clearTimeout(st.saveTimer);
+    st.saveTimer = setTimeout(() => saveInline(art, st), 650);
+  }
+
+  async function saveInline(art, st, silent) {
+    st.saveTimer = null;
+    const mermaid = generateMermaid(st.state).trim();
+    if (!mermaid) return;
+    try {
+      const updated = await api(`/api/diagramas/${st.d.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mermaid, atualizado_por: testerName() || undefined }),
+      });
+      st.d.mermaid = updated.mermaid;
+      st.d.updated_at = updated.updated_at;
+      st.d.atualizado_por = updated.atualizado_por;
+      st.d.seeded = updated.seeded;
+      const idx = DIAGRAMS.findIndex((x) => x.id === updated.id);
+      if (idx >= 0) DIAGRAMS[idx] = Object.assign(DIAGRAMS[idx], { mermaid: updated.mermaid, updated_at: updated.updated_at, atualizado_por: updated.atualizado_por, seeded: updated.seeded });
+      const foot = art.querySelector(".diagram-meta-foot");
+      if (foot) foot.innerHTML = `${updated.atualizado_por ? `Atualizado por <span class="who">${esc(updated.atualizado_por)}</span> · ` : ""}${fmtWhen(updated.updated_at)}`;
+      st.dirty = false;
+      if (!silent) setSaveState(art, "saved");
+    } catch (e) {
+      setSaveState(art, "error");
+      if (!silent) toast("Erro ao salvar: " + e.message, true);
+    }
+  }
+
+  function setSaveState(art, s) {
+    const el = art.querySelector(".inline-save-state");
+    if (!el) return;
+    el.className = "inline-save-state " + s;
+    el.textContent = s === "saving" ? "salvando…" : s === "saved" ? "salvo ✓" : s === "error" ? "erro ao salvar" : "";
+    if (s === "saved") { clearTimeout(setSaveState._t); setSaveState._t = setTimeout(() => { if (el.textContent === "salvo ✓") el.textContent = ""; }, 1600); }
+  }
+
+  // desenha o SVG editável e (re)constrói a camada de affordances por cima
+  function renderInlineCanvas(art, st, focusNodeId) {
+    const canvas = art.querySelector(".diagram-canvas");
+    if (!canvas) return;
+    canvas.dataset.rendered = "1";
+    const code = generateMermaid(st.state);
+    renderMermaidInto(canvas, code).then(() => {
+      buildInlineAffordances(art, st);
+      if (focusNodeId) startRename(art, st, focusNodeId);
+    });
+  }
+
+  function inlineNodeId(g) {
+    const m = /-flowchart-([A-Za-z0-9_]+)-\d+$/.exec(g.id || "");
+    return m ? m[1] : null;
+  }
+
+  function buildInlineAffordances(art, st) {
+    const canvas = art.querySelector(".diagram-canvas");
+    const svg = canvas.querySelector("svg");
+    if (!svg) return;
+    canvas.classList.add("inline-canvas");
+    // camada de overlay cobrindo exatamente o SVG
+    let fx = canvas.querySelector(".inline-fx");
+    if (fx) fx.remove();
+    fx = document.createElement("div");
+    fx.className = "inline-fx";
+    canvas.appendChild(fx);
+    fx.style.left = svg.offsetLeft + "px";
+    fx.style.top = svg.offsetTop + "px";
+    fx.style.width = svg.offsetWidth + "px";
+    fx.style.height = svg.offsetHeight + "px";
+    const fxRect = fx.getBoundingClientRect();
+
+    // ---- nós: renomear no clique + botões +, forma e excluir ----
+    $$("g.node", svg).forEach((g) => {
+      const nid = inlineNodeId(g);
+      const node = st.state.nodes.find((n) => n.id === nid);
+      if (!node) return;
+      g.classList.add("inline-node");
+      g.addEventListener("click", (ev) => {
+        if (ev.target.closest && ev.target.closest(".inline-node-fx")) return;
+        ev.stopPropagation();
+        startRename(art, st, nid);
+      });
+      const r = g.getBoundingClientRect();
+      const left = r.left - fxRect.left, top = r.top - fxRect.top;
+      const grp = document.createElement("div");
+      grp.className = "inline-node-fx";
+      grp.style.left = left + "px";
+      grp.style.top = top + "px";
+      grp.style.width = r.width + "px";
+      grp.style.height = r.height + "px";
+      grp.innerHTML =
+        `<button type="button" class="ifx ifx-add" title="Clique: nova etapa · Arraste até uma caixa pra ligar">+</button>
+         <button type="button" class="ifx ifx-shape" title="Alternar tipo: etapa / decisão / notificação"></button>
+         <button type="button" class="ifx ifx-del" title="Excluir etapa">×</button>`;
+      const SHAPE_GLYPH = { step: "▭", decision: "◇", notif: "🔔" };
+      const shapeBtn = grp.querySelector(".ifx-shape");
+      shapeBtn.textContent = SHAPE_GLYPH[node.shape] || "▭";
+      // destinatário: só faz sentido em notificação
+      if (node.shape === "notif") {
+        const recBtn = document.createElement("button");
+        recBtn.type = "button";
+        recBtn.className = "ifx ifx-recipient";
+        recBtn.textContent = "👤";
+        recBtn.title = (node.to ? NOTIF_PHRASE[node.to] : "Sem destinatário") + " — clique pra trocar";
+        grp.appendChild(recBtn);
+        recBtn.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          const order = ["", ...NOTIF_RECIPIENTS];
+          node.to = order[(order.indexOf(node.to || "") + 1) % order.length];
+          commitInline(art, st);
+        });
+      }
+      fx.appendChild(grp);
+      // manter os botões visíveis enquanto o mouse está no nó ou no grupo;
+      // e registrar qual caixa está sob o cursor (pra tecla Delete)
+      const show = () => { grp.classList.add("hot"); st.hoverNodeId = nid; };
+      const hide = () => { grp.classList.remove("hot"); if (st.hoverNodeId === nid) st.hoverNodeId = null; };
+      g.addEventListener("mouseenter", show); g.addEventListener("mouseleave", hide);
+      grp.addEventListener("mouseenter", show); grp.addEventListener("mouseleave", hide);
+      // + : clique cria uma etapa ligada; arrastar até outra caixa liga nela
+      grp.querySelector(".ifx-add").addEventListener("mousedown", (ev) => {
+        if (ev.button !== 0) return;
+        ev.preventDefault(); ev.stopPropagation();
+        startConnectDrag(art, st, nid, ev);
+      });
+      shapeBtn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const order = ["step", "decision", "notif"];
+        node.shape = order[(order.indexOf(node.shape) + 1) % order.length];
+        commitInline(art, st);
+      });
+      grp.querySelector(".ifx-del").addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        st.state.nodes = st.state.nodes.filter((n) => n.id !== nid);
+        st.state.edges = st.state.edges.filter((e) => e.from !== nid && e.to !== nid);
+        commitInline(art, st);
+      });
+    });
+
+    // ---- arestas: clicar tracejа/solta; botão de inverter no meio ----
+    const edgePaths = $$(".edgePaths path.flowchart-link, .edgePaths path", svg);
+    const usedEdge = new Set();
+    edgePaths.forEach((path) => {
+      const edge = edgeForPath(path, st.state, usedEdge);
+      if (!edge) return;
+      path.classList.add("inline-edge");
+      path.style.cursor = "pointer";
+      // caminho invisível "gordo" pra facilitar o clique na seta fina
+      const hit = path.cloneNode();
+      hit.classList.add("inline-edge-hit");
+      hit.removeAttribute("id");
+      hit.style.stroke = "transparent";
+      hit.style.strokeWidth = "12px";
+      hit.style.fill = "none";
+      hit.style.pointerEvents = "stroke";
+      hit.style.cursor = "pointer";
+      path.parentNode.insertBefore(hit, path.nextSibling);
+      // controles da seta no meio dela (rótulo / inverter / excluir) — só aparecem ao passar o mouse nessa aresta
+      try {
+        const p = path.getPointAtLength(path.getTotalLength() / 2);
+        const sp = svg.createSVGPoint(); sp.x = p.x; sp.y = p.y;
+        const scr = sp.matrixTransform(path.getScreenCTM());
+        const lx = scr.x - fxRect.left, ly = scr.y - fxRect.top;
+        // 1 clique traceja/solta na hora; o rótulo fica no botão "Aa"
+        const onClick = (ev) => { ev.stopPropagation(); edge.dotted = !edge.dotted; commitInline(art, st); };
+        [hit, path].forEach((el) => el.addEventListener("click", onClick));
+        const ctrls = document.createElement("div");
+        ctrls.className = "inline-edge-fx";
+        ctrls.style.left = lx + "px";
+        ctrls.style.top = ly + "px";
+        ctrls.innerHTML =
+          `<button type="button" class="ifx ifx-edge-label" title="Rótulo da seta (ex.: Sim / Não)">Aa</button>
+           <button type="button" class="ifx ifx-reverse" title="Inverter o sentido da seta">⇄</button>
+           <button type="button" class="ifx ifx-edge-del" title="Excluir esta ligação">×</button>`;
+        fx.appendChild(ctrls);
+        ctrls.querySelector(".ifx-edge-label").addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          startEdgeLabelEdit(art, st, edge.id, lx, ly);
+        });
+        ctrls.querySelector(".ifx-reverse").addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          const t = edge.from; edge.from = edge.to; edge.to = t;
+          commitInline(art, st);
+        });
+        ctrls.querySelector(".ifx-edge-del").addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          st.state.edges = st.state.edges.filter((x) => x.id !== edge.id);
+          commitInline(art, st);
+        });
+        let hideT = null;
+        const showRev = () => { clearTimeout(hideT); ctrls.classList.add("hot"); st.hoverEdgeId = edge.id; };
+        const hideRev = () => { hideT = setTimeout(() => ctrls.classList.remove("hot"), 120); if (st.hoverEdgeId === edge.id) st.hoverEdgeId = null; };
+        [hit, path, ctrls].forEach((el) => { el.addEventListener("mouseenter", showRev); el.addEventListener("mouseleave", hideRev); });
+      } catch (e) { /* getPointAtLength pode falhar em curvas raras — segue sem os controles */ }
+    });
+  }
+
+  // arrastar do "+" de uma caixa até outra pra criar a ligação.
+  // sem arrastar (só clique) mantém o atalho de criar uma etapa nova já ligada.
+  function startConnectDrag(art, st, sourceId, downEv) {
+    const canvas = art.querySelector(".diagram-canvas");
+    const fx = canvas && canvas.querySelector(".inline-fx");
+    const svg = canvas && canvas.querySelector("svg");
+    if (!fx || !svg) return;
+    const fxRect = fx.getBoundingClientRect();
+    const toLocal = (cx, cy) => [cx - fxRect.left, cy - fxRect.top];
+    // posições das caixas (fixas durante o arrasto)
+    const nodes = $$("g.node", svg).map((g) => {
+      const id = inlineNodeId(g); if (!id) return null;
+      const r = g.getBoundingClientRect();
+      return { id, g, r };
+    }).filter(Boolean);
+    const src = nodes.find((n) => n.id === sourceId);
+    if (!src) return;
+    const nodeAt = (cx, cy) => nodes.find((n) => cx >= n.r.left && cx <= n.r.right && cy >= n.r.top && cy <= n.r.bottom);
+
+    // linha-fantasma que segue o cursor. Um <div> girado (não um <svg> aninhado,
+    // que a regra global ".diagram-canvas svg { height:auto }" colapsava pra 0×0).
+    const [sx, sy] = toLocal(src.r.left + src.r.width / 2, src.r.top + src.r.height / 2);
+    const line = document.createElement("div");
+    line.className = "inline-drag-line";
+    line.style.left = sx + "px";
+    line.style.top = sy + "px";
+    fx.appendChild(line);
+    const drawLine = (lx, ly) => {
+      const dx = lx - sx, dy = ly - sy;
+      line.style.width = Math.hypot(dx, dy) + "px";
+      line.style.transform = `rotate(${Math.atan2(dy, dx)}rad)`;
+    };
+    document.body.classList.add("inline-connecting");
+
+    let dragging = false, hovered = null;
+    const move = (e) => {
+      const dx = e.clientX - downEv.clientX, dy = e.clientY - downEv.clientY;
+      if (!dragging && Math.hypot(dx, dy) < 5) return;
+      dragging = true;
+      const [lx, ly] = toLocal(e.clientX, e.clientY);
+      drawLine(lx, ly);
+      const tgt = nodeAt(e.clientX, e.clientY);
+      if (hovered && (!tgt || tgt.g !== hovered)) hovered.classList.remove("inline-drop-target");
+      if (tgt && tgt.id !== sourceId) { tgt.g.classList.add("inline-drop-target"); hovered = tgt.g; }
+      else hovered = tgt && tgt.id === sourceId ? hovered : null;
+    };
+    const up = (e) => {
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      document.body.classList.remove("inline-connecting");
+      if (hovered) hovered.classList.remove("inline-drop-target");
+      line.remove();
+      if (!dragging) {
+        // clique puro: cria etapa nova já ligada (atalho antigo)
+        const id = newNodeId(st.state);
+        st.state.nodes.push({ id, label: "Nova etapa", shape: "step" });
+        st.state.edges.push({ id: newEdgeId(st.state), from: sourceId, to: id, label: "", dotted: false });
+        commitInline(art, st, id);
+        return;
+      }
+      const tgt = nodeAt(e.clientX, e.clientY);
+      if (!tgt || tgt.id === sourceId) return;   // soltou no vazio (ou nela mesma): cancela
+      const dup = st.state.edges.some((ed) => ed.from === sourceId && ed.to === tgt.id);
+      if (dup) { toast("Essas caixas já estão ligadas."); return; }
+      // ligação que envolve notificação nasce tracejada (aviso lateral, não fluxo principal)
+      const isNotif = (id) => { const n = st.state.nodes.find((x) => x.id === id); return n && n.shape === "notif"; };
+      const dotted = isNotif(sourceId) || isNotif(tgt.id);
+      st.state.edges.push({ id: newEdgeId(st.state), from: sourceId, to: tgt.id, label: "", dotted });
+      commitInline(art, st);
+      toast(dotted ? "Notificação ligada ao lado" : "Ligação criada");
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  }
+
+  // casa um <path> de aresta renderizado com a aresta do estado.
+  // o Mermaid expõe o par origem/destino em data-id (ex.: "L_B_B_0"); o id do
+  // elemento vem prefixado ("mmd-2-L_B_B_0"), então preferimos o data-id.
+  function edgeForPath(path, state, used) {
+    const raw = path.getAttribute("data-id") || path.id || "";
+    const m = /L[_-](.+?)[_-](.+?)[_-]\d+$/.exec(raw);
+    let from = null, to = null;
+    if (m) { from = m[1]; to = m[2]; }
+    let cands = state.edges;
+    if (from && to) cands = state.edges.filter((e) => e.from === from && e.to === to);
+    const pick = cands.find((e) => !used.has(e.id)) || cands[0];
+    if (pick) used.add(pick.id);
+    return pick || null;
+  }
+
+  // renomear uma etapa direto sobre a caixa (input flutuante, sem janelinha)
+  function startRename(art, st, nid) {
+    const canvas = art.querySelector(".diagram-canvas");
+    const fx = canvas.querySelector(".inline-fx");
+    const svg = canvas.querySelector("svg");
+    if (!fx || !svg) return;
+    const g = $$("g.node", svg).find((x) => inlineNodeId(x) === nid);
+    const node = st.state.nodes.find((n) => n.id === nid);
+    if (!g || !node) return;
+    fx.querySelector(".inline-rename")?.remove();
+    const fxRect = fx.getBoundingClientRect();
+    const r = g.getBoundingClientRect();
+    const inp = document.createElement("input");
+    inp.type = "text";
+    inp.className = "inline-rename";
+    inp.value = node.label || "";
+    inp.style.left = (r.left - fxRect.left - 6) + "px";
+    inp.style.top = (r.top - fxRect.top + r.height / 2 - 15) + "px";
+    inp.style.width = Math.max(120, r.width + 12) + "px";
+    fx.appendChild(inp);
+    setTimeout(() => { inp.focus(); inp.select(); }, 10);
+    let done = false;
+    const commit = (save) => {
+      if (done) return; done = true;
+      if (save) { node.label = inp.value; commitInline(art, st); }
+      else { inp.remove(); }
+    };
+    inp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); commit(true); }
+      else if (ev.key === "Escape") { ev.preventDefault(); commit(false); }
+      ev.stopPropagation();
+    });
+    inp.addEventListener("blur", () => commit(true));
+    inp.addEventListener("click", (ev) => ev.stopPropagation());
+  }
+
+  // rotular uma seta direto no meio dela (ex.: Sim / Não numa decisão)
+  function startEdgeLabelEdit(art, st, edgeId, lx, ly) {
+    const canvas = art.querySelector(".diagram-canvas");
+    const fx = canvas && canvas.querySelector(".inline-fx");
+    const edge = st.state.edges.find((e) => e.id === edgeId);
+    if (!fx || !edge) return;
+    fx.querySelector(".inline-rename")?.remove();
+    const inp = document.createElement("input");
+    inp.type = "text";
+    inp.className = "inline-rename inline-edge-input";
+    inp.value = edge.label || "";
+    inp.placeholder = "rótulo (ex.: Sim)";
+    inp.style.left = (lx - 55) + "px";
+    inp.style.top = (ly - 14) + "px";
+    inp.style.width = "110px";
+    fx.appendChild(inp);
+    setTimeout(() => { inp.focus(); inp.select(); }, 10);
+    let done = false;
+    const commit = (save) => {
+      if (done) return; done = true;
+      if (save) { edge.label = inp.value; commitInline(art, st); }
+      else { inp.remove(); }
+    };
+    inp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); commit(true); }
+      else if (ev.key === "Escape") { ev.preventDefault(); commit(false); }
+      ev.stopPropagation();
+    });
+    inp.addEventListener("blur", () => commit(true));
+    inp.addEventListener("click", (ev) => ev.stopPropagation());
+  }
+
+  // atalhos de teclado enquanto um card está em edição inline
+  document.addEventListener("keydown", (e) => {
+    const art = $(".diagram.editing");
+    if (!art) return;
+    const st = inlineState.get(Number(art.dataset.id));
+    if (!st) return;
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || "");
+    // Ctrl/Cmd+Z desfaz
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === "z" || e.key === "Z")) {
+      if (typing) return;   // deixa o desfazer nativo do campo de texto
+      e.preventDefault(); undoInline(art, st); return;
+    }
+    // Delete/Backspace apaga a caixa (ou a seta) sob o mouse
+    if ((e.key === "Delete" || e.key === "Backspace") && !typing) {
+      if (st.hoverNodeId) {
+        e.preventDefault();
+        const nid = st.hoverNodeId; st.hoverNodeId = null;
+        st.state.nodes = st.state.nodes.filter((n) => n.id !== nid);
+        st.state.edges = st.state.edges.filter((ed) => ed.from !== nid && ed.to !== nid);
+        commitInline(art, st);
+      } else if (st.hoverEdgeId) {
+        e.preventDefault();
+        const eid = st.hoverEdgeId; st.hoverEdgeId = null;
+        st.state.edges = st.state.edges.filter((ed) => ed.id !== eid);
+        commitInline(art, st);
+      }
+    }
+  });
+
+  $$(".view-tab").forEach((t) => t.addEventListener("click", () => switchView(t.dataset.view)));
+  $("#btn-add-diagram").addEventListener("click", () => openDiagramModal("create"));
+  $("#diagrams-empty-add").addEventListener("click", () => openDiagramModal("create"));
+  diagramForm.addEventListener("submit", submitDiagramForm);
+  // builder: adicionar etapa / ligação
+  $("#add-node").addEventListener("click", () => {
+    builder.nodes.push({ id: newNodeId(), label: "Nova etapa", shape: "step" });
+    renderNodes(); renderEdges(); scheduleSync();
+  });
+  $("#add-edge").addEventListener("click", () => {
+    if (!builder.nodes.length) { toast("Adicione ao menos uma etapa primeiro.", true); return; }
+    const first = builder.nodes[0].id;
+    const second = (builder.nodes[1] || builder.nodes[0]).id;
+    builder.edges.push({ id: "e" + (++builder.eSeq), from: first, to: second, label: "", dotted: false });
+    renderEdges(); scheduleSync();
+  });
+  // builder: sentido (vertical/horizontal)
+  $$('input[name="builder-dir"]', diagramForm).forEach((r) => {
+    r.addEventListener("change", (ev) => { if (ev.target.checked) { builder.dir = ev.target.value; scheduleSync(); } });
+  });
+  // modo avançado: edição manual do código volta pro builder (best-effort)
+  diagramSource.addEventListener("input", () => {
+    if (syncingCode) return;
+    manualCode = true;
+    const state = parseMermaid(diagramSource.value);
+    if (state.nodes.length) { builder = state; renderNodes(); renderEdges(); }
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => renderPreview(diagramSource.value), 300);
+  });
+  // popover de edição direto no desenho
+  $("#mm-pop-label").addEventListener("input", (ev) => {
+    const node = builder.nodes.find((n) => n.id === popNodeId);
+    if (!node) return;
+    node.label = ev.target.value;
+    const inp = document.querySelector(`#nodes-list .builder-row[data-id="${popNodeId}"] .b-label`);
+    if (inp) inp.value = ev.target.value;
+    scheduleSync();
+  });
+  $("#mm-pop-shape").addEventListener("change", (ev) => {
+    const node = builder.nodes.find((n) => n.id === popNodeId);
+    if (!node) return;
+    node.shape = ev.target.value;
+    renderNodes(); scheduleSync();
+  });
+  $("#mm-pop-add").addEventListener("click", () => {
+    if (!popNodeId) return;
+    const id = newNodeId();
+    builder.nodes.push({ id, label: "Nova etapa", shape: "step" });
+    builder.edges.push({ id: "e" + (++builder.eSeq), from: popNodeId, to: id, label: "", dotted: false });
+    renderNodes(); renderEdges();
+    pendingSelectId = id;   // abre o popover já na nova etapa
+    scheduleSync();
+  });
+  $("#mm-pop-del").addEventListener("click", () => {
+    if (!popNodeId) return;
+    const id = popNodeId;
+    builder.nodes = builder.nodes.filter((n) => n.id !== id);
+    builder.edges = builder.edges.filter((e) => e.from !== id && e.to !== id);
+    closeNodePopover();
+    renderNodes(); renderEdges(); scheduleSync();
+  });
+  $("#mm-pop-close").addEventListener("click", closeNodePopover);
+  // clicar no fundo da pré-visualização fecha o popover (clique numa caixa não borbulha)
+  $("#diagram-preview").addEventListener("click", () => closeNodePopover());
+
+  $("#diagram-close").addEventListener("click", closeDiagramModal);
+  $("#diagram-cancel").addEventListener("click", closeDiagramModal);
+  diagramModal.addEventListener("click", (e) => { if (e.target.id === "diagram-modal") closeDiagramModal(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || diagramModal.hidden) return;
+    if (!nodePop.hidden) { closeNodePopover(); return; }   // Esc fecha o popover antes do modal
+    closeDiagramModal();
+  });
+  // título/badge iniciais coerentes com o fluxo atual
+  onFlowChangedForDiagrams();
 
   // ---------------- tester name ----------------
   const testerInput = $("#input-tester");

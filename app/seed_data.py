@@ -341,6 +341,83 @@ def seed(db):
     return added, updated
 
 
+FLOW_C_IDEAL = """flowchart TD
+    A[01 · Criar OS] --> B[02 · Buscando Tecnico]
+    B --> C[03 · Tec. Aceitou]
+    C --> D[04 · Agendado]
+    D --> E[05 · Tec. em Deslocamento]
+    E --> F[06 · Aguardando Liberacao]
+    F --> G[07 · Tec. em Atendimento]
+    G --> H{Precisa de N2?}
+    H -- Sim --> I[08 · Acompanhamento N2]
+    H -- Nao --> J[09 · Aguardando RAT]
+    I --> J
+    J --> K[10 · Em Revisao]
+    K --> L{RAT aprovada?}
+    L -- Sim --> M[11 · Atividade Concluida]
+    L -- Nao --> J
+"""
+
+FLOW_C_ATUAL = """flowchart TD
+    A[01 · Criar OS] --> B[02 · Buscando Tecnico]
+    B -. as vezes precisa Reenviar busca .-> B
+    B --> C[03 · Tec. Aceitou]
+    C --> D[04 · Agendado]
+    D --> E[05 · Tec. em Deslocamento]
+    E --> F[06 · Aguardando Liberacao]
+    F --> G[07 · Tec. em Atendimento]
+    G --> G2[Operador clica Acompanhamento Concluido]
+    G2 --> J[09 · Aguardando RAT]
+    J --> K[10 · Em Revisao]
+    K --> M[11 · Atividade Concluida]
+"""
+
+# Diagramas iniciais por fluxo. O time pode editar/adicionar depois; o seed só
+# cria estes quando ainda NAO existe nenhum diagrama daquele fluxo (idempotente).
+SEED_DIAGRAMS = [
+    dict(
+        fluxo="C", kind="ideal", ordem=0,
+        titulo="Fluxo C — como deveria funcionar",
+        descricao="Caminho ideal do despacho NEXO, do Criar OS ate a Atividade "
+                  "Concluida, com os dois pontos de decisao (escalonamento N2 e "
+                  "aprovacao da RAT).",
+        mermaid=FLOW_C_IDEAL,
+    ),
+    dict(
+        fluxo="C", kind="atual", ordem=0,
+        titulo="Fluxo C — como esta funcionando hoje",
+        descricao="Comportamento observado nos testes: a busca de tecnico as vezes "
+                  "exige 'Reenviar busca' manual, e quem encerra o estagio 07 e o "
+                  "OPERADOR (clicando em 'Acompanhamento Concluido'), nao o tecnico. "
+                  "Edite este diagrama conforme forem aparecendo mais situacoes reais.",
+        mermaid=FLOW_C_ATUAL,
+    ),
+]
+
+
+def seed_diagrams(db):
+    """Cria os diagramas iniciais de fluxo na primeira subida. Idempotente:
+    para cada (fluxo, kind) do SEED_DIAGRAMS, só insere se ainda não houver
+    NENHUM diagrama daquele fluxo+kind no banco — assim nunca sobrescreve o que
+    o time editou ou os diagramas extras que criaram."""
+    from .models import FlowDiagram
+
+    added = 0
+    for d in SEED_DIAGRAMS:
+        exists = (
+            db.query(FlowDiagram)
+            .filter(FlowDiagram.fluxo == d["fluxo"], FlowDiagram.kind == d["kind"])
+            .first()
+        )
+        if exists:
+            continue
+        db.add(FlowDiagram(seeded=True, **d))
+        added += 1
+    if added:
+        db.commit()
+    return added
+
+
 def migrate_observations(db):
     """Migração única: casos antigos guardavam UMA observação sem autor no campo
     TestCase.observacao. Agora cada nota vira uma linha em Observation, com autor

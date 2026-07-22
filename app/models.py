@@ -58,6 +58,29 @@ class MeetingNote(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
 
+class FlowDiagram(Base):
+    """Diagrama Mermaid de um fluxo — descreve como um fluxo está funcionando
+    hoje (kind="atual") ou como deveria funcionar (kind="ideal"), com uma
+    descrição da situação real. Editável na tela; o seed só cria os iniciais
+    quando ainda não existe nenhum diagrama daquele fluxo/kind (não sobrescreve
+    o que o time editou)."""
+    __tablename__ = "flow_diagrams"
+
+    id = Column(Integer, primary_key=True)
+    fluxo = Column(String, nullable=False, default="C", server_default="C")  # Fluxo A / B / C
+    kind = Column(String, nullable=False, default="atual", server_default="atual")  # atual / ideal
+    titulo = Column(String, nullable=False)
+    descricao = Column(Text, nullable=True, default="")   # situação real descrita
+    mermaid = Column(Text, nullable=False)                 # código-fonte Mermaid
+    ordem = Column(Integer, nullable=True, default=0, server_default="0")
+    atualizado_por = Column(String, nullable=True)
+    # seeded=True marca um diagrama que veio do seed e ainda não foi editado —
+    # assim que o time edita, vira False e o seed nunca mais mexe nele.
+    seeded = Column(Boolean, nullable=False, default=False, server_default=expression.false())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
 class Observation(Base):
     """Uma nota do historico de observacoes de um caso — cada uma com seu proprio autor,
     diferente do campo antigo `TestCase.observacao` (unico, qualquer um sobrescrevia)."""
