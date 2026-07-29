@@ -57,6 +57,9 @@ class Situacao(Base):
     titulo = Column(String, nullable=False)
     descricao = Column(Text, nullable=False)
     origem = Column(String, nullable=True)
+    # um único chamado testado vale pra situação inteira (todos os estágios são
+    # passos do mesmo atendimento sendo percorrido, não atendimentos separados)
+    chamado = Column(String, nullable=True)
     # active=False é exclusão suave (some da tela, não ressuscita no deploy porque o
     # seed de situações só insere quando o code está totalmente ausente da tabela).
     active = Column(Boolean, nullable=False, default=True, server_default=expression.true())
@@ -85,7 +88,6 @@ class SituacaoEstagio(Base):
     resultado_esperado = Column(Text, nullable=False)
     status = Column(String, nullable=False, default="Não testado")
     testado_por = Column(String, nullable=True)
-    chamado = Column(String, nullable=True)          # chamado testado
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
     situacao = relationship("Situacao", back_populates="estagios")

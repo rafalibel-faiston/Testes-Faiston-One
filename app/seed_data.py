@@ -356,6 +356,11 @@ def migrate_schema(engine):
         if "estagio" not in note_cols:
             stmts.append("ALTER TABLE meeting_notes ADD COLUMN estagio VARCHAR")
 
+    if "situacoes" in existing_tables:
+        sit_cols = {c["name"] for c in insp.get_columns("situacoes")}
+        if "chamado" not in sit_cols:
+            stmts.append("ALTER TABLE situacoes ADD COLUMN chamado VARCHAR")
+
     if not stmts:
         return 0
     with engine.begin() as conn:

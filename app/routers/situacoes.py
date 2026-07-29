@@ -91,6 +91,11 @@ def get_situacao(code: str, db: Session = Depends(get_db)):
 @router.patch("/situacoes/{code}", response_model=schemas.SituacaoOut)
 def update_situacao(code: str, payload: schemas.SituacaoUpdate, db: Session = Depends(get_db)):
     sit = _get_situacao_or_404(db, code)
+
+    # dado de execução — do testador, não é "conteúdo" da situação (não vira user_managed)
+    if payload.chamado is not None:
+        sit.chamado = payload.chamado
+
     data = payload.model_dump(exclude_unset=True)
     changed = False
     for field in ("fluxo", "titulo", "descricao", "origem"):
@@ -159,8 +164,6 @@ def update_estagio(code: str, estagio_id: int, payload: schemas.SituacaoEstagioU
         est.status = payload.status
     if payload.testado_por is not None:
         est.testado_por = payload.testado_por
-    if payload.chamado is not None:
-        est.chamado = payload.chamado
 
     data = payload.model_dump(exclude_unset=True)
     touched_descriptive = False

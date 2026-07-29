@@ -1931,6 +1931,7 @@
   // Grupos A/B/C/D, sem misturar com eles.
   let SITUACOES = [];
   let situacoesLoaded = false;
+  const expandedSituacoes = new Set();   // codes das situações abertas (recolhidas por padrão)
   const STANDARD_STAGES = [
     "01 · Criar OS", "02 · Buscando Técnico", "03 · Téc. Aceitou", "04 · Agendado",
     "05 · Téc. em Deslocamento", "06 · Aguardando Liberação", "07 · Téc. em Atendimento",
@@ -2001,12 +2002,6 @@
           </div>
         </div>
         <div class="case-meta">Testado por <span class="who">${e.testado_por ? esc(e.testado_por) : "—"}</span><span class="when">${e.testado_por ? " · " + fmtWhen(e.updated_at) : ""}</span></div>
-        <div class="reg-row">
-          <label class="reg-field">
-            <span class="reg-k">Chamado testado</span>
-            <input class="reg-chamado" type="text" value="${esc(e.chamado || "")}" placeholder="qual chamado foi testado" autocomplete="off">
-          </label>
-        </div>
         <div class="obs-row">
           <div class="obs-list">${estagioObsList(e.observations)}</div>
           <div class="obs-add">
@@ -2034,11 +2029,16 @@
 
   function situacaoCard(sit) {
     const { total, done, pct } = situacaoProgress(sit);
+    const open = expandedSituacoes.has(sit.code);
     const stages = sit.estagios.map((e, i) => estagioCard(sit, e, i + 1)).join("");
-    return `<section class="situacao" data-code="${esc(sit.code)}">
+    return `<section class="situacao ${open ? "" : "collapsed"}" data-code="${esc(sit.code)}">
       <div class="situacao-head">
+        <button type="button" class="situacao-toggle" aria-label="Abrir/recolher" aria-expanded="${open ? "true" : "false"}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
         <span class="situacao-badge">Situação</span>
         <span class="situacao-title">${esc(sit.titulo)}</span>
+        <span class="situacao-progress-mini">${done}/${total}</span>
         <div class="case-actions">
           <button type="button" class="case-icon-btn" data-edit-situacao="${esc(sit.code)}" title="Editar situação" aria-label="Editar">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
@@ -2049,16 +2049,24 @@
         </div>
         <span class="situacao-code-mini">${esc(sit.code)}</span>
       </div>
-      <p class="situacao-desc">${esc(sit.descricao)}</p>
-      <div class="situacao-progress">
-        <div class="situacao-bar"><i style="width:${pct}%"></i></div>
-        <span class="situacao-progress-label">${done}/${total} estágios testados</span>
+      <div class="situacao-body">
+        <p class="situacao-desc">${esc(sit.descricao)}</p>
+        <div class="situacao-progress">
+          <div class="situacao-bar"><i style="width:${pct}%"></i></div>
+          <span class="situacao-progress-label">${done}/${total} estágios testados</span>
+        </div>
+        <div class="reg-row">
+          <label class="reg-field">
+            <span class="reg-k">Chamado testado</span>
+            <input class="situacao-chamado" type="text" value="${esc(sit.chamado || "")}" placeholder="qual chamado foi testado nesta situação" autocomplete="off">
+          </label>
+        </div>
+        <div class="situacao-stages">${stages}</div>
+        <button type="button" class="add-btn situacao-add-estagio" data-add-estagio="${esc(sit.code)}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Estágio
+        </button>
       </div>
-      <div class="situacao-stages">${stages}</div>
-      <button type="button" class="add-btn situacao-add-estagio" data-add-estagio="${esc(sit.code)}">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Estágio
-      </button>
     </section>`;
   }
 
@@ -2087,6 +2095,27 @@
       const addEstBtn = $(`[data-add-estagio="${cssEscape(sitCode)}"]`, card);
       if (addEstBtn) addEstBtn.addEventListener("click", () => openEstagioModal("create", sitCode));
 
+      // um único "chamado testado" vale pra situação inteira (não por estágio)
+      const chamadoInput = $(".situacao-chamado", card);
+      if (chamadoInput) chamadoInput.addEventListener("change", async () => {
+        try {
+          await api(`/api/situacoes/${encodeURIComponent(sitCode)}`, {
+            method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chamado: chamadoInput.value.trim() }),
+          });
+          await refreshSituacao(sitCode);
+          toast("Chamado salvo");
+        } catch (e) { toast("Erro ao salvar: " + e.message, true); }
+      });
+
+      // abrir/recolher pelo cabeçalho (menos os botões de ação)
+      $(".situacao-head", card).addEventListener("click", (ev) => {
+        if (ev.target.closest(".case-actions")) return;
+        const nowOpen = card.classList.toggle("collapsed") === false;
+        card.querySelector(".situacao-toggle").setAttribute("aria-expanded", nowOpen ? "true" : "false");
+        if (nowOpen) expandedSituacoes.add(sitCode); else expandedSituacoes.delete(sitCode);
+      });
+
       $$(".estagio", card).forEach((row) => attachOneEstagioHandlers(row, sitCode));
     });
   }
@@ -2098,18 +2127,6 @@
     if (editBtn) editBtn.addEventListener("click", () => openEstagioModal("edit", sitCode, estagioId));
     const delBtn = $("[data-del-estagio]", row);
     if (delBtn) delBtn.addEventListener("click", () => deleteEstagio(sitCode, estagioId));
-
-    const chamadoInput = $(".reg-chamado", row);
-    if (chamadoInput) chamadoInput.addEventListener("change", async () => {
-      try {
-        await api(`/api/situacoes/${encodeURIComponent(sitCode)}/estagios/${estagioId}`, {
-          method: "PATCH", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chamado: chamadoInput.value.trim() }),
-        });
-        await refreshSituacao(sitCode);
-        toast("Chamado salvo");
-      } catch (e) { toast("Erro ao salvar: " + e.message, true); }
-    });
 
     $$(".sbtn", row).forEach((btn) => {
       btn.addEventListener("click", async () => {

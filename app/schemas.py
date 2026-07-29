@@ -126,7 +126,6 @@ class SituacaoEstagioOut(BaseModel):
     resultado_esperado: str
     status: str
     testado_por: Optional[str] = None
-    chamado: Optional[str] = None
     updated_at: Optional[datetime] = None
     screenshots: List[SitScreenshotOut] = []
     observations: List[SitObservationOut] = []
@@ -148,7 +147,6 @@ class SituacaoEstagioUpdate(BaseModel):
     ordem: Optional[int] = None
     status: Optional[str] = None
     testado_por: Optional[str] = None
-    chamado: Optional[str] = None
 
 
 class SituacaoOut(BaseModel):
@@ -160,6 +158,7 @@ class SituacaoOut(BaseModel):
     titulo: str
     descricao: str
     origem: Optional[str] = None
+    chamado: Optional[str] = None
     user_managed: Optional[bool] = False
     updated_at: Optional[datetime] = None
     estagios: List[SituacaoEstagioOut] = []
@@ -178,6 +177,8 @@ class SituacaoUpdate(BaseModel):
     titulo: Optional[str] = None
     descricao: Optional[str] = None
     origem: Optional[str] = None
+    # dado de execução (do testador) — não é "conteúdo" da situação, não marca user_managed
+    chamado: Optional[str] = None
 
 
 class SummaryOut(BaseModel):
