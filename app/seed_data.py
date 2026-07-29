@@ -240,6 +240,65 @@ for i, d in enumerate(_DELTA_RAW, start=1):
         origem="O que evoluiu esta semana",
     ))
 
+# ---------------------------------------------------------------------------
+# Evolução da semana de 29/07: tempo de espera por aceite configurável, os dois
+# prazos distintos de "Ocorrência" (sem aceite × não confirmar presença),
+# horário de início da RAT pela liberação de acesso, e distância de trajeto
+# real no app do técnico. Cenários com pré-condição/passos próprios (mais
+# detalhados que o template genérico acima) porque cada um exige montar uma
+# situação específica no chamado de teste para reproduzir o comportamento.
+# Fonte: dashboard_flowC_1507, atualização de 29/07/2026.
+# ---------------------------------------------------------------------------
+_EVOL_2907 = [
+    dict(frente="Operador (web)", prioridade="Alta",
+         pre_condicao="Operador logado no painel web, com acesso à tela Configurações → Notificações.",
+         passos='1) Abrir Configurações → Notificações. 2) Alterar o tempo de espera por aceite do despacho para um valor dentro do intervalo permitido (ex.: 10 minutos) e salvar. 3) Disparar a busca de um chamado de teste sem que nenhum técnico aceite.',
+         resultado_esperado='O campo aceita valores entre 5 e 120 minutos (padrão 30) e salva a alteração. Passado o tempo configurado sem nenhum técnico aceitar a busca, o chamado vai automaticamente para "Ocorrência" — o disparo pode levar até 5 min a mais que o valor configurado.'),
+    dict(frente="Operador (web)", prioridade="Média",
+         pre_condicao="Operador logado no painel web, com acesso à tela Configurações → Notificações.",
+         passos='1) Em Configurações → Notificações, tentar salvar o tempo de espera por aceite com um valor abaixo de 5 minutos. 2) Tentar salvar novamente com um valor acima de 120 minutos.',
+         resultado_esperado='O sistema não aceita valores fora do intervalo de 5 a 120 minutos — bloqueia o salvamento ou ajusta ao limite mais próximo, nunca permitindo menos de 5 nem mais de 120 minutos.'),
+    dict(frente="Operador (web)", prioridade="Alta",
+         pre_condicao="Chamado de teste pronto para disparar a busca de técnico; tempo de espera por aceite configurado e conhecido (ex.: 30 min).",
+         passos='1) Disparar a busca do chamado de teste. 2) Antes do prazo se esgotar, ir em Configurações → Notificações e alterar o tempo de espera por aceite para um valor diferente (ex.: 5 min). 3) Continuar sem que nenhum técnico aceite e aguardar o desfecho.',
+         resultado_esperado='A busca já em andamento mantém o tempo original configurado no momento do disparo — não encurta nem estende para o novo valor. Apenas os próximos disparos passam a usar o novo tempo configurado.'),
+    dict(frente="Transversal", prioridade="Alta",
+         pre_condicao="Chamado de teste com técnico(s) de teste orientados a não aceitar a busca; tempo de espera por aceite configurado e conhecido.",
+         passos='1) Disparar a busca do chamado de teste. 2) Não aceitar em nenhum técnico (app nem link do WhatsApp) durante todo o tempo configurado. 3) Esgotado o prazo, conferir o chamado no painel do operador e no app do técnico.',
+         resultado_esperado='Esgotado o tempo de espera por aceite sem nenhum técnico aceitar, o chamado ("sem aceite") muda automaticamente para "Ocorrência": some da lista de disponíveis do técnico e fica bloqueado em visualização, detalhe e aceite (app e link do WhatsApp). Só volta a ficar ofertável quando o operador usa "Re-disparar busca".'),
+    dict(frente="Operador (web)", prioridade="Média",
+         pre_condicao="Operador logado no painel web, com acesso à tela Configurações → Notificações.",
+         passos='1) Abrir Configurações → Notificações. 2) Ler os textos/rótulos dos campos relacionados a ocorrência, incluindo o campo antes chamado "Prazo para ocorrência".',
+         resultado_esperado='A tela explica que um chamado pode ir para "Ocorrência" em dois momentos distintos: (a) ninguém aceita a busca dentro do tempo configurado, ou (b) o técnico aceita mas não confirma a presença antes do horário agendado. O campo antigo "Prazo para ocorrência" aparece renomeado para "Prazo final de confirmação de presença", sem confundir os dois prazos.'),
+    dict(frente="App do técnico", prioridade="Alta",
+         pre_condicao='Chamado de teste agendado e aceito por um técnico de teste; "Prazo final de confirmação de presença" configurado e conhecido.',
+         passos='1) Técnico aceita o chamado agendado, sem confirmar a presença em seguida. 2) Ignorar o lembrete/pedido de confirmação de presença até o prazo final configurado se esgotar. 3) Esgotado o prazo, conferir o chamado no painel do operador e no app do técnico.',
+         resultado_esperado='Esgotado o "Prazo final de confirmação de presença" sem o técnico confirmar, o chamado vai para "Ocorrência" por um motivo distinto do "sem aceite" (o técnico havia aceitado, mas não confirmou presença), some da agenda do técnico e segue o mesmo tratamento de ocorrência — bloqueado para aceite até a operação usar "Re-disparar busca".'),
+    dict(frente="Operador (web)", prioridade="Média",
+         pre_condicao="Chamado de teste em andamento, com acesso ao Tiflux/relatório do atendimento.",
+         passos='1) Levar um chamado de teste até o técnico registrar "Acesso Liberado". 2) Conferir no Tiflux o campo "Hora Início da Atividade" desse atendimento. 3) Comparar com o horário em que o técnico havia aceitado o chamado.',
+         resultado_esperado='O horário de início registrado corresponde ao momento em que o chamado entra em "Aguardando Liberação" (liberação de acesso, quando o atendimento realmente começa) — não ao horário em que o técnico aceitou o chamado. O horário de término permanece correto, sem alteração.'),
+    dict(frente="App do técnico", prioridade="Média",
+         pre_condicao="Técnico de teste logado no app, com um chamado de teste cujo endereço tenha distância por rota perceptivelmente maior que a distância em linha reta.",
+         passos='1) Abrir o detalhe do chamado de teste no app do técnico. 2) Conferir a distância exibida abaixo do endereço. 3) Comparar com a distância informada na mensagem do WhatsApp recebida para o mesmo chamado.',
+         resultado_esperado='A distância exibida no app é a distância de deslocamento por rota (por vias), igual à da mensagem do WhatsApp — não mais a distância em linha reta, que ficava visivelmente menor que o trajeto real (ex.: ~13 km em linha reta para um trajeto real de ~23 km por rota).'),
+]
+_evol_start = len(_DELTA_RAW) + 1
+for i, d in enumerate(_EVOL_2907, start=_evol_start):
+    _group_c.append(dict(
+        code=f"FC-DELTA-{i:02d}",
+        grupo="Grupo C",
+        estagio_num=None,
+        estagio="Transversal · Evolução da semana",
+        frente=d["frente"],
+        tipo="Validação (comprovar ao vivo)",
+        prioridade=d["prioridade"],
+        pre_condicao=d["pre_condicao"],
+        passos=d["passos"],
+        resultado_esperado=d["resultado_esperado"],
+        origem="O que evoluiu esta semana (29/07)",
+    ))
+
 _group_d = [dict(
     code="FC-TKFILHO-01",
     grupo="Grupo D",
