@@ -446,6 +446,7 @@
     loadNotes();
     loadActivities();
     if (typeof onFlowChangedForDiagrams === "function") onFlowChangedForDiagrams();
+    if (typeof onFlowChangedForSituacoes === "function") onFlowChangedForSituacoes();
   }
   $$(".flow-tab").forEach((t) => t.addEventListener("click", () => setFlow(t.dataset.flow)));
 
@@ -824,7 +825,9 @@
     });
     $("#view-testes").hidden = view !== "testes";
     $("#view-fluxos").hidden = view !== "fluxos";
+    $("#view-situacoes").hidden = view !== "situacoes";
     if (view === "fluxos") loadDiagrams();
+    if (view === "situacoes") loadSituacoes();
   }
 
   function onFlowChangedForDiagrams() {
@@ -1920,6 +1923,476 @@
   });
   // título/badge iniciais coerentes com o fluxo atual
   onFlowChangedForDiagrams();
+
+  // ---------------- situações (cenários com estágios do chamado) ----------------
+  // Cada Situação descreve um cenário completo (ex.: "chamado sem aceite") e se
+  // desdobra em vários estágios do chamado — cada estágio é um mini caso de teste
+  // (status, observações e prints próprios). Vive dentro do fluxo, ao lado dos
+  // Grupos A/B/C/D, sem misturar com eles.
+  let SITUACOES = [];
+  let situacoesLoaded = false;
+  const STANDARD_STAGES = [
+    "01 · Criar OS", "02 · Buscando Técnico", "03 · Téc. Aceitou", "04 · Agendado",
+    "05 · Téc. em Deslocamento", "06 · Aguardando Liberação", "07 · Téc. em Atendimento",
+    "08 · Acompanhamento N2", "09 · Aguardando RAT", "10 · Em Revisão",
+    "11 · Atividade Concluída", "12 · Notificações (transversal)",
+  ];
+
+  function situacaoFlow(s) { return s.fluxo || "C"; }
+  function findSituacao(code) { return SITUACOES.find((s) => s.code === code); }
+  function findEstagio(sitCode, estagioId) {
+    const s = findSituacao(sitCode);
+    return s ? s.estagios.find((e) => e.id === estagioId) : null;
+  }
+
+  async function loadSituacoes() {
+    if (!situacoesLoaded) $("#situacoes-loading").hidden = false;
+    try {
+      SITUACOES = await api("/api/situacoes");
+      situacoesLoaded = true;
+      $("#situacoes-loading").hidden = true;
+      renderSituacoes();
+    } catch (e) {
+      $("#situacoes-loading").textContent = "Erro ao carregar situações: " + e.message;
+    }
+  }
+
+  function estagioShotThumb(shot, sitCode, estagioId) {
+    return `<div class="shot-thumb" data-shot="${shot.id}">
+      <img src="/api/situacao-screenshots/${shot.id}" alt="${esc(shot.filename)}" loading="lazy">
+      <button class="del" data-del-sit-shot="${shot.id}" data-sit="${esc(sitCode)}" data-estagio="${estagioId}" title="Remover print">✕</button>
+    </div>`;
+  }
+
+  function estagioObsList(observations) {
+    if (!observations || !observations.length) {
+      return `<div class="obs-empty">Nenhuma observação ainda.</div>`;
+    }
+    return observations.map((o) => `<div class="obs-item">
+        <div class="obs-item-head"><span class="obs-author">${esc(o.autor || "Anônimo")}</span><span class="obs-when">${fmtWhen(o.created_at)}</span></div>
+        <div class="obs-text">${esc(o.texto)}</div>
+      </div>`).join("");
+  }
+
+  function estagioCard(sit, e, idx) {
+    const stCode = STATUS_CODE[e.status] || "nt";
+    const frontCode = FRONT_CODE[e.frente] || "trv";
+    const shots = (e.screenshots || []).map((s) => estagioShotThumb(s, sit.code, e.id)).join("");
+    return `<article class="estagio st-${stCode}" data-sit="${esc(sit.code)}" data-estagio-id="${e.id}">
+      <div class="estagio-head">
+        <span class="estagio-num">Estágio ${idx}</span>
+        <span class="tag front-${frontCode}">${esc(e.frente)}</span>
+        <span class="estagio-nome">${esc(e.nome)}</span>
+        <div class="estagio-actions">
+          <button type="button" class="case-icon-btn" data-edit-estagio title="Editar estágio" aria-label="Editar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
+          <button type="button" class="case-icon-btn danger" data-del-estagio title="Excluir estágio" aria-label="Excluir">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        </div>
+      </div>
+      ${e.passos ? `<div class="blk wide"><div class="k">Passos</div><div class="v">${esc(e.passos)}</div></div>` : ""}
+      <div class="blk wide result"><div class="k">Resultado esperado</div><div class="v">${esc(e.resultado_esperado)}</div></div>
+      <div class="estagio-foot">
+        <div class="status-row">
+          <div class="status-btns">
+            ${STATUSES.map((s) => `<button class="sbtn ${s === e.status ? "active" : ""}" data-s="${s}">${s}</button>`).join("")}
+          </div>
+        </div>
+        <div class="case-meta">Testado por <span class="who">${e.testado_por ? esc(e.testado_por) : "—"}</span><span class="when">${e.testado_por ? " · " + fmtWhen(e.updated_at) : ""}</span></div>
+        <div class="reg-row">
+          <label class="reg-field">
+            <span class="reg-k">Chamado testado</span>
+            <input class="reg-chamado" type="text" value="${esc(e.chamado || "")}" placeholder="qual chamado foi testado" autocomplete="off">
+          </label>
+        </div>
+        <div class="obs-row">
+          <div class="obs-list">${estagioObsList(e.observations)}</div>
+          <div class="obs-add">
+            <textarea class="obs-input" rows="1" placeholder="Adicionar observação..."></textarea>
+            <button type="button" class="obs-add-btn">Adicionar</button>
+          </div>
+        </div>
+        <div class="shots-row">
+          <div class="shots-grid">${shots}</div>
+          <label class="upload-zone" title="Anexar print">
+            +
+            <input type="file" accept="image/*" class="shot-input">
+          </label>
+        </div>
+      </div>
+    </article>`;
+  }
+
+  function situacaoProgress(sit) {
+    const total = sit.estagios.length;
+    const done = sit.estagios.filter((e) => e.status !== "Não testado").length;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    return { total, done, pct };
+  }
+
+  function situacaoCard(sit) {
+    const { total, done, pct } = situacaoProgress(sit);
+    const stages = sit.estagios.map((e, i) => estagioCard(sit, e, i + 1)).join("");
+    return `<section class="situacao" data-code="${esc(sit.code)}">
+      <div class="situacao-head">
+        <span class="situacao-badge">Situação</span>
+        <span class="situacao-title">${esc(sit.titulo)}</span>
+        <div class="case-actions">
+          <button type="button" class="case-icon-btn" data-edit-situacao="${esc(sit.code)}" title="Editar situação" aria-label="Editar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
+          <button type="button" class="case-icon-btn danger" data-del-situacao="${esc(sit.code)}" title="Excluir situação" aria-label="Excluir">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        </div>
+        <span class="situacao-code-mini">${esc(sit.code)}</span>
+      </div>
+      <p class="situacao-desc">${esc(sit.descricao)}</p>
+      <div class="situacao-progress">
+        <div class="situacao-bar"><i style="width:${pct}%"></i></div>
+        <span class="situacao-progress-label">${done}/${total} estágios testados</span>
+      </div>
+      <div class="situacao-stages">${stages}</div>
+      <button type="button" class="add-btn situacao-add-estagio" data-add-estagio="${esc(sit.code)}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Estágio
+      </button>
+    </section>`;
+  }
+
+  function renderSituacoes() {
+    const flowSits = SITUACOES.filter((s) => situacaoFlow(s) === currentFlow);
+    const emptyEl = $("#situacoes-empty");
+    if (!flowSits.length) {
+      $("#situacoes").innerHTML = "";
+      $("#situacoes-empty-badge").textContent = "Fluxo " + currentFlow;
+      emptyEl.hidden = false;
+      return;
+    }
+    emptyEl.hidden = true;
+    $("#situacoes").innerHTML = flowSits.map(situacaoCard).join("");
+    attachSituacaoHandlers();
+  }
+
+  function attachSituacaoHandlers() {
+    $$(".situacao").forEach((card) => {
+      const sitCode = card.dataset.code;
+
+      const editBtn = $(`[data-edit-situacao="${cssEscape(sitCode)}"]`, card);
+      if (editBtn) editBtn.addEventListener("click", () => openSituacaoModal("edit", sitCode));
+      const delBtn = $(`[data-del-situacao="${cssEscape(sitCode)}"]`, card);
+      if (delBtn) delBtn.addEventListener("click", () => deleteSituacao(sitCode));
+      const addEstBtn = $(`[data-add-estagio="${cssEscape(sitCode)}"]`, card);
+      if (addEstBtn) addEstBtn.addEventListener("click", () => openEstagioModal("create", sitCode));
+
+      $$(".estagio", card).forEach((row) => attachOneEstagioHandlers(row, sitCode));
+    });
+  }
+
+  function attachOneEstagioHandlers(row, sitCode) {
+    const estagioId = parseInt(row.dataset.estagioId, 10);
+
+    const editBtn = $("[data-edit-estagio]", row);
+    if (editBtn) editBtn.addEventListener("click", () => openEstagioModal("edit", sitCode, estagioId));
+    const delBtn = $("[data-del-estagio]", row);
+    if (delBtn) delBtn.addEventListener("click", () => deleteEstagio(sitCode, estagioId));
+
+    const chamadoInput = $(".reg-chamado", row);
+    if (chamadoInput) chamadoInput.addEventListener("change", async () => {
+      try {
+        await api(`/api/situacoes/${encodeURIComponent(sitCode)}/estagios/${estagioId}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chamado: chamadoInput.value.trim() }),
+        });
+        await refreshSituacao(sitCode);
+        toast("Chamado salvo");
+      } catch (e) { toast("Erro ao salvar: " + e.message, true); }
+    });
+
+    $$(".sbtn", row).forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const s = btn.dataset.s;
+        try {
+          await api(`/api/situacoes/${encodeURIComponent(sitCode)}/estagios/${estagioId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: s, testado_por: testerName() || undefined }),
+          });
+          await refreshSituacao(sitCode);
+          toast(`Estágio → ${s}`);
+        } catch (e) { toast("Erro ao salvar: " + e.message, true); }
+      });
+    });
+
+    const obsInput = $(".obs-input", row);
+    const obsBtn = $(".obs-add-btn", row);
+    const submitObs = async () => {
+      const texto = obsInput.value.trim();
+      if (!texto) return;
+      obsBtn.disabled = true;
+      try {
+        await api(`/api/situacoes/${encodeURIComponent(sitCode)}/estagios/${estagioId}/observacoes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ texto, autor: testerName() || undefined }),
+        });
+        await refreshSituacao(sitCode);
+        toast("Observação adicionada");
+      } catch (e) {
+        toast("Erro ao salvar observação: " + e.message, true);
+      } finally {
+        obsBtn.disabled = false;
+      }
+    };
+    obsBtn.addEventListener("click", submitObs);
+    obsInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitObs(); }
+    });
+
+    const fileInput = $(".shot-input", row);
+    const zone = $(".upload-zone", row);
+    fileInput.addEventListener("change", () => { if (fileInput.files[0]) uploadEstagioShot(sitCode, estagioId, fileInput.files[0], zone); });
+    ["dragover", "dragenter"].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add("dragover"); }));
+    ["dragleave", "drop"].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.remove("dragover"); }));
+    zone.addEventListener("drop", (e) => {
+      const f = e.dataTransfer.files[0];
+      if (f) uploadEstagioShot(sitCode, estagioId, f, zone);
+    });
+
+    $$(".shots-grid .shot-thumb", row).forEach((thumb) => {
+      const img = $("img", thumb);
+      if (!img) return;
+      img.addEventListener("click", () => {
+        const shotId = parseInt(thumb.dataset.shot, 10);
+        const e = findEstagio(sitCode, estagioId);
+        const slides = (e.screenshots || []).map((s) => ({ id: s.id, filename: s.filename, estagio: e.nome }));
+        const idx = slides.findIndex((s) => s.id === shotId);
+        openSituacaoCarousel(slides, idx < 0 ? 0 : idx, `Evidências — ${e.nome}`);
+      });
+    });
+    $$(".del[data-del-sit-shot]", row).forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!confirm("Remover este print?")) return;
+        try {
+          await api(`/api/situacao-screenshots/${btn.dataset.delSitShot}`, { method: "DELETE" });
+          await refreshSituacao(sitCode);
+          toast("Print removido");
+        } catch (err) { toast("Erro ao remover: " + err.message, true); }
+      });
+    });
+  }
+
+  // Prints não têm um carrossel de apresentação próprio como os casos de teste
+  // (evidências por situação são poucas) — abre no lightbox simples em sequência.
+  function openSituacaoCarousel(slides, startIndex, title) {
+    if (!slides.length) return;
+    openLightbox(`/api/situacao-screenshots/${slides[Math.max(0, startIndex)].id}`);
+  }
+
+  async function refreshSituacao(sitCode) {
+    const updated = await api(`/api/situacoes/${encodeURIComponent(sitCode)}`);
+    const i = SITUACOES.findIndex((s) => s.code === sitCode);
+    if (i >= 0) SITUACOES[i] = updated; else SITUACOES.push(updated);
+    renderSituacoes();
+  }
+
+  async function uploadEstagioShot(sitCode, estagioId, file, zone) {
+    zone.textContent = "…";
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      if (testerName()) fd.append("uploaded_by", testerName());
+      await api(`/api/situacoes/${encodeURIComponent(sitCode)}/estagios/${estagioId}/screenshots`, { method: "POST", body: fd });
+      await refreshSituacao(sitCode);
+      toast("Print anexado");
+    } catch (e) {
+      toast("Erro ao subir print: " + e.message, true);
+      zone.textContent = "+";
+    }
+  }
+
+  async function deleteEstagio(sitCode, estagioId) {
+    if (!confirm("Excluir este estágio da situação?")) return;
+    try {
+      await api(`/api/situacoes/${encodeURIComponent(sitCode)}/estagios/${estagioId}`, { method: "DELETE" });
+      await refreshSituacao(sitCode);
+      toast("Estágio excluído");
+    } catch (e) { toast("Erro ao excluir: " + e.message, true); }
+  }
+
+  function onFlowChangedForSituacoes() {
+    $("#situacoes-title").textContent = "Situações do Fluxo " + currentFlow;
+    $("#situacoes-empty-badge").textContent = "Fluxo " + currentFlow;
+    if (currentView === "situacoes") renderSituacoes();
+  }
+
+  // ---------------- modal: criar / editar / excluir situação ----------------
+  let editingSituacaoCode = null;
+  const situacaoModal = $("#situacao-modal");
+  const situacaoForm = $("#situacao-form");
+  const situacaoStubRow = $("#situacao-stub-row");
+
+  function openSituacaoModal(mode, code) {
+    editingSituacaoCode = mode === "edit" ? code : null;
+    $("#situacao-modal-title").textContent = mode === "edit" ? "Editar situação" : "Nova situação";
+    const codeEl = $("#situacao-modal-code");
+    situacaoStubRow.hidden = mode === "edit";
+    if (mode === "edit") {
+      const s = findSituacao(code);
+      if (!s) return;
+      codeEl.textContent = s.code; codeEl.hidden = false;
+      situacaoForm.fluxo.value = situacaoFlow(s);
+      situacaoForm.titulo.value = s.titulo || "";
+      situacaoForm.descricao.value = s.descricao || "";
+    } else {
+      situacaoForm.reset();
+      codeEl.hidden = true;
+      situacaoForm.fluxo.value = currentFlow;
+      $("#situacao-stub-12").checked = true;
+    }
+    situacaoModal.hidden = false;
+    setTimeout(() => { try { situacaoForm.titulo.focus(); } catch (e) {} }, 30);
+  }
+  function closeSituacaoModal() { situacaoModal.hidden = true; editingSituacaoCode = null; }
+
+  async function submitSituacaoForm(e) {
+    e.preventDefault();
+    const payload = {
+      fluxo: situacaoForm.fluxo.value,
+      titulo: situacaoForm.titulo.value.trim(),
+      descricao: situacaoForm.descricao.value.trim(),
+    };
+    if (!payload.titulo) { toast("Informe o título da situação.", true); return; }
+    if (!payload.descricao) { toast("Descreva o cenário.", true); return; }
+    const wantsStub = !editingSituacaoCode && $("#situacao-stub-12").checked;
+    const saveBtn = $("#situacao-modal-save");
+    saveBtn.disabled = true;
+    try {
+      let code = editingSituacaoCode;
+      if (editingSituacaoCode) {
+        await api(`/api/situacoes/${encodeURIComponent(editingSituacaoCode)}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        });
+        toast("Situação atualizada");
+      } else {
+        const created = await api("/api/situacoes", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        });
+        code = created.code;
+        if (wantsStub) {
+          for (const nome of STANDARD_STAGES) {
+            await api(`/api/situacoes/${encodeURIComponent(code)}/estagios`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                nome, frente: "A definir",
+                resultado_esperado: "[PREENCHER] O que deve acontecer neste estágio, neste cenário.",
+              }),
+            });
+          }
+        }
+        toast("Situação criada");
+      }
+      const targetFlow = payload.fluxo;
+      await loadSituacoes();
+      if (targetFlow !== currentFlow) setFlow(targetFlow);
+      closeSituacaoModal();
+    } catch (err) {
+      toast("Erro ao salvar: " + err.message, true);
+    } finally {
+      saveBtn.disabled = false;
+    }
+  }
+
+  async function deleteSituacao(code) {
+    if (!confirm(`Excluir a situação ${code}? Ela sai da lista (dá pra recriar depois).`)) return;
+    try {
+      await api(`/api/situacoes/${encodeURIComponent(code)}`, { method: "DELETE" });
+      SITUACOES = SITUACOES.filter((s) => s.code !== code);
+      renderSituacoes();
+      toast("Situação excluída");
+    } catch (err) {
+      toast("Erro ao excluir: " + err.message, true);
+    }
+  }
+
+  situacaoForm.addEventListener("submit", submitSituacaoForm);
+  $("#situacao-modal-close").addEventListener("click", closeSituacaoModal);
+  $("#situacao-modal-cancel").addEventListener("click", closeSituacaoModal);
+  situacaoModal.addEventListener("click", (e) => { if (e.target.id === "situacao-modal") closeSituacaoModal(); });
+  $("#btn-add-situacao").addEventListener("click", () => openSituacaoModal("create"));
+  $("#situacoes-empty-add").addEventListener("click", () => openSituacaoModal("create"));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !situacaoModal.hidden) closeSituacaoModal(); });
+
+  // ---------------- modal: adicionar / editar estágio dentro de uma situação ----------------
+  let editingEstagio = null;   // { sitCode, estagioId } | null
+  let estagioModalSitCode = null;   // situação-alvo ao criar um estágio novo
+  const estagioModal = $("#estagio-modal");
+  const estagioForm = $("#estagio-form");
+
+  function openEstagioModal(mode, sitCode, estagioId) {
+    estagioModalSitCode = sitCode;
+    editingEstagio = mode === "edit" ? { sitCode, estagioId } : null;
+    $("#estagio-modal-title").textContent = mode === "edit" ? "Editar estágio" : "Novo estágio";
+    const sit = findSituacao(sitCode);
+    $("#estagio-modal-sit").textContent = sit ? sit.titulo : sitCode;
+    if (mode === "edit") {
+      const e = findEstagio(sitCode, estagioId);
+      if (!e) return;
+      estagioForm.nome.value = e.nome || "";
+      estagioForm.frente.value = e.frente || "A definir";
+      estagioForm.passos.value = e.passos || "";
+      estagioForm.resultado_esperado.value = e.resultado_esperado || "";
+    } else {
+      estagioForm.reset();
+      estagioForm.frente.value = "A definir";
+    }
+    estagioModal.hidden = false;
+    setTimeout(() => { try { estagioForm.nome.focus(); } catch (e) {} }, 30);
+  }
+  function closeEstagioModal() { estagioModal.hidden = true; editingEstagio = null; }
+
+  async function submitEstagioForm(e) {
+    e.preventDefault();
+    const payload = {
+      nome: estagioForm.nome.value.trim(),
+      frente: estagioForm.frente.value,
+      passos: estagioForm.passos.value.trim(),
+      resultado_esperado: estagioForm.resultado_esperado.value.trim(),
+    };
+    if (!payload.nome) { toast("Informe o nome do estágio.", true); return; }
+    if (!payload.resultado_esperado) { toast("Informe o resultado esperado.", true); return; }
+    const saveBtn = $("#estagio-modal-save");
+    saveBtn.disabled = true;
+    try {
+      if (editingEstagio) {
+        await api(`/api/situacoes/${encodeURIComponent(editingEstagio.sitCode)}/estagios/${editingEstagio.estagioId}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        });
+        await refreshSituacao(editingEstagio.sitCode);
+        toast("Estágio atualizado");
+      } else {
+        await api(`/api/situacoes/${encodeURIComponent(estagioModalSitCode)}/estagios`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        });
+        await refreshSituacao(estagioModalSitCode);
+        toast("Estágio criado");
+      }
+      closeEstagioModal();
+    } catch (err) {
+      toast("Erro ao salvar: " + err.message, true);
+    } finally {
+      saveBtn.disabled = false;
+    }
+  }
+
+  estagioForm.addEventListener("submit", submitEstagioForm);
+  $("#estagio-modal-close").addEventListener("click", closeEstagioModal);
+  $("#estagio-modal-cancel").addEventListener("click", closeEstagioModal);
+  estagioModal.addEventListener("click", (e) => { if (e.target.id === "estagio-modal") closeEstagioModal(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !estagioModal.hidden) closeEstagioModal(); });
 
   // ---------------- perfil (LP Digital / Faiston) ----------------
   const PERFIL_KEY = "fluxoc_perfil";

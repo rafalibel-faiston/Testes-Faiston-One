@@ -91,6 +91,95 @@ class TestCaseCreate(BaseModel):
     chamado: Optional[str] = None
 
 
+class SitScreenshotOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    filename: str
+    content_type: str
+    uploaded_by: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
+class SitObservationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    autor: Optional[str] = None
+    texto: str
+    created_at: Optional[datetime] = None
+
+
+class SitObservationCreate(BaseModel):
+    texto: str
+    autor: Optional[str] = None
+
+
+class SituacaoEstagioOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    ordem: int = 0
+    nome: str
+    frente: str
+    passos: Optional[str] = ""
+    resultado_esperado: str
+    status: str
+    testado_por: Optional[str] = None
+    chamado: Optional[str] = None
+    updated_at: Optional[datetime] = None
+    screenshots: List[SitScreenshotOut] = []
+    observations: List[SitObservationOut] = []
+
+
+class SituacaoEstagioCreate(BaseModel):
+    nome: str
+    frente: str = "Transversal"
+    passos: Optional[str] = ""
+    resultado_esperado: str
+    ordem: Optional[int] = None
+
+
+class SituacaoEstagioUpdate(BaseModel):
+    nome: Optional[str] = None
+    frente: Optional[str] = None
+    passos: Optional[str] = None
+    resultado_esperado: Optional[str] = None
+    ordem: Optional[int] = None
+    status: Optional[str] = None
+    testado_por: Optional[str] = None
+    chamado: Optional[str] = None
+
+
+class SituacaoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    code: str
+    fluxo: str = "C"
+    titulo: str
+    descricao: str
+    origem: Optional[str] = None
+    user_managed: Optional[bool] = False
+    updated_at: Optional[datetime] = None
+    estagios: List[SituacaoEstagioOut] = []
+
+
+class SituacaoCreate(BaseModel):
+    code: Optional[str] = None
+    fluxo: str = "C"
+    titulo: str
+    descricao: str
+    origem: str = "Criado no console"
+
+
+class SituacaoUpdate(BaseModel):
+    fluxo: Optional[str] = None
+    titulo: Optional[str] = None
+    descricao: Optional[str] = None
+    origem: Optional[str] = None
+
+
 class SummaryOut(BaseModel):
     total: int
     counts: dict

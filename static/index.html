@@ -88,6 +88,10 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1" transform="translate(0 0)"/><path d="M6 9v6M18 9v6M9 6h6"/></svg>
       Fluxos (diagramas)
     </button>
+    <button type="button" class="view-tab" data-view="situacoes" role="tab" aria-selected="false">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5a2 2 0 0 1 2-2h8.5L20 7.5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M14 3v5h5"/><path d="M8 13h8M8 17h5"/></svg>
+      Situações
+    </button>
   </div>
 
   <div id="view-testes">
@@ -206,6 +210,33 @@
     </div>
     <div id="diagrams"></div>
   </div><!-- /view-fluxos -->
+
+  <div id="view-situacoes" hidden>
+    <section class="diagrams-head">
+      <div class="diagrams-head-copy">
+        <h2 id="situacoes-title">Situações do Fluxo C</h2>
+        <p>Descreva um cenário completo (ex.: "chamado sem aceite") e vá testando estágio por estágio,
+        cada um com seu próprio status, observações e prints — sem misturar com os casos soltos dos Grupos.
+        Toda situação nova já entra com os 12 estágios padrão do fluxo, prontos pra editar ou remover.</p>
+      </div>
+      <button type="button" class="add-btn" id="btn-add-situacao">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nova situação
+      </button>
+    </section>
+    <div id="situacoes-loading" class="loading">Carregando situações…</div>
+    <div id="situacoes-empty" class="flow-empty" hidden>
+      <div class="flow-empty-badge" id="situacoes-empty-badge">Fluxo A</div>
+      <h2>Nenhuma situação ainda</h2>
+      <p>Este fluxo ainda não tem nenhum cenário descrito. Crie o primeiro pra começar a testar
+      passo a passo.</p>
+      <button type="button" class="add-btn" id="situacoes-empty-add">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Criar primeira situação
+      </button>
+    </div>
+    <div id="situacoes"></div>
+  </div><!-- /view-situacoes -->
 
 </main>
 
@@ -414,6 +445,73 @@
       do mais recente pro mais antigo. O que você ainda não tinha visto aparece marcado como <b>novo</b>.</p>
       <div class="notes-list" id="activity-list"></div>
     </div>
+  </div>
+</div>
+
+<div class="modal" id="situacao-modal" hidden aria-modal="true" role="dialog">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3 id="situacao-modal-title">Nova situação</h3>
+      <span class="modal-code" id="situacao-modal-code"></span>
+      <button type="button" class="modal-close" id="situacao-modal-close" aria-label="Fechar">✕</button>
+    </div>
+    <form id="situacao-form" class="modal-body">
+      <div class="form-grid">
+        <label class="fld">Fluxo
+          <select name="fluxo">
+            <option value="C">Fluxo C</option>
+            <option value="A">Fluxo A</option>
+            <option value="B">Fluxo B</option>
+          </select>
+        </label>
+        <label class="fld fld-wide">Título da situação
+          <input name="titulo" placeholder="ex.: Chamado sem aceite" required>
+        </label>
+      </div>
+      <label class="fld">Descreva o cenário <b>*</b>
+        <textarea name="descricao" rows="3" placeholder="O que acontece nessa situação, do início ao fim" required></textarea>
+      </label>
+      <label class="fld-check" id="situacao-stub-row">
+        <input type="checkbox" id="situacao-stub-12" checked>
+        Já criar com os 12 estágios padrão do fluxo (dá pra editar ou remover depois)
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="situacao-modal-cancel">Cancelar</button>
+        <button type="submit" class="btn-primary" id="situacao-modal-save">Salvar situação</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal" id="estagio-modal" hidden aria-modal="true" role="dialog">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3 id="estagio-modal-title">Novo estágio</h3>
+      <span class="modal-code" id="estagio-modal-sit"></span>
+      <button type="button" class="modal-close" id="estagio-modal-close" aria-label="Fechar">✕</button>
+    </div>
+    <form id="estagio-form" class="modal-body">
+      <div class="form-grid">
+        <label class="fld fld-wide">Nome do estágio
+          <input name="nome" placeholder="ex.: 03 · Téc. Aceitou" required>
+        </label>
+        <label class="fld">Frente
+          <select name="frente">
+            <option>Operador (web)</option><option>App do técnico</option><option>Transversal</option><option>A definir</option>
+          </select>
+        </label>
+      </div>
+      <label class="fld">Passos
+        <textarea name="passos" rows="2" placeholder="Como reproduzir (opcional)"></textarea>
+      </label>
+      <label class="fld">Resultado esperado <b>*</b>
+        <textarea name="resultado_esperado" rows="3" placeholder="O que tem que acontecer nesse estágio, neste cenário" required></textarea>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="estagio-modal-cancel">Cancelar</button>
+        <button type="submit" class="btn-primary" id="estagio-modal-save">Salvar estágio</button>
+      </div>
+    </form>
   </div>
 </div>
 

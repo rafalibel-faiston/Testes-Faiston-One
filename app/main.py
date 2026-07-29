@@ -11,6 +11,7 @@ from .routers import notes as notes_router
 from .routers import export as export_router
 from .routers import diagrams as diagrams_router
 from .routers import activity as activity_router
+from .routers import situacoes as situacoes_router
 from . import seed_data
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -33,6 +34,7 @@ try:
     seed_data.seed(_db)
     seed_data.migrate_observations(_db)
     seed_data.seed_diagrams(_db)
+    seed_data.seed_situacoes(_db)
 finally:
     _db.close()
 
@@ -41,6 +43,7 @@ app.include_router(notes_router.router, prefix="/api")
 app.include_router(export_router.router, prefix="/api")
 app.include_router(diagrams_router.router, prefix="/api")
 app.include_router(activity_router.router, prefix="/api")
+app.include_router(situacoes_router.router, prefix="/api")
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 

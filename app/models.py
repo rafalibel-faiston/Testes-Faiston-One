@@ -43,6 +43,86 @@ class TestCase(Base):
     )
 
 
+class Situacao(Base):
+    """Um cenário descrito por completo (ex.: "chamado sem aceite") que se conta
+    passo a passo através de vários estágios do chamado — cada estágio é o
+    'mini caso de teste' daquele passo específico dentro da história do cenário.
+    Vive dentro de um fluxo (A/B/C), ao lado dos Grupos de casos de teste, sem
+    substituí-los."""
+    __tablename__ = "situacoes"
+
+    id = Column(Integer, primary_key=True)
+    code = Column(String, unique=True, index=True, nullable=False)
+    fluxo = Column(String, nullable=False, default="C", server_default="C")
+    titulo = Column(String, nullable=False)
+    descricao = Column(Text, nullable=False)
+    origem = Column(String, nullable=True)
+    # active=False é exclusão suave (some da tela, não ressuscita no deploy porque o
+    # seed de situações só insere quando o code está totalmente ausente da tabela).
+    active = Column(Boolean, nullable=False, default=True, server_default=expression.true())
+    user_managed = Column(Boolean, nullable=False, default=False, server_default=expression.false())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+    estagios = relationship(
+        "SituacaoEstagio", back_populates="situacao", cascade="all, delete-orphan",
+        order_by="SituacaoEstagio.ordem",
+    )
+
+
+class SituacaoEstagio(Base):
+    """Um estágio do chamado dentro de uma Situação, com seu próprio status,
+    observações e prints — igual a um TestCase, só que aninhado sob a situação
+    em vez de solto num grupo."""
+    __tablename__ = "situacao_estagios"
+
+    id = Column(Integer, primary_key=True)
+    situacao_id = Column(Integer, ForeignKey("situacoes.id", ondelete="CASCADE"), nullable=False)
+    ordem = Column(Integer, nullable=False, default=0, server_default="0")
+    nome = Column(String, nullable=False)           # ex.: "03 · Téc. Aceitou"
+    frente = Column(String, nullable=False, default="Transversal")
+    passos = Column(Text, nullable=True, default="")
+    resultado_esperado = Column(Text, nullable=False)
+    status = Column(String, nullable=False, default="Não testado")
+    testado_por = Column(String, nullable=True)
+    chamado = Column(String, nullable=True)          # chamado testado
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+    situacao = relationship("Situacao", back_populates="estagios")
+    screenshots = relationship(
+        "SituacaoScreenshot", back_populates="estagio", cascade="all, delete-orphan", order_by="SituacaoScreenshot.id"
+    )
+    observations = relationship(
+        "SituacaoObservation", back_populates="estagio", cascade="all, delete-orphan", order_by="SituacaoObservation.id"
+    )
+
+
+class SituacaoObservation(Base):
+    __tablename__ = "situacao_observations"
+
+    id = Column(Integer, primary_key=True)
+    estagio_id = Column(Integer, ForeignKey("situacao_estagios.id", ondelete="CASCADE"), nullable=False)
+    autor = Column(String, nullable=True)
+    texto = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    estagio = relationship("SituacaoEstagio", back_populates="observations")
+
+
+class SituacaoScreenshot(Base):
+    __tablename__ = "situacao_screenshots"
+
+    id = Column(Integer, primary_key=True)
+    estagio_id = Column(Integer, ForeignKey("situacao_estagios.id", ondelete="CASCADE"), nullable=False)
+    filename = Column(String, nullable=False)
+    content_type = Column(String, nullable=False)
+    data = Column(LargeBinary, nullable=False)
+    uploaded_by = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    estagio = relationship("SituacaoEstagio", back_populates="screenshots")
+
+
 class MeetingNote(Base):
     """Ponto solto levantado durante os testes pra levar pra reunião — não
     exige nenhum caso de teste executado, só o registro da ideia/dúvida/bug."""

@@ -316,7 +316,7 @@ main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
 }
 .blk.result .v { color:var(--text); font-weight:400; }
 
-.case-foot { border-top:1px solid var(--line); padding-top:14px; display:flex; flex-direction:column; gap:12px; }
+.case-foot, .estagio-foot { border-top:1px solid var(--line); padding-top:14px; display:flex; flex-direction:column; gap:12px; }
 .status-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .status-btns { display:flex; gap:6px; flex-wrap:wrap; }
 .case-meta { font-size:11px; color:var(--text-3); }
@@ -692,6 +692,12 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
   outline:none; border-color:var(--f-blue); box-shadow:0 0 0 3px rgba(0,84,236,.12);
 }
 .fld-hint { font-size:9.5px; text-transform:none; letter-spacing:0; color:var(--text-3); font-weight:400; }
+.fld-check {
+  display:flex; align-items:center; gap:9px; cursor:pointer;
+  font-size:12.5px; font-weight:500; text-transform:none; letter-spacing:0; color:var(--text-2);
+}
+.fld-check input { width:16px; height:16px; accent-color:var(--f-blue); cursor:pointer; flex-shrink:0; }
+.fld-check[hidden] { display:none; }
 .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:4px; }
 .btn-ghost {
   border:1px solid var(--line-2); background:var(--surface-2); color:var(--text-2);
@@ -1125,3 +1131,49 @@ body.inline-connecting * { cursor:crosshair !important; }
   .whoami { width:100%; }
   .whoami input { width:100%; }
 }
+
+/* ---------- situações (cenário com estágios do chamado) ---------- */
+.situacao {
+  background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--f-blue);
+  border-radius:var(--radius-lg); padding:22px 24px; margin-bottom:24px; box-shadow:var(--shadow-1);
+  transition:box-shadow .2s var(--ease), border-color .2s var(--ease);
+  animation:cardIn .5s var(--ease) both;
+}
+.situacao:hover { box-shadow:var(--shadow-2); }
+.situacao-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+.situacao-badge {
+  flex-shrink:0; font-family:'Roboto',sans-serif; font-size:10px; font-weight:700; letter-spacing:.6px; text-transform:uppercase;
+  color:#fff; background:var(--grad-primary); border-radius:999px; padding:4px 12px;
+}
+.situacao-title { font-family:'Roboto Slab',serif; font-size:17px; font-weight:700; color:var(--text); flex:1; min-width:200px; }
+.situacao-code-mini {
+  font-family:'Roboto Mono',monospace; font-size:10px; font-weight:500; color:var(--text-3);
+  letter-spacing:.2px; opacity:.75; user-select:all;
+}
+.situacao-desc { font-size:13px; color:var(--text-2); line-height:1.6; margin-bottom:16px; }
+.situacao-progress { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
+.situacao-bar { flex:1; height:6px; border-radius:999px; background:var(--surface-3); overflow:hidden; }
+.situacao-bar > i { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,#0d9d6c,#34d399); transition:width .2s var(--ease); }
+.situacao-progress-label { flex-shrink:0; font-size:11.5px; color:var(--text-3); white-space:nowrap; }
+.situacao-stages { display:flex; flex-direction:column; gap:12px; }
+.situacao-add-estagio { margin-top:16px; padding:9px 16px; font-size:12.5px; }
+
+/* estágio dentro da situação — mesma linguagem visual do caso de teste, num tom
+   levemente recuado (surface-2) pra deixar claro que é filho da situação */
+.estagio {
+  background:var(--surface-2); border:1px solid var(--line); border-left:3px solid var(--na-ln);
+  border-radius:var(--radius); padding:16px 18px;
+  transition:border-color .2s var(--ease), box-shadow .2s var(--ease);
+}
+.estagio:hover { box-shadow:var(--shadow-1); }
+.estagio.st-ok   { border-left-color:var(--ok); }
+.estagio.st-bad  { border-left-color:var(--bad); }
+.estagio.st-warn { border-left-color:var(--warn); }
+.estagio.st-na   { border-left-color:var(--na); }
+.estagio-head { display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-bottom:11px; }
+.estagio-num {
+  flex-shrink:0; font-family:'Roboto Mono',monospace; font-size:10px; font-weight:700; letter-spacing:.3px;
+  color:var(--text-2); background:var(--surface-3); border:1px solid var(--line-2); border-radius:999px; padding:3px 11px;
+}
+.estagio-nome { font-size:13px; font-weight:600; color:var(--text); }
+.estagio-actions { display:inline-flex; gap:6px; margin-left:auto; }

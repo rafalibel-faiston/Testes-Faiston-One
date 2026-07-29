@@ -507,3 +507,205 @@ def migrate_observations(db):
     if migrated:
         db.commit()
     return migrated
+
+
+# ---------------------------------------------------------------------------
+# SITUAÇÕES — cenários contados passo a passo por estágios do chamado, dentro
+# do Fluxo C, ao lado dos Grupos A/B/C/D (não os substitui). Cada situação usa
+# a régua padrão dos 12 estágios do fluxo como ponto de partida, mas pode
+# inserir estágios próprios quando o cenário desvia do caminho normal (ex.:
+# "vai para Ocorrência" no meio do caminho) — o time pode editar tudo na tela.
+# ---------------------------------------------------------------------------
+def _sit_estagio(nome, frente, resultado_esperado, passos="", status=None):
+    return dict(nome=nome, frente=frente, resultado_esperado=resultado_esperado,
+                passos=passos, status=status or "Não testado")
+
+
+SITUACOES_SEED = [
+    dict(
+        code="SIT-01",
+        fluxo="C",
+        titulo="Chamado agendado — técnico aceita, sem ocorrência",
+        descricao=(
+            "Cenário de referência (sem desvio): um chamado é criado com data agendada, um "
+            "técnico aceita a busca dentro do prazo, confirma presença e o atendimento é "
+            "concluído do início ao fim sem nenhuma ocorrência no meio do caminho."
+        ),
+        origem="Cenários de evolução da semana (29/07)",
+        estagios=[
+            _sit_estagio("01 · Criar OS", "Operador (web)",
+                "Chamado é criado com data e hora agendadas e aparece no painel do operador no estado inicial correto."),
+            _sit_estagio("02 · Buscando Técnico", "Transversal",
+                "Sistema dispara a busca de técnico; o chamado fica disponível para aceite (app e link do WhatsApp) "
+                "dentro do tempo de espera por aceite configurado, sem esgotar o prazo."),
+            _sit_estagio("03 · Téc. Aceitou", "App do técnico",
+                "Um técnico aceita a busca antes do prazo se esgotar; o chamado sai da lista de disponíveis e "
+                "nenhuma ocorrência é gerada."),
+            _sit_estagio("04 · Agendado", "App do técnico",
+                'Chamado passa para "Agendado"; "Iniciar Deslocamento" fica bloqueado até a data marcada. O lembrete '
+                "de confirmação (~24h antes) e o pedido de confirmação de execução (~2h antes) chegam normalmente, e "
+                'o técnico confirma presença dentro do "Prazo final de confirmação de presença" — sem gerar ocorrência.'),
+            _sit_estagio("05 · Téc. em Deslocamento", "App do técnico",
+                'No dia agendado, com a presença já confirmada, "Iniciar Deslocamento" é liberado; o painel do '
+                'operador passa a mostrar "Em Rota".'),
+            _sit_estagio("06 · Aguardando Liberação", "App do técnico",
+                'Técnico chega ao local, registra "Acesso Liberado" e toca "Iniciar Atendimento"; o horário de início '
+                "registrado passa a refletir este momento (liberação de acesso), não o do aceite."),
+            _sit_estagio("07 · Téc. em Atendimento", "App do técnico",
+                'Atendimento decorre normalmente; o cronômetro mede o tempo real e o painel mostra "Em Execução" com '
+                "os horários de chegada/início."),
+            _sit_estagio("08 · Acompanhamento N2", "Operador (web)",
+                "Não aplicável neste cenário — o atendimento é concluído sem necessidade de escalonamento ao "
+                "suporte N2.", status="N/A"),
+            _sit_estagio("09 · Aguardando RAT", "Operador (web)",
+                'Operador clica "Acompanhamento Concluído"; o sistema solicita a RAT ao técnico, que abre e envia '
+                "normalmente."),
+            _sit_estagio("10 · Em Revisão", "Operador (web)",
+                "Técnico envia a RAT; operador revisa fotos e assinatura e aprova sem apontar nenhuma correção."),
+            _sit_estagio("11 · Atividade Concluída", "Operador (web)",
+                'Painel mostra "Concluído"; o técnico é liberado e o app também mostra o chamado como concluído.'),
+            _sit_estagio("12 · Notificações (transversal)", "Transversal",
+                "Cada marco do fluxo (aceite, confirmação de presença, deslocamento, liberação, conclusão) dispara "
+                "notificação por push/WhatsApp corretamente — nenhum alerta de ocorrência é disparado neste cenário."),
+        ],
+    ),
+    dict(
+        code="SIT-02",
+        fluxo="C",
+        titulo="Chamado imediato com reagendamento, ocorrência no meio",
+        descricao=(
+            "Um chamado criado para atendimento imediato (sem data marcada) precisa ser "
+            "reagendado depois do aceite — e, na nova data, o técnico não confirma presença a "
+            "tempo, gerando uma ocorrência antes de o atendimento ser retomado por outro técnico."
+        ),
+        origem="Cenários de evolução da semana (29/07)",
+        estagios=[
+            _sit_estagio("01 · Criar OS", "Operador (web)",
+                "Chamado é criado sem data marcada (atendimento imediato) e aparece no painel do operador."),
+            _sit_estagio("02 · Buscando Técnico", "Transversal",
+                "Busca é disparada imediatamente; um técnico aceita dentro do tempo de espera por aceite configurado."),
+            _sit_estagio("03 · Téc. Aceitou", "App do técnico",
+                "Técnico aceita o chamado, mas identifica que não pode atender agora e solicita o reagendamento "
+                "pelo app."),
+            _sit_estagio("04 · Agendado (reagendamento)", "Operador (web)",
+                "Operador reagenda o chamado para uma nova data; a partir daqui, o chamado passa a exigir "
+                'confirmação de presença dentro do "Prazo final de confirmação de presença" para essa nova data.'),
+            _sit_estagio("Ocorrência por não confirmar presença", "Transversal",
+                'O técnico não confirma a presença para a nova data dentro do prazo configurado; o chamado vai para '
+                '"Ocorrência" (motivo: não confirmação — distinto de "sem aceite"), some da agenda do técnico e fica '
+                "bloqueado para aceite/visualização (app e link do WhatsApp)."),
+            _sit_estagio("Ocorrência — retomada pela operação", "Operador (web)",
+                'Operador usa "Re-disparar busca"; o chamado volta a ficar ofertável e um novo técnico pode '
+                "aceitá-lo normalmente."),
+            _sit_estagio("05 · Téc. em Deslocamento", "App do técnico",
+                'Um novo técnico aceita a nova busca, confirma presença e inicia o deslocamento; painel mostra '
+                '"Em Rota".'),
+            _sit_estagio("06 · Aguardando Liberação", "App do técnico",
+                'Técnico chega, registra "Acesso Liberado" e inicia o atendimento.'),
+            _sit_estagio("07 · Téc. em Atendimento", "App do técnico",
+                "Atendimento decorre normalmente até a conclusão."),
+            _sit_estagio("08 · Acompanhamento N2", "Operador (web)",
+                "Não aplicável neste cenário — não há escalonamento ao N2.", status="N/A"),
+            _sit_estagio("09 · Aguardando RAT", "Operador (web)",
+                'Operador clica "Acompanhamento Concluído"; RAT é solicitada e enviada normalmente.'),
+            _sit_estagio("10 · Em Revisão", "Operador (web)",
+                "Operador aprova a RAT sem pendências."),
+            _sit_estagio("11 · Atividade Concluída", "Operador (web)",
+                "Chamado é concluído; técnico é liberado."),
+            _sit_estagio("12 · Notificações (transversal)", "Transversal",
+                "O histórico no Tiflux registra o reagendamento e a ocorrência corretamente, com os comentários "
+                "automáticos de cada marco (incluindo o motivo da ocorrência)."),
+        ],
+    ),
+    dict(
+        code="SIT-03",
+        fluxo="C",
+        titulo="Chamado sem aceite (ocorrência por falta de aceite)",
+        descricao=(
+            "Nenhum técnico aceita a busca dentro do tempo de espera configurado; o chamado deve "
+            'ir automaticamente para "Ocorrência" por falta de aceite — cenário curto, encerra '
+            "antes de chegar ao deslocamento."
+        ),
+        origem="Cenários de evolução da semana (29/07)",
+        estagios=[
+            _sit_estagio("01 · Criar OS", "Operador (web)",
+                "Chamado é criado e aparece no painel do operador, pronto para a busca de técnico."),
+            _sit_estagio("02 · Buscando Técnico — busca disparada", "Transversal",
+                "Sistema dispara a busca; o tempo de espera por aceite está configurado e conhecido (ex.: 10 min)."),
+            _sit_estagio("Prazo de aceite esgota sem ninguém aceitar", "Transversal",
+                "Nenhum técnico aceita a busca (app nem link do WhatsApp) durante todo o tempo configurado."),
+            _sit_estagio("Chamado vai para Ocorrência (sem aceite)", "Transversal",
+                'Esgotado o tempo, o chamado muda automaticamente para "Ocorrência"; some da lista de disponíveis '
+                "do técnico e fica bloqueado em visualização, detalhe e aceite."),
+            _sit_estagio("Ocorrência — chamado bloqueado", "App do técnico",
+                "Tentativas de abrir o chamado pelo app ou pelo link do WhatsApp são bloqueadas enquanto ele "
+                "estiver em Ocorrência."),
+            _sit_estagio("Re-disparar busca", "Operador (web)",
+                'Operador usa "Re-disparar busca"; o chamado volta a ficar ofertável a técnicos, saindo do estado '
+                "de Ocorrência."),
+        ],
+    ),
+    dict(
+        code="SIT-04",
+        fluxo="C",
+        titulo="Chamado com ocorrência por não confirmar presença",
+        descricao=(
+            'Um técnico aceita um chamado agendado, mas não confirma a presença antes do "Prazo '
+            'final de confirmação de presença"; o chamado deve ir para "Ocorrência" por um motivo '
+            'distinto do "sem aceite".'
+        ),
+        origem="Cenários de evolução da semana (29/07)",
+        estagios=[
+            _sit_estagio("01 · Criar OS", "Operador (web)",
+                "Chamado é criado com data agendada e aparece no painel."),
+            _sit_estagio("02 · Buscando Técnico", "Transversal",
+                "Busca é disparada normalmente."),
+            _sit_estagio("03 · Téc. Aceitou", "App do técnico",
+                "Um técnico aceita o chamado agendado dentro do tempo de espera por aceite."),
+            _sit_estagio("04 · Agendado — aguardando confirmação de presença", "App do técnico",
+                "O lembrete de confirmação (~24h antes) e o pedido de confirmação de execução (~2h antes) chegam "
+                'normalmente; o "Prazo final de confirmação de presença" está configurado e conhecido.'),
+            _sit_estagio("Técnico não confirma presença", "App do técnico",
+                "O técnico ignora os lembretes e não confirma presença dentro do prazo final configurado."),
+            _sit_estagio("Chamado vai para Ocorrência (não confirmar)", "Transversal",
+                'Esgotado o prazo, o chamado vai para "Ocorrência" por um motivo distinto do "sem aceite" (o '
+                "técnico havia aceitado, mas não confirmou); some da agenda do técnico e fica bloqueado para aceite."),
+            _sit_estagio("Re-disparar busca", "Operador (web)",
+                'Operador usa "Re-disparar busca"; o chamado volta a ficar ofertável a outro técnico, seguindo o '
+                'mesmo tratamento de ocorrência do cenário "sem aceite".'),
+        ],
+    ),
+]
+
+
+def seed_situacoes(db):
+    """Cria as situações iniciais na primeira subida. Idempotente por código:
+    só insere quando o code está totalmente ausente da tabela — nunca sobrescreve
+    o que o time editou ou apagou (soft delete mantém o code presente, então
+    uma situação excluída não ressuscita num redeploy)."""
+    from .models import Situacao, SituacaoEstagio
+
+    added = 0
+    for s in SITUACOES_SEED:
+        if db.query(Situacao).filter(Situacao.code == s["code"]).first():
+            continue
+        sit = Situacao(
+            code=s["code"], fluxo=s.get("fluxo", "C"), titulo=s["titulo"],
+            descricao=s["descricao"], origem=s.get("origem"),
+        )
+        db.add(sit)
+        db.flush()
+        for i, e in enumerate(s["estagios"], start=1):
+            db.add(SituacaoEstagio(
+                situacao_id=sit.id,
+                ordem=i,
+                nome=e["nome"],
+                frente=e.get("frente", "Transversal"),
+                passos=e.get("passos", ""),
+                resultado_esperado=e["resultado_esperado"],
+                status=e.get("status", "Não testado"),
+            ))
+        added += 1
+    if added:
+        db.commit()
+    return added
