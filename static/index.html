@@ -224,6 +224,46 @@
         Nova situação
       </button>
     </section>
+
+    <div class="stat-strip" id="sit-stat-strip" role="group" aria-label="Filtrar estágios por status">
+      <button type="button" class="stat" data-k="Não testado" title="Filtrar: Não testado"><span class="stat-n" id="sit-stat-nt">0</span><span class="stat-l">Não testado</span></button>
+      <button type="button" class="stat ok" data-k="Aprovado" title="Filtrar: Aprovado"><span class="stat-n" id="sit-stat-ok">0</span><span class="stat-l">Aprovado</span></button>
+      <button type="button" class="stat bad" data-k="Reprovado" title="Filtrar: Reprovado"><span class="stat-n" id="sit-stat-bad">0</span><span class="stat-l">Reprovado</span></button>
+      <button type="button" class="stat warn" data-k="Bloqueado" title="Filtrar: Bloqueado"><span class="stat-n" id="sit-stat-warn">0</span><span class="stat-l">Bloqueado</span></button>
+      <button type="button" class="stat na" data-k="N/A" title="Filtrar: N/A"><span class="stat-n" id="sit-stat-na">0</span><span class="stat-l">N/A</span></button>
+    </div>
+
+    <section class="toolbar" aria-label="Filtros de situações">
+      <div class="toolbar-bar">
+        <button type="button" class="filters-toggle" id="sit-filters-toggle" aria-expanded="false" aria-controls="sit-filters-body">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+          Filtros
+          <span class="filters-active-count" id="sit-filters-active-count" hidden>0</span>
+          <svg class="filters-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="glow-search" id="sit-glow-search">
+          <div class="glow-search-pill">
+            <svg class="search-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input type="text" id="sit-f-busca" placeholder="Buscar por situação, estágio ou palavra-chave...">
+          </div>
+        </div>
+      </div>
+      <div class="filters-body" id="sit-filters-body" hidden>
+        <div class="chip-row">
+          <span class="chip-row-label">Situação</span>
+          <div class="chips chips-scroll" id="sit-chips-situacao"></div>
+        </div>
+        <div class="chip-row">
+          <span class="chip-row-label">Frente</span>
+          <div class="chips" id="sit-chips-frente"></div>
+        </div>
+        <div class="chip-row">
+          <span class="chip-row-label">Status</span>
+          <div class="chips" id="sit-chips-status"></div>
+        </div>
+      </div>
+    </section>
+
     <div id="situacoes-loading" class="loading">Carregando situações…</div>
     <div id="situacoes-empty" class="flow-empty" hidden>
       <div class="flow-empty-badge" id="situacoes-empty-badge">Fluxo A</div>

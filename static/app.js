@@ -1932,6 +1932,8 @@
   let SITUACOES = [];
   let situacoesLoaded = false;
   const expandedSituacoes = new Set();   // codes das situações abertas (recolhidas por padrão)
+  const sitActiveFilters = { situacao: "", frente: "", status: "" };
+  const forcedOpenSituacoes = new Set();   // codes abertas TEMPORARIAMENTE por um filtro ativo (não mexe em expandedSituacoes)
   const STANDARD_STAGES = [
     "01 · Criar OS", "02 · Buscando Técnico", "03 · Téc. Aceitou", "04 · Agendado",
     "05 · Téc. em Deslocamento", "06 · Aguardando Liberação", "07 · Téc. em Atendimento",
@@ -1979,7 +1981,12 @@
     const stCode = STATUS_CODE[e.status] || "nt";
     const frontCode = FRONT_CODE[e.frente] || "trv";
     const shots = (e.screenshots || []).map((s) => estagioShotThumb(s, sit.code, e.id)).join("");
-    return `<article class="estagio st-${stCode}" data-sit="${esc(sit.code)}" data-estagio-id="${e.id}">
+    // o texto da situação (título/descrição) entra no search de cada estágio —
+    // assim buscar pelo nome do cenário mostra todos os estágios dele, mesmo que
+    // o texto buscado não apareça no estágio em si
+    const search = (sit.titulo + " " + sit.descricao + " " + e.nome + " " + e.resultado_esperado).toLowerCase();
+    return `<article class="estagio st-${stCode}" data-sit="${esc(sit.code)}" data-estagio-id="${e.id}"
+        data-frente="${esc(e.frente)}" data-status="${esc(e.status)}" data-search="${esc(search)}">
       <div class="estagio-head">
         <span class="estagio-num">Estágio ${idx}</span>
         <span class="tag front-${frontCode}">${esc(e.frente)}</span>
@@ -2077,12 +2084,125 @@
       $("#situacoes").innerHTML = "";
       $("#situacoes-empty-badge").textContent = "Fluxo " + currentFlow;
       emptyEl.hidden = false;
+      buildSituacaoFilters(flowSits);
+      updateSituacaoStats(flowSits);
       return;
     }
     emptyEl.hidden = true;
     $("#situacoes").innerHTML = flowSits.map(situacaoCard).join("");
     attachSituacaoHandlers();
+    buildSituacaoFilters(flowSits);
+    applySituacaoFilters();
+    updateSituacaoStats(flowSits);
   }
+
+  // ---------------- situações: KPIs + filtros ----------------
+  function allEstagios(flowSits) {
+    return flowSits.flatMap((s) => s.estagios);
+  }
+
+  function updateSituacaoStats(flowSits) {
+    const counts = { "Não testado": 0, "Aprovado": 0, "Reprovado": 0, "Bloqueado": 0, "N/A": 0 };
+    allEstagios(flowSits).forEach((e) => { counts[e.status] = (counts[e.status] || 0) + 1; });
+    $("#sit-stat-nt").textContent = counts["Não testado"];
+    $("#sit-stat-ok").textContent = counts["Aprovado"];
+    $("#sit-stat-bad").textContent = counts["Reprovado"];
+    $("#sit-stat-warn").textContent = counts["Bloqueado"];
+    $("#sit-stat-na").textContent = counts["N/A"];
+    $$("#sit-stat-strip .stat").forEach((t) => t.classList.toggle("active", t.dataset.k === sitActiveFilters.status));
+  }
+  $$("#sit-stat-strip .stat").forEach((tile) => {
+    tile.addEventListener("click", () => {
+      const k = tile.dataset.k;
+      sitActiveFilters.status = sitActiveFilters.status === k ? "" : k;
+      $$("#sit-chips-status .chip").forEach((b) => b.classList.toggle("active", b.dataset.val === sitActiveFilters.status));
+      $$("#sit-stat-strip .stat").forEach((t) => t.classList.toggle("active", t.dataset.k === sitActiveFilters.status));
+      applySituacaoFilters();
+    });
+  });
+
+  function buildSitChipGroup(containerId, filterKey, values, colorMap) {
+    const el = document.getElementById(containerId);
+    el.innerHTML = values.map(({ label, val }) => {
+      const colorClass = colorMap && colorMap[label] ? colorMap[label] : "";
+      const active = sitActiveFilters[filterKey] === val;
+      return `<button type="button" class="chip ${colorClass} ${active ? "active" : ""}" data-key="${filterKey}" data-val="${esc(val)}">${esc(label)}</button>`;
+    }).join("");
+    $$(".chip", el).forEach((btn) => {
+      btn.addEventListener("click", () => {
+        sitActiveFilters[btn.dataset.key] = btn.dataset.val;
+        $$(".chip", el).forEach((b) => b.classList.toggle("active", b.dataset.val === btn.dataset.val));
+        if (filterKey === "status") $$("#sit-stat-strip .stat").forEach((t) => t.classList.toggle("active", t.dataset.k === sitActiveFilters.status));
+        applySituacaoFilters();
+      });
+    });
+  }
+
+  function buildSituacaoFilters(flowSits) {
+    const uniq = (arr) => [...new Set(arr)];
+    buildSitChipGroup("sit-chips-situacao", "situacao",
+      [{ label: "Todas", val: "" }, ...flowSits.map((s) => ({ label: s.titulo, val: s.code }))]);
+    buildSitChipGroup("sit-chips-frente", "frente",
+      [{ label: "Todas", val: "" }, ...uniq(allEstagios(flowSits).map((e) => e.frente)).map((v) => ({ label: v, val: v }))],
+      FRENT_CHIP_CLASS);
+    buildSitChipGroup("sit-chips-status", "status",
+      [{ label: "Todos", val: "" }, ...STATUSES.map((v) => ({ label: v, val: v }))],
+      STATUS_CHIP_CLASS);
+  }
+
+  function updateSituacaoFiltersActiveCount() {
+    const n = ["situacao", "frente", "status"].filter((k) => sitActiveFilters[k]).length;
+    const el = $("#sit-filters-active-count");
+    if (el) { el.textContent = n; el.hidden = n === 0; }
+  }
+
+  function applySituacaoFilters() {
+    const { situacao: sitSel, frente: fr, status: st } = sitActiveFilters;
+    const q = $("#sit-f-busca").value.trim().toLowerCase();
+    const anyActive = !!(sitSel || fr || st || q);
+
+    $$(".situacao").forEach((card) => {
+      const sitCode = card.dataset.code;
+      if (sitSel && sitCode !== sitSel) {
+        card.classList.add("sit-hidden");
+        return;
+      }
+      card.classList.remove("sit-hidden");
+
+      let anyVisible = false;
+      $$(".estagio", card).forEach((row) => {
+        let ok = true;
+        if (fr && row.dataset.frente !== fr) ok = false;
+        if (st && row.dataset.status !== st) ok = false;
+        if (q && !row.dataset.search.includes(q)) ok = false;
+        row.classList.toggle("hidden", !ok);
+        if (ok) anyVisible = true;
+      });
+
+      if (anyActive && !anyVisible) card.classList.add("sit-hidden");
+
+      // enquanto um filtro está ativo, abre temporariamente os cards com resultado
+      // (sem mexer no estado de aberto/fechado que o usuário escolheu)
+      if (anyActive && anyVisible) {
+        card.classList.add("filter-open");
+        forcedOpenSituacoes.add(sitCode);
+      } else if (forcedOpenSituacoes.has(sitCode)) {
+        card.classList.remove("filter-open");
+        forcedOpenSituacoes.delete(sitCode);
+      }
+    });
+
+    updateSituacaoFiltersActiveCount();
+  }
+  $("#sit-f-busca").addEventListener("input", applySituacaoFilters);
+
+  const sitFiltersToggle = $("#sit-filters-toggle");
+  const sitFiltersBody = $("#sit-filters-body");
+  sitFiltersToggle.addEventListener("click", () => {
+    const open = sitFiltersBody.hidden;
+    sitFiltersBody.hidden = !open;
+    sitFiltersToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  });
 
   function attachSituacaoHandlers() {
     $$(".situacao").forEach((card) => {

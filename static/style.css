@@ -1143,6 +1143,9 @@ body.inline-connecting * { cursor:crosshair !important; }
 .situacao-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; cursor:pointer; }
 .situacao.collapsed .situacao-head { margin-bottom:0; }
 .situacao.collapsed .situacao-body { display:none; }
+.situacao.collapsed.filter-open .situacao-body { display:block; }
+.situacao.sit-hidden { display:none; }
+.estagio.hidden { display:none; }
 .situacao-toggle {
   flex-shrink:0; width:24px; height:24px; border-radius:7px; cursor:pointer;
   border:1px solid var(--line-2); background:var(--surface-2); color:var(--text-2);
