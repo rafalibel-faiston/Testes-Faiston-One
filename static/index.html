@@ -507,9 +507,13 @@
       <label class="fld">Descreva o cenário <b>*</b>
         <textarea name="descricao" rows="3" placeholder="O que acontece nessa situação, do início ao fim" required></textarea>
       </label>
-      <label class="fld-check" id="situacao-stub-row">
-        <input type="checkbox" id="situacao-stub-12" checked>
-        Já criar com os 12 estágios padrão do fluxo (dá pra editar ou remover depois)
+      <label class="fld" id="situacao-stub-row">Estágios iniciais
+        <select id="situacao-stub-source">
+          <option value="padrao" selected>Os 12 estágios padrão do fluxo</option>
+          <option value="nenhum">Nenhum (começar do zero)</option>
+          <option value="" disabled>──────────</option>
+        </select>
+        <span class="fld-hint">Dá pra editar, adicionar ou remover estágios depois de criar.</span>
       </label>
       <div class="modal-actions">
         <button type="button" class="btn-ghost" id="situacao-modal-cancel">Cancelar</button>

@@ -2372,6 +2372,22 @@
   const situacaoForm = $("#situacao-form");
   const situacaoStubRow = $("#situacao-stub-row");
 
+  function fillSituacaoStubSource() {
+    const sel = $("#situacao-stub-source");
+    sel.querySelectorAll("option[data-copy]").forEach((o) => o.remove());
+    if (!SITUACOES.length) return;
+    const group = document.createElement("optgroup");
+    group.label = "Copiar estágios de…";
+    SITUACOES.slice().sort((a, b) => a.titulo.localeCompare(b.titulo)).forEach((s) => {
+      const o = document.createElement("option");
+      o.value = "copiar:" + s.code;
+      o.dataset.copy = "1";
+      o.textContent = `${s.titulo} (${s.code}, ${s.estagios.length} estágio${s.estagios.length === 1 ? "" : "s"})`;
+      group.appendChild(o);
+    });
+    sel.appendChild(group);
+  }
+
   function openSituacaoModal(mode, code) {
     editingSituacaoCode = mode === "edit" ? code : null;
     $("#situacao-modal-title").textContent = mode === "edit" ? "Editar situação" : "Nova situação";
@@ -2388,7 +2404,8 @@
       situacaoForm.reset();
       codeEl.hidden = true;
       situacaoForm.fluxo.value = currentFlow;
-      $("#situacao-stub-12").checked = true;
+      fillSituacaoStubSource();
+      $("#situacao-stub-source").value = "padrao";
     }
     situacaoModal.hidden = false;
     setTimeout(() => { try { situacaoForm.titulo.focus(); } catch (e) {} }, 30);
@@ -2404,7 +2421,8 @@
     };
     if (!payload.titulo) { toast("Informe o título da situação.", true); return; }
     if (!payload.descricao) { toast("Descreva o cenário.", true); return; }
-    const wantsStub = !editingSituacaoCode && $("#situacao-stub-12").checked;
+    const stubSource = editingSituacaoCode ? "" : $("#situacao-stub-source").value;
+    const copySourceCode = stubSource.startsWith("copiar:") ? stubSource.slice(7) : null;
     const saveBtn = $("#situacao-modal-save");
     saveBtn.disabled = true;
     try {
@@ -2419,7 +2437,18 @@
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
         });
         code = created.code;
-        if (wantsStub) {
+        if (copySourceCode) {
+          const source = findSituacao(copySourceCode);
+          for (const e of (source ? source.estagios : [])) {
+            await api(`/api/situacoes/${encodeURIComponent(code)}/estagios`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                nome: e.nome, frente: e.frente, passos: e.passos || "",
+                resultado_esperado: e.resultado_esperado,
+              }),
+            });
+          }
+        } else if (stubSource === "padrao") {
           for (const nome of STANDARD_STAGES) {
             await api(`/api/situacoes/${encodeURIComponent(code)}/estagios`, {
               method: "POST", headers: { "Content-Type": "application/json" },
