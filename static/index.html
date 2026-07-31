@@ -80,21 +80,17 @@
   </nav>
 
   <div class="view-switch" role="tablist" aria-label="Alternar visão">
-    <button type="button" class="view-tab active" data-view="testes" role="tab" aria-selected="true">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-      Casos de teste
-    </button>
     <button type="button" class="view-tab" data-view="fluxos" role="tab" aria-selected="false">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1" transform="translate(0 0)"/><path d="M6 9v6M18 9v6M9 6h6"/></svg>
       Fluxos (diagramas)
     </button>
-    <button type="button" class="view-tab" data-view="situacoes" role="tab" aria-selected="false">
+    <button type="button" class="view-tab active" data-view="situacoes" role="tab" aria-selected="true">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5a2 2 0 0 1 2-2h8.5L20 7.5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M14 3v5h5"/><path d="M8 13h8M8 17h5"/></svg>
       Situações
     </button>
   </div>
 
-  <div id="view-testes">
+  <div id="view-testes" hidden>
 
   <section class="hero">
     <div class="stat-strip" id="stat-strip" role="group" aria-label="Filtrar por status">
@@ -211,7 +207,7 @@
     <div id="diagrams"></div>
   </div><!-- /view-fluxos -->
 
-  <div id="view-situacoes" hidden>
+  <div id="view-situacoes">
     <section class="diagrams-head">
       <div class="diagrams-head-copy">
         <h2 id="situacoes-title">Situações do Fluxo C</h2>

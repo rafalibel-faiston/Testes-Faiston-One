@@ -782,7 +782,7 @@
   });
 
   // ---------------- fluxos (diagramas Mermaid) ----------------
-  let currentView = "testes";        // "testes" | "fluxos"
+  let currentView = "situacoes";     // "testes" | "fluxos" | "situacoes"
   let DIAGRAMS = [];
   let diagramsLoaded = false;
   const expandedDiagrams = new Set();   // ids dos diagramas abertos (recolhidos por padrão)
@@ -2694,4 +2694,5 @@
     $("#cases-loading").textContent = "Erro ao carregar casos: " + e.message;
   });
   loadNotes();
+  loadSituacoes();
 })();
