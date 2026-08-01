@@ -262,6 +262,67 @@ class TeamViewMark(BaseModel):
     last_seen_id: int
 
 
+class AgendaEventoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    titulo: str
+    descricao: Optional[str] = ""
+    data: str
+    hora_inicio: Optional[str] = None
+    hora_fim: Optional[str] = None
+    autor: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class AgendaEventoCreate(BaseModel):
+    titulo: str
+    descricao: Optional[str] = ""
+    data: str
+    hora_inicio: Optional[str] = None
+    hora_fim: Optional[str] = None
+    autor: Optional[str] = None
+
+
+class AgendaEventoUpdate(BaseModel):
+    titulo: Optional[str] = None
+    descricao: Optional[str] = None
+    data: Optional[str] = None
+    hora_inicio: Optional[str] = None
+    hora_fim: Optional[str] = None
+
+
+class TodoTarefaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    titulo: str
+    descricao: Optional[str] = ""
+    status: str = "a_fazer"
+    posicao: int = 0
+    responsavel: Optional[str] = None
+    autor: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class TodoTarefaCreate(BaseModel):
+    titulo: str
+    descricao: Optional[str] = ""
+    status: str = "a_fazer"
+    responsavel: Optional[str] = None
+    autor: Optional[str] = None
+
+
+class TodoTarefaUpdate(BaseModel):
+    titulo: Optional[str] = None
+    descricao: Optional[str] = None
+    status: Optional[str] = None
+    posicao: Optional[int] = None
+    responsavel: Optional[str] = None
+
+
 class FlowDiagramUpdate(BaseModel):
     fluxo: Optional[str] = None
     kind: Optional[str] = None

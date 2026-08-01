@@ -1205,4 +1205,101 @@ body.inline-connecting * { cursor:crosshair !important; }
   color:var(--text-2); background:var(--surface-3); border:1px solid var(--line-2); border-radius:999px; padding:3px 11px;
 }
 .estagio-nome { font-size:13px; font-weight:600; color:var(--text); }
+
+/* ---------- module tabs (Dispatcher / Gestão de Ativos / Agenda / Todo) ---------- */
+.module-tabs {
+  display:inline-flex; gap:4px; margin-bottom:18px; padding:4px; flex-wrap:wrap;
+  background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow-1);
+}
+.module-tab {
+  display:inline-flex; align-items:center; gap:8px; cursor:pointer;
+  border:none; background:transparent; color:var(--text-2);
+  border-radius:9px; padding:9px 18px; font-size:13.5px; font-weight:600; font-family:'Roboto',sans-serif;
+  transition:background .15s var(--ease), color .15s var(--ease), box-shadow .15s var(--ease);
+}
+.module-tab:hover { color:var(--text); background:var(--surface-2); }
+.module-tab.active { color:#fff; background:var(--grad-mix); box-shadow:0 6px 16px -8px rgba(150,10,156,.45); }
+.module-tab[hidden] { display:none; }
+.module-tab-soon {
+  font-size:9.5px; font-weight:700; letter-spacing:.4px; text-transform:uppercase;
+  background:var(--surface-3); color:var(--text-3); border-radius:999px; padding:2px 8px;
+}
+.module-tab.active .module-tab-soon { background:rgba(255,255,255,.22); color:#fff; }
+#module-ativos[hidden], #module-agenda[hidden], #module-todo[hidden], #module-dispatcher[hidden] { display:none; }
+
+.module-empty {
+  background:var(--surface); border:1px dashed var(--line-2); border-radius:var(--radius-lg);
+  padding:70px 40px; text-align:center; box-shadow:var(--shadow-1);
+}
+.module-empty h2 { font-size:22px; font-weight:700; color:var(--text); margin-bottom:10px; }
+.module-empty p { font-size:14px; color:var(--text-2); max-width:480px; margin:0 auto; line-height:1.65; }
+
+/* ---------- Agenda ---------- */
+.agenda-nav { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
+.agenda-week-label { font-size:14px; font-weight:600; color:var(--text); min-width:220px; }
+.agenda-grid { display:grid; grid-template-columns:repeat(7, minmax(150px, 1fr)); gap:12px; overflow-x:auto; }
+.agenda-day {
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  padding:12px; display:flex; flex-direction:column; gap:8px; min-height:160px;
+}
+.agenda-day.is-today { border-color:var(--f-blue); box-shadow:0 0 0 3px rgba(0,84,236,.10); }
+.agenda-day-head { display:flex; align-items:center; justify-content:space-between; }
+.agenda-day-name { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text-3); }
+.agenda-day-num { font-size:15px; font-weight:700; color:var(--text); font-family:'Roboto Slab',serif; }
+.agenda-day.is-today .agenda-day-num { color:var(--f-blue); }
+.agenda-day-add {
+  align-self:flex-start; border:none; background:transparent; color:var(--text-3); cursor:pointer;
+  font-size:11.5px; font-weight:600; padding:2px 0; transition:color .15s var(--ease);
+}
+.agenda-day-add:hover { color:var(--f-blue); }
+.agenda-day-empty { font-size:11px; color:var(--text-3); font-style:italic; }
+.agenda-evento {
+  background:var(--surface-2); border:1px solid var(--line); border-left:3px solid var(--f-blue);
+  border-radius:9px; padding:8px 10px; cursor:pointer; transition:box-shadow .15s var(--ease);
+}
+.agenda-evento:hover { box-shadow:var(--shadow-1); }
+.agenda-evento-hora { font-size:10px; font-weight:700; color:var(--f-blue); font-family:'Roboto Mono',monospace; }
+.agenda-evento-titulo { font-size:12.5px; font-weight:600; color:var(--text); line-height:1.4; }
+
+/* ---------- Todo / Kanban ---------- */
+.kanban-board { display:grid; grid-template-columns:repeat(3, 1fr); gap:16px; align-items:start; }
+.kanban-col {
+  background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-lg);
+  padding:14px; display:flex; flex-direction:column; gap:10px; min-height:220px;
+}
+.kanban-col-head { display:flex; align-items:center; justify-content:space-between; padding:0 2px; }
+.kanban-col-head h3 { font-size:13.5px; font-weight:700; color:var(--text); text-transform:uppercase; letter-spacing:.4px; }
+.kanban-count {
+  font-size:11px; font-weight:700; color:var(--text-2); background:var(--surface-3);
+  border-radius:999px; padding:2px 9px;
+}
+.kanban-list { display:flex; flex-direction:column; gap:10px; min-height:40px; }
+.kanban-card {
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  padding:12px 14px; box-shadow:var(--shadow-1); transition:box-shadow .15s var(--ease);
+}
+.kanban-card:hover { box-shadow:var(--shadow-2); }
+.kanban-card-title { font-size:13px; font-weight:600; color:var(--text); line-height:1.45; cursor:pointer; }
+.kanban-card-title:hover { color:var(--f-blue); }
+.kanban-card-resp { font-size:11px; color:var(--text-3); margin-top:4px; }
+.kanban-card-actions { display:flex; align-items:center; gap:6px; margin-top:10px; }
+.kanban-move {
+  width:24px; height:24px; border-radius:7px; border:1px solid var(--line-2); background:var(--surface-2);
+  color:var(--text-2); cursor:pointer; display:inline-flex; align-items:center; justify-content:center;
+  font-size:13px; line-height:1; transition:all .15s var(--ease);
+}
+.kanban-move:hover { background:var(--surface-3); color:var(--text); }
+.kanban-move:disabled { opacity:.3; cursor:default; }
+.kanban-card-del {
+  margin-left:auto; width:24px; height:24px; border-radius:7px; border:1px solid var(--line-2); background:var(--surface-2);
+  color:var(--text-3); cursor:pointer; display:inline-flex; align-items:center; justify-content:center;
+  transition:all .15s var(--ease);
+}
+.kanban-card-del:hover { color:var(--bad); border-color:var(--bad); background:var(--bad-bg); }
+.kanban-empty { font-size:11.5px; color:var(--text-3); font-style:italic; padding:6px 2px; }
+
+@media (max-width: 900px) {
+  .agenda-grid { grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); }
+  .kanban-board { grid-template-columns:1fr; }
+}
 .estagio-actions { display:inline-flex; gap:6px; margin-left:auto; }

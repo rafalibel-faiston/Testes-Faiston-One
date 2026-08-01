@@ -193,6 +193,37 @@ class TeamView(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
 
+class AgendaEvento(Base):
+    """Compromisso da agenda semanal do time Faiston — só aparece pra quem
+    entra como Faiston, é compartilhada pelo time todo (sem login por pessoa)."""
+    __tablename__ = "agenda_eventos"
+
+    id = Column(Integer, primary_key=True)
+    titulo = Column(String, nullable=False)
+    descricao = Column(Text, nullable=True, default="")
+    data = Column(String, nullable=False)          # "AAAA-MM-DD"
+    hora_inicio = Column(String, nullable=True)    # "HH:MM"
+    hora_fim = Column(String, nullable=True)        # "HH:MM"
+    autor = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
+class TodoTarefa(Base):
+    """Cartão do quadro Kanban (A Fazer / Fazendo / Feito) do time Faiston."""
+    __tablename__ = "todo_tarefas"
+
+    id = Column(Integer, primary_key=True)
+    titulo = Column(String, nullable=False)
+    descricao = Column(Text, nullable=True, default="")
+    status = Column(String, nullable=False, default="a_fazer", server_default="a_fazer")
+    posicao = Column(Integer, nullable=False, default=0, server_default="0")
+    responsavel = Column(String, nullable=True)
+    autor = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
 class Observation(Base):
     """Uma nota do historico de observacoes de um caso — cada uma com seu proprio autor,
     diferente do campo antigo `TestCase.observacao` (unico, qualquer um sobrescrevia)."""

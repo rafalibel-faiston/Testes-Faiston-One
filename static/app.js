@@ -2595,6 +2595,7 @@
     applyPerfilChip();
     closePerfilGate();
     loadActivities();   // recarrega o "visto" do time escolhido
+    if (typeof applyModuleVisibility === "function") applyModuleVisibility();
   }
 
   $$(".perfil-choice").forEach((b) => {
@@ -2748,8 +2749,302 @@
   activityModal.addEventListener("click", (e) => { if (e.target.id === "activity-modal") closeActivityModal(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !activityModal.hidden) closeActivityModal(); });
 
+  // ---------------- módulos (Dispatcher / Gestão de Ativos / Agenda / Todo) ----------------
+  // Ativos, Agenda e Todo só existem pro perfil Faiston — a LP só acompanha o
+  // Dispatcher (fluxos e resultados dos testes).
+  let currentModule = "dispatcher";
+
+  function applyModuleVisibility() {
+    const isFaiston = PERFIL === "Faiston";
+    $("#module-tab-ativos").hidden = !isFaiston;
+    $("#module-tab-agenda").hidden = !isFaiston;
+    $("#module-tab-todo").hidden = !isFaiston;
+    if (!isFaiston && currentModule !== "dispatcher") switchModule("dispatcher");
+  }
+
+  function switchModule(mod) {
+    currentModule = mod;
+    $$(".module-tab").forEach((t) => {
+      const on = t.dataset.module === mod;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    $("#module-dispatcher").hidden = mod !== "dispatcher";
+    $("#module-ativos").hidden = mod !== "ativos";
+    $("#module-agenda").hidden = mod !== "agenda";
+    $("#module-todo").hidden = mod !== "todo";
+    if (mod === "agenda") loadAgenda();
+    if (mod === "todo") loadTodo();
+  }
+
+  $$(".module-tab").forEach((t) => t.addEventListener("click", () => {
+    if (t.hidden) return;
+    switchModule(t.dataset.module);
+  }));
+
+  // ---------------- Agenda (compromissos da semana do time Faiston) ----------------
+  let AGENDA_EVENTS = [];
+  const DIA_NOMES = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+  function startOfWeek(d) {
+    const date = new Date(d);
+    const day = date.getDay();               // 0 = domingo
+    const diff = (day === 0 ? -6 : 1) - day;  // volta pra segunda-feira
+    date.setDate(date.getDate() + diff);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }
+  function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+  function isoDate(d) {
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  let agendaWeekStart = startOfWeek(new Date());
+
+  async function loadAgenda() {
+    const start = agendaWeekStart, end = addDays(start, 6);
+    try {
+      AGENDA_EVENTS = await api(`/api/agenda?inicio=${isoDate(start)}&fim=${isoDate(end)}`);
+    } catch (e) { AGENDA_EVENTS = []; }
+    renderAgenda();
+  }
+
+  function eventoCard(ev) {
+    const hora = ev.hora_inicio ? esc(ev.hora_inicio) + (ev.hora_fim ? "–" + esc(ev.hora_fim) : "") : "";
+    return `<div class="agenda-evento" data-id="${ev.id}">
+      ${hora ? `<div class="agenda-evento-hora">${hora}</div>` : ""}
+      <div class="agenda-evento-titulo">${esc(ev.titulo)}</div>
+    </div>`;
+  }
+
+  function renderAgenda() {
+    const start = agendaWeekStart, end = addDays(start, 6);
+    const fmtShort = (d) => `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+    $("#agenda-week-label").textContent = `${fmtShort(start)} — ${fmtShort(end)}`;
+    const todayIso = isoDate(new Date());
+    let html = "";
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(start, i);
+      const iso = isoDate(d);
+      const dayEvents = AGENDA_EVENTS.filter((e) => e.data === iso)
+        .sort((a, b) => (a.hora_inicio || "").localeCompare(b.hora_inicio || ""));
+      html += `<div class="agenda-day ${iso === todayIso ? "is-today" : ""}">
+        <div class="agenda-day-head">
+          <span class="agenda-day-name">${DIA_NOMES[d.getDay()]}</span>
+          <span class="agenda-day-num">${d.getDate()}</span>
+        </div>
+        <button type="button" class="agenda-day-add" data-date="${iso}">+ adicionar</button>
+        ${dayEvents.length ? dayEvents.map(eventoCard).join("") : '<div class="agenda-day-empty">Nada programado</div>'}
+      </div>`;
+    }
+    const grid = $("#agenda-grid");
+    grid.innerHTML = html;
+    $$(".agenda-day-add", grid).forEach((b) => b.addEventListener("click", () => openEventoModal(null, b.dataset.date)));
+    $$(".agenda-evento", grid).forEach((el) => el.addEventListener("click", () => openEventoModal(Number(el.dataset.id))));
+  }
+
+  $("#agenda-prev").addEventListener("click", () => { agendaWeekStart = addDays(agendaWeekStart, -7); loadAgenda(); });
+  $("#agenda-next").addEventListener("click", () => { agendaWeekStart = addDays(agendaWeekStart, 7); loadAgenda(); });
+  $("#agenda-today").addEventListener("click", () => { agendaWeekStart = startOfWeek(new Date()); loadAgenda(); });
+
+  let editingEventoId = null;
+  const eventoModal = $("#evento-modal");
+  const eventoForm = $("#evento-form");
+
+  function openEventoModal(id, presetDate) {
+    editingEventoId = id || null;
+    eventoForm.reset();
+    $("#evento-delete").hidden = !id;
+    const ev = id ? AGENDA_EVENTS.find((e) => e.id === id) : null;
+    $("#evento-modal-title").textContent = id ? "Editar compromisso" : "Novo compromisso";
+    if (ev) {
+      eventoForm.titulo.value = ev.titulo;
+      eventoForm.data.value = ev.data;
+      eventoForm.hora_inicio.value = ev.hora_inicio || "";
+      eventoForm.hora_fim.value = ev.hora_fim || "";
+      eventoForm.descricao.value = ev.descricao || "";
+    } else {
+      eventoForm.data.value = presetDate || isoDate(new Date());
+    }
+    eventoModal.hidden = false;
+  }
+  function closeEventoModal() { eventoModal.hidden = true; editingEventoId = null; }
+
+  $("#btn-add-evento").addEventListener("click", () => openEventoModal(null, isoDate(new Date())));
+  $("#evento-cancel").addEventListener("click", closeEventoModal);
+  $("#evento-modal-close").addEventListener("click", closeEventoModal);
+  eventoModal.addEventListener("click", (e) => { if (e.target.id === "evento-modal") closeEventoModal(); });
+
+  eventoForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(eventoForm);
+    const titulo = (fd.get("titulo") || "").trim();
+    const data = fd.get("data");
+    if (!titulo || !data) return;
+    const payload = {
+      titulo, data,
+      hora_inicio: fd.get("hora_inicio") || null,
+      hora_fim: fd.get("hora_fim") || null,
+      descricao: fd.get("descricao") || "",
+    };
+    try {
+      if (editingEventoId) {
+        await api(`/api/agenda/${editingEventoId}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        });
+      } else {
+        payload.autor = testerName() || undefined;
+        await api("/api/agenda", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        });
+      }
+      closeEventoModal();
+      loadAgenda();
+      toast("Compromisso salvo.");
+    } catch (err) { toast("Erro ao salvar: " + err.message, true); }
+  });
+
+  $("#evento-delete").addEventListener("click", async () => {
+    if (!editingEventoId || !confirm("Excluir este compromisso?")) return;
+    try {
+      await api(`/api/agenda/${editingEventoId}`, { method: "DELETE" });
+      closeEventoModal();
+      loadAgenda();
+      toast("Compromisso excluído.");
+    } catch (err) { toast("Erro ao excluir: " + err.message, true); }
+  });
+
+  // ---------------- Todo (quadro Kanban do time Faiston) ----------------
+  let TODO_TASKS = [];
+  const TODO_STATUS_LABEL = { a_fazer: "A Fazer", fazendo: "Fazendo", feito: "Feito" };
+  const TODO_STATUS_ORDER = ["a_fazer", "fazendo", "feito"];
+
+  async function loadTodo() {
+    try {
+      TODO_TASKS = await api("/api/todo");
+    } catch (e) { TODO_TASKS = []; }
+    renderTodo();
+  }
+
+  function tarefaCard(t, status) {
+    const idx = TODO_STATUS_ORDER.indexOf(status);
+    const canLeft = idx > 0, canRight = idx < TODO_STATUS_ORDER.length - 1;
+    return `<div class="kanban-card" data-id="${t.id}">
+      <div class="kanban-card-title">${esc(t.titulo)}</div>
+      ${t.responsavel ? `<div class="kanban-card-resp">${esc(t.responsavel)}</div>` : ""}
+      <div class="kanban-card-actions">
+        <button type="button" class="kanban-move" data-dir="left" ${canLeft ? "" : "disabled"}
+          title="${canLeft ? "Mover pra " + esc(TODO_STATUS_LABEL[TODO_STATUS_ORDER[idx - 1]]) : ""}">‹</button>
+        <button type="button" class="kanban-move" data-dir="right" ${canRight ? "" : "disabled"}
+          title="${canRight ? "Mover pra " + esc(TODO_STATUS_LABEL[TODO_STATUS_ORDER[idx + 1]]) : ""}">›</button>
+        <button type="button" class="kanban-card-del" aria-label="Excluir tarefa">✕</button>
+      </div>
+    </div>`;
+  }
+
+  function renderTodo() {
+    const board = $("#kanban-board");
+    TODO_STATUS_ORDER.forEach((status) => {
+      const tasks = TODO_TASKS.filter((t) => t.status === status).sort((a, b) => a.posicao - b.posicao);
+      $(`#kanban-count-${status}`).textContent = tasks.length;
+      $(`#kanban-list-${status}`).innerHTML = tasks.length
+        ? tasks.map((t) => tarefaCard(t, status)).join("")
+        : '<div class="kanban-empty">Nada por aqui</div>';
+    });
+    $$(".kanban-card", board).forEach((card) => {
+      const id = Number(card.dataset.id);
+      $(".kanban-card-title", card).addEventListener("click", () => openTarefaModal(id));
+      $$(".kanban-move", card).forEach((btn) => btn.addEventListener("click", () => moveTarefa(id, btn.dataset.dir)));
+      $(".kanban-card-del", card).addEventListener("click", () => deleteTarefa(id));
+    });
+  }
+
+  async function moveTarefa(id, dir) {
+    const t = TODO_TASKS.find((x) => x.id === id);
+    if (!t) return;
+    const idx = TODO_STATUS_ORDER.indexOf(t.status);
+    const newIdx = dir === "left" ? idx - 1 : idx + 1;
+    if (newIdx < 0 || newIdx >= TODO_STATUS_ORDER.length) return;
+    try {
+      await api(`/api/todo/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: TODO_STATUS_ORDER[newIdx] }),
+      });
+      loadTodo();
+    } catch (e) { toast("Erro ao mover: " + e.message, true); }
+  }
+
+  async function deleteTarefa(id) {
+    if (!confirm("Excluir esta tarefa?")) return false;
+    try {
+      await api(`/api/todo/${id}`, { method: "DELETE" });
+      loadTodo();
+      toast("Tarefa excluída.");
+      return true;
+    } catch (e) { toast("Erro ao excluir: " + e.message, true); return false; }
+  }
+
+  let editingTarefaId = null;
+  const tarefaModal = $("#tarefa-modal");
+  const tarefaForm = $("#tarefa-form");
+
+  function openTarefaModal(id) {
+    editingTarefaId = id || null;
+    tarefaForm.reset();
+    $("#tarefa-delete").hidden = !id;
+    const t = id ? TODO_TASKS.find((x) => x.id === id) : null;
+    $("#tarefa-modal-title").textContent = id ? "Editar tarefa" : "Nova tarefa";
+    if (t) {
+      tarefaForm.titulo.value = t.titulo;
+      tarefaForm.responsavel.value = t.responsavel || "";
+      tarefaForm.descricao.value = t.descricao || "";
+    }
+    tarefaModal.hidden = false;
+  }
+  function closeTarefaModal() { tarefaModal.hidden = true; editingTarefaId = null; }
+
+  $("#btn-add-tarefa").addEventListener("click", () => openTarefaModal(null));
+  $("#tarefa-cancel").addEventListener("click", closeTarefaModal);
+  $("#tarefa-modal-close").addEventListener("click", closeTarefaModal);
+  tarefaModal.addEventListener("click", (e) => { if (e.target.id === "tarefa-modal") closeTarefaModal(); });
+
+  tarefaForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(tarefaForm);
+    const titulo = (fd.get("titulo") || "").trim();
+    if (!titulo) return;
+    const payload = {
+      titulo,
+      responsavel: fd.get("responsavel") || null,
+      descricao: fd.get("descricao") || "",
+    };
+    try {
+      if (editingTarefaId) {
+        await api(`/api/todo/${editingTarefaId}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        });
+      } else {
+        payload.autor = testerName() || undefined;
+        await api("/api/todo", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        });
+      }
+      closeTarefaModal();
+      loadTodo();
+      toast("Tarefa salva.");
+    } catch (err) { toast("Erro ao salvar: " + err.message, true); }
+  });
+
+  $("#tarefa-delete").addEventListener("click", async () => {
+    if (!editingTarefaId) return;
+    const ok = await deleteTarefa(editingTarefaId);
+    if (ok) closeTarefaModal();
+  });
+
   // na entrada: aplica o chip e, se ninguém escolheu ainda, força a escolha do perfil
   applyPerfilChip();
+  applyModuleVisibility();
   if (!PERFIL) openPerfilGate(false);
 
   // ---------------- tester name ----------------

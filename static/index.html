@@ -69,6 +69,17 @@
 
 <main>
 
+  <nav class="module-tabs" id="module-tabs" aria-label="Selecionar módulo">
+    <button type="button" class="module-tab active" data-module="dispatcher" aria-selected="true">Dispatcher</button>
+    <button type="button" class="module-tab" data-module="ativos" id="module-tab-ativos" aria-selected="false" hidden>
+      Gestão de Ativos <span class="module-tab-soon">em breve</span>
+    </button>
+    <button type="button" class="module-tab" data-module="agenda" id="module-tab-agenda" aria-selected="false" hidden>Agenda</button>
+    <button type="button" class="module-tab" data-module="todo" id="module-tab-todo" aria-selected="false" hidden>Todo</button>
+  </nav>
+
+  <div id="module-dispatcher">
+
   <nav class="flow-tabs" id="flow-tabs" aria-label="Selecionar fluxo de teste">
     <button type="button" class="flow-tab active" data-flow="C" aria-selected="true">
       <span class="flow-tab-name">Fluxo C</span>
@@ -278,6 +289,63 @@
     </div>
     <div id="situacoes"></div>
   </div><!-- /view-situacoes -->
+
+  </div><!-- /module-dispatcher -->
+
+  <div id="module-ativos" hidden>
+    <section class="module-empty">
+      <h2>Gestão de Ativos</h2>
+      <p>Em breve. Esse módulo vai reunir o controle de ativos do Faiston One, separado do Dispatcher.</p>
+    </section>
+  </div>
+
+  <div id="module-agenda" hidden>
+    <section class="diagrams-head">
+      <div class="diagrams-head-copy">
+        <h2>Agenda da semana</h2>
+        <p>Compromissos e tarefas programadas do time Faiston. Agenda única do time —
+        o que alguém colocar aqui, todo mundo da Faiston vê.</p>
+      </div>
+      <button type="button" class="add-btn" id="btn-add-evento">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Novo compromisso
+      </button>
+    </section>
+    <div class="agenda-nav">
+      <button type="button" class="btn-ghost" id="agenda-prev" aria-label="Semana anterior">‹</button>
+      <span class="agenda-week-label" id="agenda-week-label">—</span>
+      <button type="button" class="btn-ghost" id="agenda-next" aria-label="Próxima semana">›</button>
+      <button type="button" class="btn-ghost" id="agenda-today">Hoje</button>
+    </div>
+    <div class="agenda-grid" id="agenda-grid"></div>
+  </div>
+
+  <div id="module-todo" hidden>
+    <section class="diagrams-head">
+      <div class="diagrams-head-copy">
+        <h2>Todo — quadro Kanban</h2>
+        <p>Tarefas do time Faiston pra acompanhar o projeto, em três colunas.</p>
+      </div>
+      <button type="button" class="add-btn" id="btn-add-tarefa">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nova tarefa
+      </button>
+    </section>
+    <div class="kanban-board" id="kanban-board">
+      <div class="kanban-col" data-status="a_fazer">
+        <div class="kanban-col-head"><h3>A Fazer</h3><span class="kanban-count" id="kanban-count-a_fazer">0</span></div>
+        <div class="kanban-list" id="kanban-list-a_fazer"></div>
+      </div>
+      <div class="kanban-col" data-status="fazendo">
+        <div class="kanban-col-head"><h3>Fazendo</h3><span class="kanban-count" id="kanban-count-fazendo">0</span></div>
+        <div class="kanban-list" id="kanban-list-fazendo"></div>
+      </div>
+      <div class="kanban-col" data-status="feito">
+        <div class="kanban-col-head"><h3>Feito</h3><span class="kanban-count" id="kanban-count-feito">0</span></div>
+        <div class="kanban-list" id="kanban-list-feito"></div>
+      </div>
+    </div>
+  </div>
 
 </main>
 
@@ -555,6 +623,64 @@
       <div class="modal-actions">
         <button type="button" class="btn-ghost" id="estagio-modal-cancel">Cancelar</button>
         <button type="submit" class="btn-primary" id="estagio-modal-save">Salvar estágio</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal" id="evento-modal" hidden aria-modal="true" role="dialog">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3 id="evento-modal-title">Novo compromisso</h3>
+      <button type="button" class="modal-close" id="evento-modal-close" aria-label="Fechar">✕</button>
+    </div>
+    <form id="evento-form" class="modal-body">
+      <label class="fld fld-wide">Título <b>*</b>
+        <input name="titulo" placeholder="ex.: Reunião de alinhamento" required>
+      </label>
+      <div class="form-grid">
+        <label class="fld">Data <b>*</b>
+          <input type="date" name="data" required>
+        </label>
+        <label class="fld">Início
+          <input type="time" name="hora_inicio">
+        </label>
+        <label class="fld">Fim
+          <input type="time" name="hora_fim">
+        </label>
+      </div>
+      <label class="fld">Notas
+        <textarea name="descricao" rows="2" placeholder="detalhes (opcional)"></textarea>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="evento-delete" hidden>Excluir</button>
+        <button type="button" class="btn-ghost" id="evento-cancel">Cancelar</button>
+        <button type="submit" class="btn-primary" id="evento-save">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal" id="tarefa-modal" hidden aria-modal="true" role="dialog">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3 id="tarefa-modal-title">Nova tarefa</h3>
+      <button type="button" class="modal-close" id="tarefa-modal-close" aria-label="Fechar">✕</button>
+    </div>
+    <form id="tarefa-form" class="modal-body">
+      <label class="fld fld-wide">Título <b>*</b>
+        <input name="titulo" placeholder="ex.: Levantar requisitos do módulo" required>
+      </label>
+      <label class="fld">Responsável
+        <input name="responsavel" placeholder="quem vai fazer (opcional)" autocomplete="off">
+      </label>
+      <label class="fld">Descrição
+        <textarea name="descricao" rows="3" placeholder="detalhes (opcional)"></textarea>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="tarefa-delete" hidden>Excluir</button>
+        <button type="button" class="btn-ghost" id="tarefa-cancel">Cancelar</button>
+        <button type="submit" class="btn-primary" id="tarefa-save">Salvar</button>
       </div>
     </form>
   </div>
