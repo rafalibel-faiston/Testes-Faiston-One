@@ -2566,48 +2566,69 @@
   let PERFIL = localStorage.getItem(PERFIL_KEY) || "";
   const perfilModal = $("#perfil-modal");
 
-  async function tentarEntrar(perfil, senha) {
-  try {
-    const r = await api("/api/perfil/entrar", {
-      method: "POST",
-      body: JSON.stringify({ perfil, senha }),
-    });
-    return !!r.ok;
-  } catch (e) { return false; }
-}
-
-function setPerfil(p) {
-  PERFIL = p;
-  localStorage.setItem(PERFIL_KEY, p);
-  applyPerfilChip();
-  closePerfilGate();
-  loadActivities();
-}
-
-$$(".perfil-choice").forEach((b) => {
-  b.addEventListener("click", async () => {
-    const p = b.dataset.perfil;
-    if (p === "Faiston") {
-      $("#perfil-senha-box").hidden = false;
-      $("#perfil-senha-input").focus();
-      return;
-    }
-    setPerfil(p);
-  });
-});
-
-$("#perfil-senha-confirmar").addEventListener("click", async () => {
-  const senha = $("#perfil-senha-input").value;
-  const ok = await tentarEntrar("Faiston", senha);
-  if (ok) {
-    setPerfil("Faiston");
-    $("#perfil-senha-box").hidden = true;
-    $("#perfil-senha-input").value = "";
-    $("#perfil-senha-erro").hidden = true;
-  } else {
-    $("#perfil-senha-erro").hidden = false;
+  function applyPerfilChip() {
+    const nameEl = $("#perfil-name"), dot = $("#perfil-dot");
+    if (nameEl) nameEl.textContent = PERFIL ? PERFIL_LABEL[PERFIL] : "escolher";
+    if (dot) dot.className = "perfil-dot" + (PERFIL ? (PERFIL === "LP" ? " lp" : " fai") : "");
   }
-});
+  function openPerfilGate(dismissable) {
+    $("#perfil-modal-close").hidden = !dismissable;
+    perfilModal.dataset.dismissable = dismissable ? "1" : "";
+    perfilModal.hidden = false;
+  }
+  function closePerfilGate() { perfilModal.hidden = true; }
+
+  async function tentarEntrar(perfil, senha) {
+    try {
+      const r = await api("/api/perfil/entrar", {
+        method: "POST",
+        body: JSON.stringify({ perfil, senha }),
+      });
+      return !!r.ok;
+    } catch (e) { return false; }
+  }
+
+  function setPerfil(p) {
+    PERFIL = p;
+    localStorage.setItem(PERFIL_KEY, p);
+    applyPerfilChip();
+    closePerfilGate();
+    loadActivities();   // recarrega o "visto" do time escolhido
+  }
+
+  $$(".perfil-choice").forEach((b) => {
+    b.addEventListener("click", async () => {
+      const p = b.dataset.perfil;
+      if (p === "Faiston") {
+        $("#perfil-senha-box").hidden = false;
+        $("#perfil-senha-input").focus();
+        return;
+      }
+      setPerfil(p);
+    });
+  });
+
+  async function confirmarSenhaFaiston() {
+    const senha = $("#perfil-senha-input").value;
+    const ok = await tentarEntrar("Faiston", senha);
+    if (ok) {
+      setPerfil("Faiston");
+      $("#perfil-senha-box").hidden = true;
+      $("#perfil-senha-input").value = "";
+      $("#perfil-senha-erro").hidden = true;
+    } else {
+      $("#perfil-senha-erro").hidden = false;
+    }
+  }
+  $("#perfil-senha-confirmar").addEventListener("click", confirmarSenhaFaiston);
+  $("#perfil-senha-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") confirmarSenhaFaiston();
+  });
+  $("#perfil-chip").addEventListener("click", () => openPerfilGate(true));
+  $("#perfil-modal-close").addEventListener("click", closePerfilGate);
+  perfilModal.addEventListener("click", (e) => {
+    if (e.target.id === "perfil-modal" && perfilModal.dataset.dismissable) closePerfilGate();
+  });
 
   // ---------------- novidades (trilha de atividades) ----------------
   // Cada mudança vira um evento no servidor. O "novo" é por TIME (perfil): o

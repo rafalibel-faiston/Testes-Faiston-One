@@ -136,6 +136,18 @@ h1,h2,h3 { font-family:'Roboto Slab',serif; }
 .perfil-choice-name { font-family:'Roboto Slab',serif; font-size:16px; font-weight:700; color:var(--text); }
 .perfil-choice-sub { font-size:11.5px; color:var(--text-3); }
 
+.perfil-senha { width:100%; margin-top:10px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.perfil-senha input {
+  flex:1; min-width:160px; padding:9px 12px; border-radius:var(--radius); border:1px solid var(--line-2);
+  background:var(--surface-2); color:var(--text); font-family:'Roboto',sans-serif; font-size:13.5px;
+}
+.perfil-senha input:focus { outline:none; border-color:var(--f-blue); }
+.perfil-senha button {
+  padding:9px 16px; border-radius:var(--radius); border:none; background:var(--f-blue); color:#fff;
+  font-family:'Roboto',sans-serif; font-weight:600; font-size:13.5px; cursor:pointer;
+}
+.perfil-senha-erro { width:100%; margin:0; color:var(--f-magenta); font-size:11.5px; }
+
 /* ---------- main layout ---------- */
 main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
 
