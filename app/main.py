@@ -13,6 +13,7 @@ from .routers import diagrams as diagrams_router
 from .routers import activity as activity_router
 from .routers import situacoes as situacoes_router
 from . import seed_data
+from .routers import auth as auth_router
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -44,6 +45,7 @@ app.include_router(export_router.router, prefix="/api")
 app.include_router(diagrams_router.router, prefix="/api")
 app.include_router(activity_router.router, prefix="/api")
 app.include_router(situacoes_router.router, prefix="/api")
+app.include_router(auth_router.router, prefix="/api")
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
