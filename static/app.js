@@ -2830,12 +2830,12 @@
       const dayEvents = AGENDA_EVENTS.filter((e) => e.data === iso)
         .sort((a, b) => (a.hora_inicio || "").localeCompare(b.hora_inicio || ""));
       html += `<div class="agenda-day ${iso === todayIso ? "is-today" : ""}">
+        <button type="button" class="agenda-day-add" data-date="${iso}" aria-label="Adicionar compromisso em ${iso}" title="Adicionar">+</button>
         <div class="agenda-day-head">
           <span class="agenda-day-name">${DIA_NOMES[d.getDay()]}</span>
           <span class="agenda-day-num">${d.getDate()}</span>
         </div>
-        <button type="button" class="agenda-day-add" data-date="${iso}">+ adicionar</button>
-        ${dayEvents.length ? dayEvents.map(eventoCard).join("") : '<div class="agenda-day-empty">Nada programado</div>'}
+        <div class="agenda-day-events">${dayEvents.map(eventoCard).join("")}</div>
       </div>`;
     }
     const grid = $("#agenda-grid");
