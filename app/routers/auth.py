@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 router = APIRouter(tags=["auth"])
 
-FAISTON_SENHA = os.getenv("FAISTON_SENHA", "")
+FAISTON_SENHA = os.getenv("FAISTON_SENHA", "").strip()
 
 
 class PerfilLogin(BaseModel):
@@ -19,4 +19,4 @@ def entrar_perfil(payload: PerfilLogin):
         return {"ok": True}
     if not FAISTON_SENHA:
         return {"ok": True}
-    return {"ok": payload.senha == FAISTON_SENHA}
+    return {"ok": payload.senha.strip() == FAISTON_SENHA}
