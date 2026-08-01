@@ -2582,6 +2582,7 @@
     try {
       const r = await api("/api/perfil/entrar", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ perfil, senha }),
       });
       return !!r.ok;
