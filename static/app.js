@@ -2007,6 +2007,10 @@
           <div class="status-btns">
             ${STATUSES.map((s) => `<button class="sbtn ${s === e.status ? "active" : ""}" data-s="${s}">${s}</button>`).join("")}
           </div>
+          ${e.status === "Reprovado" ? `<button type="button" class="adjust-btn" data-adjust title="Marca como corrigido e devolve pra fila de reteste">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            Ajustado, retestar
+          </button>` : ""}
         </div>
         <div class="case-meta">Testado por <span class="who">${e.testado_por ? esc(e.testado_por) : "—"}</span><span class="when">${e.testado_por ? " · " + fmtWhen(e.updated_at) : ""}</span></div>
         <div class="obs-row">
@@ -2261,6 +2265,23 @@
           toast(`Estágio → ${s}`);
         } catch (e) { toast("Erro ao salvar: " + e.message, true); }
       });
+    });
+
+    const adjustBtn = $("[data-adjust]", row);
+    if (adjustBtn) adjustBtn.addEventListener("click", async () => {
+      adjustBtn.disabled = true;
+      try {
+        await api(`/api/situacoes/${encodeURIComponent(sitCode)}/estagios/${estagioId}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "Não testado" }),
+        });
+        await api(`/api/situacoes/${encodeURIComponent(sitCode)}/estagios/${estagioId}/observacoes`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ texto: "Ajustado, pronto para novo teste.", autor: testerName() || "LP Digital" }),
+        });
+        await refreshSituacao(sitCode);
+        toast("Marcado como ajustado — volta pra fila de teste");
+      } catch (e) { toast("Erro ao marcar como ajustado: " + e.message, true); adjustBtn.disabled = false; }
     });
 
     const obsInput = $(".obs-input", row);
