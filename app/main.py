@@ -1,8 +1,10 @@
 import os
+import secrets
 import time
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .database import Base, SessionLocal, engine
@@ -16,6 +18,7 @@ from . import seed_data
 from .routers import auth as auth_router
 from .routers import agenda as agenda_router
 from .routers import todo as todo_router
+from .mcp_server import mcp as mcp_server
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -25,7 +28,30 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 # (sem essa env var) cai pro horario de start do processo, que muda a cada reload.
 APP_VERSION = os.getenv("RAILWAY_GIT_COMMIT_SHA", str(int(time.time())))[:12]
 
-app = FastAPI(title="Fluxo C — Console de Teste (Faiston)")
+# token exigido pra falar com o servidor MCP em /mcp — sem isso, qualquer um com
+# a URL pública do Railway conseguiria ler/editar os dados de teste via Claude.
+MCP_TOKEN = os.getenv("MCP_TOKEN", "").strip()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with mcp_server.session_manager.run():
+        yield
+
+
+app = FastAPI(title="Fluxo C — Console de Teste (Faiston)", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def mcp_auth(request: Request, call_next):
+    if request.url.path.startswith("/mcp"):
+        if not MCP_TOKEN:
+            return JSONResponse({"error": "MCP_TOKEN não configurado no servidor."}, status_code=503)
+        auth_header = request.headers.get("authorization", "")
+        token = auth_header[7:] if auth_header.lower().startswith("bearer ") else request.query_params.get("token", "")
+        if not secrets.compare_digest(token, MCP_TOKEN):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+    return await call_next(request)
 
 Base.metadata.create_all(bind=engine)
 # adiciona colunas novas em bancos que já existem (antes de qualquer query ORM)
@@ -51,6 +77,7 @@ app.include_router(auth_router.router, prefix="/api")
 app.include_router(agenda_router.router, prefix="/api")
 app.include_router(todo_router.router, prefix="/api")
 
+app.mount("/mcp", mcp_server.streamable_http_app())
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 

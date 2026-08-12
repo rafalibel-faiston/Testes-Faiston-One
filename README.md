@@ -59,9 +59,50 @@ app/
   schemas.py            # Pydantic
   seed_data.py           # os 51 casos de teste (fonte: dashboard LP 02/07) + migração de observações antigas
   routers/cases.py        # API: listar/atualizar casos, observações, upload/download/remover print, resumo
+  mcp_server.py           # servidor MCP (ver seção "Conectar no Claude/Cowork" abaixo)
 static/
   index.html, style.css, app.js   # frontend
 ```
+
+## Conectar no Claude/Cowork via MCP
+
+O app expõe um servidor MCP em `/mcp` com um subconjunto das operações (listar
+casos, ver detalhe, atualizar status, adicionar observação, resumo de execução
+e o quadro de tarefas), pra dar pra pedir essas coisas em linguagem natural
+direto do Claude, sem abrir a tela.
+
+### 1. Configurar o token
+
+A rota `/mcp` exige um token (senão responde 401/503) — sem isso qualquer um
+com a URL pública conseguiria ler/editar os dados de teste.
+
+- **Local**: defina `MCP_TOKEN` no seu `.env` (gere um valor com
+  `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`).
+- **Railway**: no serviço web → aba **Variables** → **New Variable** →
+  `MCP_TOKEN` com o mesmo valor gerado. Redeploy.
+
+### 2. Adicionar o conector
+
+Com o app rodando (local ou no domínio do Railway), a URL do servidor MCP é
+`https://<seu-dominio>/mcp/` (repare na barra final — sem ela o servidor
+responde um redirect 307 pra essa URL).
+
+- **Claude Code (CLI)**:
+  ```bash
+  claude mcp add --transport http fluxo-c https://<seu-dominio>/mcp/ \
+    --header "Authorization: Bearer <MCP_TOKEN>"
+  ```
+- **Claude.ai / Claude Cowork (Settings → Connectors → Add custom connector)**:
+  cole a URL `https://<seu-dominio>/mcp/`. Se a tela pedir um header de
+  autenticação, use `Authorization: Bearer <MCP_TOKEN>`; se não houver esse
+  campo, use a URL com o token na query string:
+  `https://<seu-dominio>/mcp/?token=<MCP_TOKEN>`.
+
+Depois disso as ferramentas (`listar_casos`, `obter_caso`,
+`atualizar_status_caso`, `adicionar_observacao`, `resumo_execucao`,
+`listar_tarefas`, `criar_tarefa`) ficam disponíveis pra pedir direto na
+conversa, tipo "marca o FC-12 como aprovado" ou "lista os casos reprovados do
+Grupo B".
 
 ## API
 
