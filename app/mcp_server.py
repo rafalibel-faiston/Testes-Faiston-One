@@ -12,6 +12,7 @@ import os
 import secrets
 import time
 from typing import Optional
+from urllib.parse import urlparse
 
 from mcp.server.auth.provider import (
     AccessToken,
@@ -21,6 +22,7 @@ from mcp.server.auth.provider import (
 )
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
@@ -145,6 +147,12 @@ class SimpleOAuthProvider:
 
 oauth_provider = SimpleOAuthProvider()
 
+# a proteção de DNS-rebinding do SDK, se deixada no padrão, só libera Host
+# "localhost"/"127.0.0.1" — sem isso o domínio real do Railway toma 421
+# Misdirected Request em toda chamada a /mcp. Libera explicitamente o host
+# público configurado (+ localhost, pra continuar funcionando em dev local).
+_public_netloc = urlparse(PUBLIC_BASE_URL).netloc
+
 mcp = FastMCP(
     "Fluxo C — Console de Teste (Faiston)",
     instructions=(
@@ -163,6 +171,11 @@ mcp = FastMCP(
             enabled=True, valid_scopes=["mcp"], default_scopes=["mcp"]
         ),
         revocation_options=RevocationOptions(enabled=True),
+    ),
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=[_public_netloc, f"{_public_netloc}:*", "127.0.0.1:*", "localhost:*", "[::1]:*"],
+        allowed_origins=[PUBLIC_BASE_URL, "http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"],
     ),
 )
 
