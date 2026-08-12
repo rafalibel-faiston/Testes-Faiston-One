@@ -3,8 +3,8 @@ import secrets
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .database import Base, SessionLocal, engine
@@ -18,7 +18,7 @@ from . import seed_data
 from .routers import auth as auth_router
 from .routers import agenda as agenda_router
 from .routers import todo as todo_router
-from .mcp_server import mcp as mcp_server
+from .mcp_server import mcp as mcp_server, oauth_provider, MCP_TOKEN
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -28,10 +28,6 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 # (sem essa env var) cai pro horario de start do processo, que muda a cada reload.
 APP_VERSION = os.getenv("RAILWAY_GIT_COMMIT_SHA", str(int(time.time())))[:12]
 
-# token exigido pra falar com o servidor MCP em /mcp — sem isso, qualquer um com
-# a URL pública do Railway conseguiria ler/editar os dados de teste via Claude.
-MCP_TOKEN = os.getenv("MCP_TOKEN", "").strip()
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -40,18 +36,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Fluxo C — Console de Teste (Faiston)", lifespan=lifespan)
-
-
-@app.middleware("http")
-async def mcp_auth(request: Request, call_next):
-    if request.url.path.startswith("/mcp"):
-        if not MCP_TOKEN:
-            return JSONResponse({"error": "MCP_TOKEN não configurado no servidor."}, status_code=503)
-        auth_header = request.headers.get("authorization", "")
-        token = auth_header[7:] if auth_header.lower().startswith("bearer ") else request.query_params.get("token", "")
-        if not secrets.compare_digest(token, MCP_TOKEN):
-            return JSONResponse({"error": "unauthorized"}, status_code=401)
-    return await call_next(request)
 
 Base.metadata.create_all(bind=engine)
 # adiciona colunas novas em bancos que já existem (antes de qualquer query ORM)
@@ -77,7 +61,6 @@ app.include_router(auth_router.router, prefix="/api")
 app.include_router(agenda_router.router, prefix="/api")
 app.include_router(todo_router.router, prefix="/api")
 
-app.mount("/mcp", mcp_server.streamable_http_app())
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
@@ -95,3 +78,52 @@ def index():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+def _login_page(request_id: str, erro: str = "") -> str:
+    erro_html = f'<p class="erro">{erro}</p>' if erro else ""
+    return f"""<!doctype html>
+<html lang="pt-br"><head><meta charset="utf-8">
+<title>Conectar — Fluxo C</title>
+<style>
+  body {{ font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0;
+          display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }}
+  form {{ background: #1e293b; padding: 2rem; border-radius: 12px; width: 320px; }}
+  h1 {{ font-size: 1.1rem; margin: 0 0 1rem; }}
+  input {{ width: 100%; box-sizing: border-box; padding: .6rem; border-radius: 6px;
+           border: 1px solid #334155; background: #0f172a; color: #e2e8f0; margin-bottom: 1rem; }}
+  button {{ width: 100%; padding: .6rem; border-radius: 6px; border: none;
+            background: #38bdf8; color: #0f172a; font-weight: 600; cursor: pointer; }}
+  .erro {{ color: #f87171; font-size: .85rem; margin: -.5rem 0 1rem; }}
+</style></head>
+<body>
+  <form method="post" action="/mcp-login">
+    <h1>Autorizar conexão com o Fluxo C — Console de Teste</h1>
+    <input type="hidden" name="request_id" value="{request_id}">
+    <input type="password" name="token" placeholder="Token de acesso (MCP_TOKEN)" autofocus>
+    {erro_html}
+    <button type="submit">Autorizar</button>
+  </form>
+</body></html>"""
+
+
+@app.get("/mcp-login")
+def mcp_login_form(request_id: str):
+    if not oauth_provider.peek_pending_request(request_id):
+        return HTMLResponse("Pedido de autorização expirado ou inválido. Tente vincular o conector de novo.", status_code=400)
+    return HTMLResponse(_login_page(request_id))
+
+
+@app.post("/mcp-login")
+def mcp_login_submit(request_id: str = Form(...), token: str = Form(...)):
+    if not oauth_provider.peek_pending_request(request_id):
+        return HTMLResponse("Pedido de autorização expirado ou inválido. Tente vincular o conector de novo.", status_code=400)
+    if not MCP_TOKEN or not secrets.compare_digest(token.strip(), MCP_TOKEN):
+        return HTMLResponse(_login_page(request_id, erro="Token incorreto."), status_code=401)
+    redirect_uri = oauth_provider.complete_authorization(request_id)
+    return RedirectResponse(redirect_uri, status_code=302)
+
+
+# montado por último, na raiz: só recebe o que nenhuma rota acima já respondeu
+# (endpoint MCP em /mcp, e as rotas OAuth /authorize, /token, /register, /.well-known/...)
+app.mount("/", mcp_server.streamable_http_app())

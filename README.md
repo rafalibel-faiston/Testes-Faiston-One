@@ -71,38 +71,51 @@ casos, ver detalhe, atualizar status, adicionar observação, resumo de execuç�
 e o quadro de tarefas), pra dar pra pedir essas coisas em linguagem natural
 direto do Claude, sem abrir a tela.
 
-### 1. Configurar o token
+O servidor MCP faz um mini fluxo OAuth: ao "Vincular" o conector, o Claude
+abre uma telinha (`/mcp-login`) pedindo o `MCP_TOKEN` como senha — só depois
+disso ele ganha acesso. Isso é necessário porque a tela de conectores do
+Claude/Cowork sempre tenta vincular via OAuth (não aceita um token solto na
+URL).
 
-A rota `/mcp` exige um token (senão responde 401/503) — sem isso qualquer um
-com a URL pública conseguiria ler/editar os dados de teste.
+### 1. Configurar as variáveis
 
-- **Local**: defina `MCP_TOKEN` no seu `.env` (gere um valor com
-  `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`).
-- **Railway**: no serviço web → aba **Variables** → **New Variable** →
-  `MCP_TOKEN` com o mesmo valor gerado. Redeploy.
+- **`MCP_TOKEN`** — a senha pedida na telinha de login.
+  - Local: defina no seu `.env` (gere um valor com
+    `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`).
+  - Railway: serviço web → aba **Variables** → **New Variable** → `MCP_TOKEN`.
+- **`PUBLIC_BASE_URL`** — a URL pública do app, sem barra no final (ex.:
+  `https://web-production-xxxx.up.railway.app`). Necessária pro OAuth saber
+  pra onde redirecionar; sem ela, o vínculo falha em produção.
+  - Railway: mesma aba **Variables** → `PUBLIC_BASE_URL` com o domínio do
+    serviço (Settings → Networking → o domínio gerado).
+
+Depois de configurar as duas, redeploy o serviço.
 
 ### 2. Adicionar o conector
 
 Com o app rodando (local ou no domínio do Railway), a URL do servidor MCP é
-`https://<seu-dominio>/mcp/` (repare na barra final — sem ela o servidor
-responde um redirect 307 pra essa URL).
+`https://<seu-dominio>/mcp`.
 
-- **Claude Code (CLI)**:
+- **Claude.ai / Claude Cowork (Settings → Conectores → Adicionar conector
+  personalizado)**: cole `https://<seu-dominio>/mcp` no campo de URL, deixe os
+  campos de OAuth Client ID/Secret em branco, e clique **Adicionar**. Na tela
+  seguinte ("Vincular"), o Claude abre a telinha de login — digite o
+  `MCP_TOKEN` e pronto.
+- **Claude Code (CLI)**, alternativa sem OAuth (usa header direto):
   ```bash
-  claude mcp add --transport http fluxo-c https://<seu-dominio>/mcp/ \
+  claude mcp add --transport http fluxo-c https://<seu-dominio>/mcp \
     --header "Authorization: Bearer <MCP_TOKEN>"
   ```
-- **Claude.ai / Claude Cowork (Settings → Connectors → Add custom connector)**:
-  cole a URL `https://<seu-dominio>/mcp/`. Se a tela pedir um header de
-  autenticação, use `Authorization: Bearer <MCP_TOKEN>`; se não houver esse
-  campo, use a URL com o token na query string:
-  `https://<seu-dominio>/mcp/?token=<MCP_TOKEN>`.
 
 Depois disso as ferramentas (`listar_casos`, `obter_caso`,
 `atualizar_status_caso`, `adicionar_observacao`, `resumo_execucao`,
 `listar_tarefas`, `criar_tarefa`) ficam disponíveis pra pedir direto na
 conversa, tipo "marca o FC-12 como aprovado" ou "lista os casos reprovados do
 Grupo B".
+
+Detalhe técnico: o "login" fica guardado em memória do processo — se o
+serviço reiniciar no Railway, o conector pode precisar ser vinculado de novo
+(o token de acesso emitido dura 30 dias, sem renovação automática).
 
 ## API
 
