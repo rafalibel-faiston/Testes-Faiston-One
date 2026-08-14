@@ -2794,7 +2794,7 @@
     $("#module-ativos").hidden = mod !== "ativos";
     $("#module-agenda").hidden = mod !== "agenda";
     $("#module-todo").hidden = mod !== "todo";
-    if (mod === "agenda") { loadAgenda(); loadPlanoBanner(); }
+    if (mod === "agenda") loadAgenda();
     if (mod === "todo") loadTodo();
   }
 
@@ -2834,9 +2834,6 @@
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
   function fmtShort(d) { return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`; }
-  function daysBetween(isoA, isoB) {
-    return Math.round((new Date(isoB + "T00:00:00") - new Date(isoA + "T00:00:00")) / 86400000);
-  }
   function monthGridRange(cursor) {
     const start = startOfWeek(startOfMonth(cursor));
     const end = addDays(startOfWeek(endOfMonth(cursor)), 6);
@@ -2855,42 +2852,19 @@
     renderAgenda();
   }
 
-  // ---- faixa de progresso do cronograma (do primeiro ao último "marco" cadastrado) ----
-  let PLANO_EVENTS = [];
-  async function loadPlanoBanner() {
-    try { PLANO_EVENTS = await api("/api/agenda"); } catch (e) { PLANO_EVENTS = []; }
-    renderPlanoBanner();
-  }
-  function renderPlanoBanner() {
-    const banner = $("#agenda-plano-banner");
-    const marcos = PLANO_EVENTS.filter((e) => e.tipo === "marco").sort((a, b) => a.data.localeCompare(b.data));
-    if (marcos.length < 2) { banner.hidden = true; return; }
-    const inicio = marcos[0].data, fim = marcos[marcos.length - 1].data;
-    const today = isoDate(new Date());
-    const totalDias = daysBetween(inicio, fim) + 1;
-    const decorridos = Math.min(Math.max(daysBetween(inicio, today) + 1, 0), totalDias);
-    const pct = Math.round((decorridos / totalDias) * 100);
-    const relatorios = PLANO_EVENTS.filter((e) => e.tipo === "relatorio" && e.data >= inicio && e.data <= fim);
-    const feitos = relatorios.filter((e) => e.concluido).length;
-    banner.hidden = false;
-    $("#agenda-plano-titulo").textContent = "Cronograma em andamento";
-    $("#agenda-plano-datas").textContent = `${fmtShort(new Date(inicio + "T00:00:00"))} → ${fmtShort(new Date(fim + "T00:00:00"))}`;
-    $("#agenda-plano-bar-fill").style.width = `${Math.min(100, Math.max(0, pct))}%`;
-    const partes = [];
-    partes.push(today < inicio ? "ainda não começou" : today > fim ? "prazo encerrado" : `${pct}% do prazo`);
-    if (relatorios.length) partes.push(`${feitos}/${relatorios.length} relatórios entregues`);
-    $("#agenda-plano-pct").textContent = partes.join(" · ");
-  }
-
   async function toggleConcluido(id, concluido) {
+    const ev = AGENDA_EVENTS.find((e) => e.id === id);
+    if (ev) ev.concluido = concluido;
+    renderAgenda();
     try {
       await api(`/api/agenda/${id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ concluido }),
       });
-      const ev = AGENDA_EVENTS.find((e) => e.id === id); if (ev) ev.concluido = concluido;
-      const pe = PLANO_EVENTS.find((e) => e.id === id); if (pe) pe.concluido = concluido;
-      renderPlanoBanner();
-    } catch (err) { toast("Erro ao atualizar: " + err.message, true); loadAgenda(); }
+    } catch (err) {
+      if (ev) ev.concluido = !concluido;
+      renderAgenda();
+      toast("Erro ao atualizar: " + err.message, true);
+    }
   }
 
   function renderLegend() {
@@ -2964,7 +2938,8 @@
     const meta = TIPO_META[ev.tipo] || TIPO_META.compromisso;
     const hora = ev.hora_inicio ? esc(ev.hora_inicio) + " " : "";
     return `<div class="agenda-month-evento ${ev.concluido ? "is-concluido" : ""}" data-id="${ev.id}" style="--tipo-color:${meta.color}" title="${esc(ev.titulo)}">
-      <span class="agenda-month-evento-dot"></span><span class="agenda-month-evento-title">${hora}${esc(ev.titulo)}</span>
+      <span class="agenda-month-evento-check"><input type="checkbox" data-toggle-id="${ev.id}" ${ev.concluido ? "checked" : ""} title="Marcar como concluído"></span>
+      <span class="agenda-month-evento-title">${hora}${esc(ev.titulo)}</span>
     </div>`;
   }
 
@@ -3009,6 +2984,8 @@
     $$(".agenda-month-day-num", grid).forEach((b) => b.addEventListener("click", () => goToWeekOf(b.dataset.date)));
     $$(".agenda-month-more", grid).forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); goToWeekOf(b.dataset.date); }));
     $$(".agenda-month-evento", grid).forEach((el) => el.addEventListener("click", (e) => { e.stopPropagation(); openEventoModal(Number(el.dataset.id)); }));
+    $$(".agenda-month-evento-check", grid).forEach((el) => el.addEventListener("click", (e) => e.stopPropagation()));
+    $$(".agenda-month-evento-check input", grid).forEach((cb) => cb.addEventListener("change", () => toggleConcluido(Number(cb.dataset.toggleId), cb.checked)));
   }
 
   function setAgendaView(view) {
@@ -3097,7 +3074,6 @@
       }
       closeEventoModal();
       loadAgenda();
-      loadPlanoBanner();
       toast("Compromisso salvo.");
     } catch (err) { toast("Erro ao salvar: " + err.message, true); }
   });
@@ -3108,7 +3084,6 @@
       await api(`/api/agenda/${editingEventoId}`, { method: "DELETE" });
       closeEventoModal();
       loadAgenda();
-      loadPlanoBanner();
       toast("Compromisso excluído.");
     } catch (err) { toast("Erro ao excluir: " + err.message, true); }
   });
