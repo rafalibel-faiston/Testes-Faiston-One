@@ -714,3 +714,193 @@ def seed_situacoes(db):
     if added:
         db.commit()
     return added
+
+
+# ---------------------------------------------------------------------------
+# Plano de Testes – Operação Logística (14/08 a 04/09/2026)
+# Fonte: cronograma passado pelo time em 14/08/2026. 3 semanas de validação da
+# ferramenta junto ao time operacional logístico, com acompanhamento paralelo
+# em Excel e desmame gradual da planilha na semana final.
+# ---------------------------------------------------------------------------
+
+_DUPLAS_S1 = (
+    "- Ezequiel (ferramenta) / Diego (planilha)\n"
+    "- Alice (ferramenta) / Kauan (planilha)\n"
+    "- Ronald (ferramenta) / Lucas (planilha)\n"
+    "- Raquel (ferramenta) / Grazi (planilha)"
+)
+_DUPLAS_S2 = (
+    "- Diego (ferramenta) / Ezequiel (planilha)\n"
+    "- Kauan (ferramenta) / Alice (planilha)\n"
+    "- Lucas (ferramenta) / Ronald (planilha)\n"
+    "- Grazi (ferramenta) / Raquel (planilha)"
+)
+_RELATORIO_DIARIO_DESC = (
+    "Cada dupla entrega ao final do dia:\n"
+    "- Erros identificados\n"
+    "- Bugs encontrados\n"
+    "- Sugestões de melhoria\n"
+    "- Dificuldades encontradas durante a utilização\n"
+    "- Chamados tratados\n"
+    "- Divergências entre ferramenta e base operacional\n"
+    "- Pontos que necessitam de acompanhamento"
+)
+
+AGENDA_OPERACAO_LOGISTICA = [
+    dict(
+        titulo="Kickoff — Input de todas as bases na ferramenta",
+        data="2026-08-14",
+        descricao="Input de todas as bases operacionais na ferramenta, garantindo que "
+                   "todas as informações necessárias estejam disponíveis para o início "
+                   "dos testes. Marca o início do Plano de Testes – Operação Logística "
+                   "(14/08 a 04/09/2026, 3 semanas).",
+    ),
+    dict(
+        titulo="Início Semana 1 — Teste ao vivo do fluxo completo (mesa NTT)",
+        data="2026-08-17",
+        descricao="Teste ao vivo com o fluxo completo da operação logística, acompanhando "
+                   "o processo de ponta a ponta em cenário real. Mesa para teste: NTT "
+                   "(provisória). Objetivo: validar o funcionamento da ferramenta dentro "
+                   "da rotina operacional, identificando erros, bugs, dificuldades, "
+                   "divergências e oportunidades de melhoria.\n\n"
+                   "Duplas — um integrante testa na ferramenta, o outro alimenta a base em "
+                   "Excel em paralelo:\n" + _DUPLAS_S1,
+    ),
+    *[
+        dict(
+            titulo="Entrega do relatório diário — Semana 1",
+            data=d,
+            hora_inicio="17:30",
+            descricao=_RELATORIO_DIARIO_DESC,
+        )
+        for d in ["2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20", "2026-08-21"]
+    ],
+    dict(
+        titulo="Revisão do processo + feedback dos pontos focais (fechamento Semana 1)",
+        data="2026-08-21",
+        descricao="Revisão do processo junto às operações, em paralelo aos testes: avaliar "
+                   "se os erros e dificuldades identificados são da ferramenta ou do "
+                   "próprio processo operacional. Coletar feedback dos pontos focais das "
+                   "operações sobre o funcionamento do processo e definir os ajustes "
+                   "necessários antes de avançar para a Semana 2.",
+    ),
+    dict(
+        titulo="Início Semana 2 — Inversão das duplas",
+        data="2026-08-24",
+        descricao="Inversão das responsabilidades dentro das duplas: quem testou a "
+                   "ferramenta na Semana 1 passa a alimentar a base operacional, e "
+                   "vice-versa — garantindo que todos participem ativamente e tenham "
+                   "experiência prática na ferramenta.\n\n" + _DUPLAS_S2,
+    ),
+    *[
+        dict(
+            titulo="Entrega do relatório diário — Semana 2",
+            data=d,
+            hora_inicio="17:30",
+            descricao=_RELATORIO_DIARIO_DESC,
+        )
+        for d in ["2026-08-24", "2026-08-25", "2026-08-26", "2026-08-27", "2026-08-28"]
+    ],
+    dict(
+        titulo="Checkpoint — erros operacionais x erros de ferramenta",
+        data="2026-08-26",
+        descricao="Verificação dos erros operacionais, principalmente relacionados à "
+                   "abertura dos chamados, com o objetivo de diferenciar possíveis falhas "
+                   "da ferramenta de erros relacionados à execução do processo.",
+    ),
+    dict(
+        titulo="Início Semana 3 — Testes finais + Plano de Desmame da Planilha",
+        data="2026-08-31",
+        descricao="Testes finais com a operação logística, considerando os ajustes, erros "
+                   "e melhorias levantados nas semanas anteriores. Foco em validar a "
+                   "estabilidade da ferramenta e avaliar se está preparada para substituir "
+                   "o processo hoje feito pela planilha.\n\n"
+                   "Início também do Plano de Desmame da Planilha — os 9 passos estão no "
+                   "quadro de tarefas (Todo), coluna 'A Fazer'.",
+    ),
+    dict(
+        titulo="Encerramento — Resultado esperado do Plano de Testes",
+        data="2026-09-04",
+        descricao="Ao final das 3 semanas, definir:\n"
+                   "- Se a ferramenta está apta para utilização definitiva\n"
+                   "- Quais erros ou melhorias ainda precisam ser tratados\n"
+                   "- Se existem riscos operacionais para a retirada da planilha\n"
+                   "- Quais processos ainda precisam de ajustes\n"
+                   "- Se a operação está preparada para trabalhar exclusivamente na nova "
+                   "ferramenta\n"
+                   "- Se o fluxo completo da operação logística está funcionando "
+                   "corretamente de ponta a ponta\n\n"
+                   "Objetivo final: concluir os testes com segurança, validar o "
+                   "funcionamento da ferramenta em ambiente operacional e realizar a "
+                   "transição da planilha para a ferramenta de forma controlada, reduzindo "
+                   "riscos e garantindo a continuidade da operação.",
+    ),
+]
+
+TODO_DESMAME_PLANILHA = [
+    "Reduzir gradualmente a utilização da planilha",
+    "Priorizar o registro das atividades diretamente na ferramenta",
+    "Comparar os dados registrados na ferramenta com a base de controle",
+    "Monitorar possíveis divergências ou perda de informações",
+    "Validar se os principais fluxos operacionais estão funcionando corretamente",
+    "Consolidar os erros e pendências identificados",
+    "Definir os responsáveis pelas correções necessárias",
+    "Validar junto à operação se a ferramenta está apta para utilização definitiva",
+    "Definir o momento adequado para encerramento da utilização da planilha",
+]
+
+
+def seed_agenda_operacao_logistica(db):
+    """Cronograma do Plano de Testes – Operação Logística (14/08 a 04/09/2026) na
+    Agenda do time Faiston. Idempotente por (titulo, data): só insere o que ainda
+    não existe, então não duplica em redeploys nem apaga o que o time editou."""
+    from .models import AgendaEvento
+
+    added = 0
+    for ev in AGENDA_OPERACAO_LOGISTICA:
+        exists = (
+            db.query(AgendaEvento)
+            .filter(AgendaEvento.titulo == ev["titulo"], AgendaEvento.data == ev["data"])
+            .first()
+        )
+        if exists:
+            continue
+        db.add(AgendaEvento(
+            titulo=ev["titulo"],
+            descricao=ev.get("descricao", ""),
+            data=ev["data"],
+            hora_inicio=ev.get("hora_inicio"),
+            hora_fim=ev.get("hora_fim"),
+            autor="Plano de Testes",
+        ))
+        added += 1
+    if added:
+        db.commit()
+    return added
+
+
+def seed_todo_desmame_planilha(db):
+    """Os 9 passos do Plano de Desmame da Planilha (Semana 3) como cartões no
+    quadro de tarefas, coluna 'A Fazer'. Idempotente por título."""
+    from sqlalchemy import func as sa_func
+    from .models import TodoTarefa
+
+    added = 0
+    max_pos = db.query(sa_func.max(TodoTarefa.posicao)).filter(TodoTarefa.status == "a_fazer").scalar() or 0
+    for i, passo in enumerate(TODO_DESMAME_PLANILHA, start=1):
+        titulo = f"Desmame {i}/9 — {passo}"
+        if db.query(TodoTarefa).filter(TodoTarefa.titulo == titulo).first():
+            continue
+        max_pos += 1
+        db.add(TodoTarefa(
+            titulo=titulo,
+            descricao="Plano de Desmame da Planilha — Semana 3 (31/08 a 04/09/2026) do "
+                      "Plano de Testes – Operação Logística.",
+            status="a_fazer",
+            posicao=max_pos,
+            autor="Plano de Testes",
+        ))
+        added += 1
+    if added:
+        db.commit()
+    return added

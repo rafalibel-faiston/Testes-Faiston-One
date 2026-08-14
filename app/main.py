@@ -48,6 +48,8 @@ try:
     seed_data.migrate_observations(_db)
     seed_data.seed_diagrams(_db)
     seed_data.seed_situacoes(_db)
+    seed_data.seed_agenda_operacao_logistica(_db)
+    seed_data.seed_todo_desmame_planilha(_db)
 finally:
     _db.close()
 
