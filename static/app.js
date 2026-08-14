@@ -2813,6 +2813,7 @@
     revisao:     { label: "Revisão",     color: "var(--warn)" },
     checkpoint:  { label: "Checkpoint",  color: "var(--f-magenta)" },
     reuniao:     { label: "Reunião",     color: "var(--f-cyan)" },
+    teste:       { label: "Teste",       color: "var(--ok)" },
     compromisso: { label: "Compromisso", color: "var(--text-3)" },
   };
   const agendaTipoFiltro = new Set(Object.keys(TIPO_META));

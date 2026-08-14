@@ -8,7 +8,7 @@ from ..database import get_db
 
 router = APIRouter(tags=["agenda"])
 
-TIPOS = {"marco", "relatorio", "revisao", "checkpoint", "reuniao", "compromisso"}
+TIPOS = {"marco", "relatorio", "revisao", "checkpoint", "reuniao", "teste", "compromisso"}
 
 
 @router.get("/agenda", response_model=List[schemas.AgendaEventoOut])
