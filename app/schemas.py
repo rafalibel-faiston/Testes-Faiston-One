@@ -271,6 +271,8 @@ class AgendaEventoOut(BaseModel):
     data: str
     hora_inicio: Optional[str] = None
     hora_fim: Optional[str] = None
+    tipo: str = "compromisso"
+    concluido: bool = False
     autor: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -282,6 +284,7 @@ class AgendaEventoCreate(BaseModel):
     data: str
     hora_inicio: Optional[str] = None
     hora_fim: Optional[str] = None
+    tipo: Optional[str] = "compromisso"
     autor: Optional[str] = None
 
 
@@ -291,6 +294,8 @@ class AgendaEventoUpdate(BaseModel):
     data: Optional[str] = None
     hora_inicio: Optional[str] = None
     hora_fim: Optional[str] = None
+    tipo: Optional[str] = None
+    concluido: Optional[bool] = None
 
 
 class TodoTarefaOut(BaseModel):

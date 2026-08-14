@@ -8,6 +8,8 @@ from ..database import get_db
 
 router = APIRouter(tags=["agenda"])
 
+TIPOS = {"marco", "relatorio", "revisao", "checkpoint", "reuniao", "compromisso"}
+
 
 @router.get("/agenda", response_model=List[schemas.AgendaEventoOut])
 def list_eventos(inicio: Optional[str] = None, fim: Optional[str] = None, db: Session = Depends(get_db)):
@@ -27,12 +29,16 @@ def create_evento(payload: schemas.AgendaEventoCreate, db: Session = Depends(get
         raise HTTPException(status_code=400, detail="Título vazio.")
     if not (payload.data or "").strip():
         raise HTTPException(status_code=400, detail="Data obrigatória.")
+    tipo = (payload.tipo or "compromisso").strip()
+    if tipo not in TIPOS:
+        tipo = "compromisso"
     evento = models.AgendaEvento(
         titulo=titulo,
         descricao=payload.descricao or "",
         data=payload.data.strip(),
         hora_inicio=(payload.hora_inicio or "").strip() or None,
         hora_fim=(payload.hora_fim or "").strip() or None,
+        tipo=tipo,
         autor=payload.autor,
     )
     db.add(evento)
@@ -61,6 +67,10 @@ def update_evento(evento_id: int, payload: schemas.AgendaEventoUpdate, db: Sessi
         evento.hora_inicio = payload.hora_inicio.strip() or None
     if payload.hora_fim is not None:
         evento.hora_fim = payload.hora_fim.strip() or None
+    if payload.tipo is not None:
+        evento.tipo = payload.tipo.strip() if payload.tipo.strip() in TIPOS else evento.tipo
+    if payload.concluido is not None:
+        evento.concluido = payload.concluido
     db.commit()
     db.refresh(evento)
     return evento

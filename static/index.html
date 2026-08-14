@@ -302,8 +302,8 @@
   <div id="module-agenda" hidden>
     <section class="diagrams-head">
       <div class="diagrams-head-copy">
-        <h2>Agenda da semana</h2>
-        <p>Compromissos e tarefas programadas do time Faiston. Agenda única do time —
+        <h2>Agenda</h2>
+        <p>Compromissos e cronogramas do time Faiston. Agenda única do time —
         o que alguém colocar aqui, todo mundo da Faiston vê.</p>
       </div>
       <button type="button" class="add-btn" id="btn-add-evento">
@@ -311,13 +311,33 @@
         Novo compromisso
       </button>
     </section>
-    <div class="agenda-nav">
-      <button type="button" class="agenda-nav-btn" id="agenda-prev" aria-label="Semana anterior">‹</button>
-      <button type="button" class="agenda-nav-btn" id="agenda-next" aria-label="Próxima semana">›</button>
-      <span class="agenda-week-label" id="agenda-week-label">—</span>
-      <button type="button" class="agenda-today-btn" id="agenda-today">Hoje</button>
+
+    <div class="agenda-plano-banner" id="agenda-plano-banner" hidden>
+      <div class="agenda-plano-info">
+        <span class="agenda-plano-titulo" id="agenda-plano-titulo">—</span>
+        <span class="agenda-plano-datas" id="agenda-plano-datas">—</span>
+      </div>
+      <div class="agenda-plano-bar-track"><div class="agenda-plano-bar-fill" id="agenda-plano-bar-fill"></div></div>
+      <span class="agenda-plano-pct" id="agenda-plano-pct">—</span>
     </div>
-    <div class="agenda-grid" id="agenda-grid"></div>
+
+    <div class="agenda-toolbar">
+      <div class="agenda-nav">
+        <button type="button" class="agenda-nav-btn" id="agenda-prev" aria-label="Anterior">‹</button>
+        <button type="button" class="agenda-nav-btn" id="agenda-next" aria-label="Próximo">›</button>
+        <span class="agenda-week-label" id="agenda-week-label">—</span>
+        <button type="button" class="agenda-today-btn" id="agenda-today">Hoje</button>
+      </div>
+      <div class="agenda-view-toggle" id="agenda-view-toggle">
+        <button type="button" class="agenda-view-btn" data-view="mes">Mês</button>
+        <button type="button" class="agenda-view-btn" data-view="semana">Semana</button>
+      </div>
+    </div>
+
+    <div class="agenda-legend" id="agenda-legend"></div>
+
+    <div class="agenda-grid agenda-grid-week" id="agenda-grid" hidden></div>
+    <div class="agenda-grid-month" id="agenda-grid-month" hidden></div>
   </div>
 
   <div id="module-todo" hidden>
@@ -649,8 +669,22 @@
           <input type="time" name="hora_fim">
         </label>
       </div>
+      <label class="fld fld-wide">Tipo
+        <select name="tipo">
+          <option value="compromisso">Compromisso</option>
+          <option value="marco">Marco do cronograma</option>
+          <option value="relatorio">Relatório / entrega</option>
+          <option value="revisao">Revisão</option>
+          <option value="checkpoint">Checkpoint</option>
+          <option value="reuniao">Reunião</option>
+        </select>
+      </label>
       <label class="fld">Notas
         <textarea name="descricao" rows="2" placeholder="detalhes (opcional)"></textarea>
+      </label>
+      <label class="fld-check">
+        <input type="checkbox" name="concluido">
+        Concluído
       </label>
       <div class="modal-actions">
         <button type="button" class="btn-ghost" id="evento-delete" hidden>Excluir</button>

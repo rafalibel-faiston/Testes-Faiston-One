@@ -2794,7 +2794,7 @@
     $("#module-ativos").hidden = mod !== "ativos";
     $("#module-agenda").hidden = mod !== "agenda";
     $("#module-todo").hidden = mod !== "todo";
-    if (mod === "agenda") loadAgenda();
+    if (mod === "agenda") { loadAgenda(); loadPlanoBanner(); }
     if (mod === "todo") loadTodo();
   }
 
@@ -2803,9 +2803,19 @@
     switchModule(t.dataset.module);
   }));
 
-  // ---------------- Agenda (compromissos da semana do time Faiston) ----------------
+  // ---------------- Agenda (compromissos do time Faiston — semana ou mês) ----------------
   let AGENDA_EVENTS = [];
   const DIA_NOMES = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+  const DIA_NOMES_SEG = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+  const TIPO_META = {
+    marco:       { label: "Marco",       color: "var(--f-purple)" },
+    relatorio:   { label: "Relatório",   color: "var(--f-blue)" },
+    revisao:     { label: "Revisão",     color: "var(--warn)" },
+    checkpoint:  { label: "Checkpoint",  color: "var(--f-magenta)" },
+    reuniao:     { label: "Reunião",     color: "var(--f-cyan)" },
+    compromisso: { label: "Compromisso", color: "var(--text-3)" },
+  };
+  const agendaTipoFiltro = new Set(Object.keys(TIPO_META));
 
   function startOfWeek(d) {
     const date = new Date(d);
@@ -2816,39 +2826,120 @@
     return date;
   }
   function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+  function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+  function endOfMonth(d) { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
+  function addMonths(d, n) { return new Date(d.getFullYear(), d.getMonth() + n, 1); }
   function isoDate(d) {
     const pad = (n) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
+  function fmtShort(d) { return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`; }
+  function daysBetween(isoA, isoB) {
+    return Math.round((new Date(isoB + "T00:00:00") - new Date(isoA + "T00:00:00")) / 86400000);
+  }
+  function monthGridRange(cursor) {
+    const start = startOfWeek(startOfMonth(cursor));
+    const end = addDays(startOfWeek(endOfMonth(cursor)), 6);
+    return [start, end];
+  }
 
+  let agendaView = "mes"; // "mes" | "semana"
   let agendaWeekStart = startOfWeek(new Date());
+  let agendaMonthCursor = startOfMonth(new Date());
 
   async function loadAgenda() {
-    const start = agendaWeekStart, end = addDays(start, 6);
+    const [start, end] = agendaView === "mes" ? monthGridRange(agendaMonthCursor) : [agendaWeekStart, addDays(agendaWeekStart, 6)];
     try {
       AGENDA_EVENTS = await api(`/api/agenda?inicio=${isoDate(start)}&fim=${isoDate(end)}`);
     } catch (e) { AGENDA_EVENTS = []; }
     renderAgenda();
   }
 
+  // ---- faixa de progresso do cronograma (do primeiro ao último "marco" cadastrado) ----
+  let PLANO_EVENTS = [];
+  async function loadPlanoBanner() {
+    try { PLANO_EVENTS = await api("/api/agenda"); } catch (e) { PLANO_EVENTS = []; }
+    renderPlanoBanner();
+  }
+  function renderPlanoBanner() {
+    const banner = $("#agenda-plano-banner");
+    const marcos = PLANO_EVENTS.filter((e) => e.tipo === "marco").sort((a, b) => a.data.localeCompare(b.data));
+    if (marcos.length < 2) { banner.hidden = true; return; }
+    const inicio = marcos[0].data, fim = marcos[marcos.length - 1].data;
+    const today = isoDate(new Date());
+    const totalDias = daysBetween(inicio, fim) + 1;
+    const decorridos = Math.min(Math.max(daysBetween(inicio, today) + 1, 0), totalDias);
+    const pct = Math.round((decorridos / totalDias) * 100);
+    const relatorios = PLANO_EVENTS.filter((e) => e.tipo === "relatorio" && e.data >= inicio && e.data <= fim);
+    const feitos = relatorios.filter((e) => e.concluido).length;
+    banner.hidden = false;
+    $("#agenda-plano-titulo").textContent = "Cronograma em andamento";
+    $("#agenda-plano-datas").textContent = `${fmtShort(new Date(inicio + "T00:00:00"))} → ${fmtShort(new Date(fim + "T00:00:00"))}`;
+    $("#agenda-plano-bar-fill").style.width = `${Math.min(100, Math.max(0, pct))}%`;
+    const partes = [];
+    partes.push(today < inicio ? "ainda não começou" : today > fim ? "prazo encerrado" : `${pct}% do prazo`);
+    if (relatorios.length) partes.push(`${feitos}/${relatorios.length} relatórios entregues`);
+    $("#agenda-plano-pct").textContent = partes.join(" · ");
+  }
+
+  async function toggleConcluido(id, concluido) {
+    try {
+      await api(`/api/agenda/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ concluido }),
+      });
+      const ev = AGENDA_EVENTS.find((e) => e.id === id); if (ev) ev.concluido = concluido;
+      const pe = PLANO_EVENTS.find((e) => e.id === id); if (pe) pe.concluido = concluido;
+      renderPlanoBanner();
+    } catch (err) { toast("Erro ao atualizar: " + err.message, true); loadAgenda(); }
+  }
+
+  function renderLegend() {
+    const legend = $("#agenda-legend");
+    legend.innerHTML = Object.entries(TIPO_META).map(([key, meta]) => `
+      <button type="button" class="agenda-legend-chip ${agendaTipoFiltro.has(key) ? "is-active" : ""}" data-tipo="${key}" style="--tipo-color:${meta.color}">
+        <span class="agenda-legend-dot"></span>${meta.label}
+      </button>`).join("");
+    $$(".agenda-legend-chip", legend).forEach((b) => b.addEventListener("click", () => {
+      const t = b.dataset.tipo;
+      if (agendaTipoFiltro.has(t)) agendaTipoFiltro.delete(t); else agendaTipoFiltro.add(t);
+      b.classList.toggle("is-active");
+      renderAgenda();
+    }));
+  }
+
   function eventoCard(ev) {
     const hora = ev.hora_inicio ? esc(ev.hora_inicio) + (ev.hora_fim ? "–" + esc(ev.hora_fim) : "") : "";
-    return `<div class="agenda-evento" data-id="${ev.id}">
-      ${hora ? `<div class="agenda-evento-hora">${hora}</div>` : ""}
-      <div class="agenda-evento-titulo">${esc(ev.titulo)}</div>
+    const meta = TIPO_META[ev.tipo] || TIPO_META.compromisso;
+    return `<div class="agenda-evento ${ev.concluido ? "is-concluido" : ""}" data-id="${ev.id}" style="--tipo-color:${meta.color}">
+      <span class="agenda-evento-check"><input type="checkbox" data-toggle-id="${ev.id}" ${ev.concluido ? "checked" : ""} title="Marcar como concluído"></span>
+      <div class="agenda-evento-body">
+        ${hora ? `<div class="agenda-evento-hora">${hora}</div>` : ""}
+        <div class="agenda-evento-titulo">${esc(ev.titulo)}</div>
+      </div>
     </div>`;
   }
 
   function renderAgenda() {
-    const start = agendaWeekStart, end = addDays(start, 6);
-    const fmtShort = (d) => `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
-    $("#agenda-week-label").textContent = `${fmtShort(start)} — ${fmtShort(end)}`;
+    if (agendaView === "mes") {
+      const label = agendaMonthCursor.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+      $("#agenda-week-label").textContent = label.charAt(0).toUpperCase() + label.slice(1);
+      renderMonthGrid();
+    } else {
+      const end = addDays(agendaWeekStart, 6);
+      $("#agenda-week-label").textContent = `${fmtShort(agendaWeekStart)} — ${fmtShort(end)}`;
+      renderWeekGrid();
+    }
+  }
+
+  function renderWeekGrid() {
+    const start = agendaWeekStart;
     const todayIso = isoDate(new Date());
+    const visible = AGENDA_EVENTS.filter((e) => agendaTipoFiltro.has(e.tipo));
     let html = "";
     for (let i = 0; i < 7; i++) {
       const d = addDays(start, i);
       const iso = isoDate(d);
-      const dayEvents = AGENDA_EVENTS.filter((e) => e.data === iso)
+      const dayEvents = visible.filter((e) => e.data === iso)
         .sort((a, b) => (a.hora_inicio || "").localeCompare(b.hora_inicio || ""));
       html += `<div class="agenda-day ${iso === todayIso ? "is-today" : ""}">
         <button type="button" class="agenda-day-add" data-date="${iso}" aria-label="Adicionar compromisso em ${iso}" title="Adicionar">+</button>
@@ -2861,13 +2952,92 @@
     }
     const grid = $("#agenda-grid");
     grid.innerHTML = html;
+    grid.hidden = false;
+    $("#agenda-grid-month").hidden = true;
     $$(".agenda-day-add", grid).forEach((b) => b.addEventListener("click", () => openEventoModal(null, b.dataset.date)));
     $$(".agenda-evento", grid).forEach((el) => el.addEventListener("click", () => openEventoModal(Number(el.dataset.id))));
+    $$(".agenda-evento-check", grid).forEach((el) => el.addEventListener("click", (e) => e.stopPropagation()));
+    $$(".agenda-evento-check input", grid).forEach((cb) => cb.addEventListener("change", () => toggleConcluido(Number(cb.dataset.toggleId), cb.checked)));
   }
 
-  $("#agenda-prev").addEventListener("click", () => { agendaWeekStart = addDays(agendaWeekStart, -7); loadAgenda(); });
-  $("#agenda-next").addEventListener("click", () => { agendaWeekStart = addDays(agendaWeekStart, 7); loadAgenda(); });
-  $("#agenda-today").addEventListener("click", () => { agendaWeekStart = startOfWeek(new Date()); loadAgenda(); });
+  function monthEventChip(ev) {
+    const meta = TIPO_META[ev.tipo] || TIPO_META.compromisso;
+    const hora = ev.hora_inicio ? esc(ev.hora_inicio) + " " : "";
+    return `<div class="agenda-month-evento ${ev.concluido ? "is-concluido" : ""}" data-id="${ev.id}" style="--tipo-color:${meta.color}" title="${esc(ev.titulo)}">
+      <span class="agenda-month-evento-dot"></span><span class="agenda-month-evento-title">${hora}${esc(ev.titulo)}</span>
+    </div>`;
+  }
+
+  function goToWeekOf(iso) {
+    agendaWeekStart = startOfWeek(new Date(iso + "T00:00:00"));
+    setAgendaView("semana");
+  }
+
+  function renderMonthGrid() {
+    const [gridStart, gridEnd] = monthGridRange(agendaMonthCursor);
+    const totalDias = Math.round((gridEnd - gridStart) / 86400000) + 1;
+    const todayIso = isoDate(new Date());
+    const curMonth = agendaMonthCursor.getMonth();
+    const visible = AGENDA_EVENTS.filter((e) => agendaTipoFiltro.has(e.tipo));
+    const MAX_SHOW = 3;
+
+    let html = `<div class="agenda-month-weekdays">${DIA_NOMES_SEG.map((n) => `<div>${n}</div>`).join("")}</div>`;
+    html += `<div class="agenda-month-days">`;
+    for (let i = 0; i < totalDias; i++) {
+      const d = addDays(gridStart, i);
+      const iso = isoDate(d);
+      const inMonth = d.getMonth() === curMonth;
+      const dayEvents = visible.filter((e) => e.data === iso)
+        .sort((a, b) => (a.hora_inicio || "").localeCompare(b.hora_inicio || ""));
+      const shown = dayEvents.slice(0, MAX_SHOW);
+      const extra = dayEvents.length - shown.length;
+      html += `<div class="agenda-month-day ${inMonth ? "" : "is-outside"} ${iso === todayIso ? "is-today" : ""}">
+        <button type="button" class="agenda-month-day-add" data-date="${iso}" aria-label="Adicionar compromisso em ${iso}" title="Adicionar">+</button>
+        <button type="button" class="agenda-month-day-num" data-date="${iso}" title="Ver semana">${d.getDate()}</button>
+        <div class="agenda-month-day-events">
+          ${shown.map(monthEventChip).join("")}
+          ${extra > 0 ? `<button type="button" class="agenda-month-more" data-date="${iso}">+${extra} mais</button>` : ""}
+        </div>
+      </div>`;
+    }
+    html += `</div>`;
+    const grid = $("#agenda-grid-month");
+    grid.innerHTML = html;
+    grid.hidden = false;
+    $("#agenda-grid").hidden = true;
+    $$(".agenda-month-day-add", grid).forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); openEventoModal(null, b.dataset.date); }));
+    $$(".agenda-month-day-num", grid).forEach((b) => b.addEventListener("click", () => goToWeekOf(b.dataset.date)));
+    $$(".agenda-month-more", grid).forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); goToWeekOf(b.dataset.date); }));
+    $$(".agenda-month-evento", grid).forEach((el) => el.addEventListener("click", (e) => { e.stopPropagation(); openEventoModal(Number(el.dataset.id)); }));
+  }
+
+  function setAgendaView(view) {
+    agendaView = view;
+    $$("#agenda-view-toggle .agenda-view-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+    loadAgenda();
+  }
+  $$("#agenda-view-toggle .agenda-view-btn").forEach((b) => {
+    b.classList.toggle("active", b.dataset.view === agendaView);
+    b.addEventListener("click", () => setAgendaView(b.dataset.view));
+  });
+
+  $("#agenda-prev").addEventListener("click", () => {
+    if (agendaView === "mes") agendaMonthCursor = addMonths(agendaMonthCursor, -1);
+    else agendaWeekStart = addDays(agendaWeekStart, -7);
+    loadAgenda();
+  });
+  $("#agenda-next").addEventListener("click", () => {
+    if (agendaView === "mes") agendaMonthCursor = addMonths(agendaMonthCursor, 1);
+    else agendaWeekStart = addDays(agendaWeekStart, 7);
+    loadAgenda();
+  });
+  $("#agenda-today").addEventListener("click", () => {
+    agendaWeekStart = startOfWeek(new Date());
+    agendaMonthCursor = startOfMonth(new Date());
+    loadAgenda();
+  });
+
+  renderLegend();
 
   let editingEventoId = null;
   const eventoModal = $("#evento-modal");
@@ -2885,8 +3055,11 @@
       eventoForm.hora_inicio.value = ev.hora_inicio || "";
       eventoForm.hora_fim.value = ev.hora_fim || "";
       eventoForm.descricao.value = ev.descricao || "";
+      eventoForm.tipo.value = ev.tipo || "compromisso";
+      eventoForm.concluido.checked = !!ev.concluido;
     } else {
       eventoForm.data.value = presetDate || isoDate(new Date());
+      eventoForm.tipo.value = "compromisso";
     }
     eventoModal.hidden = false;
   }
@@ -2908,6 +3081,8 @@
       hora_inicio: fd.get("hora_inicio") || null,
       hora_fim: fd.get("hora_fim") || null,
       descricao: fd.get("descricao") || "",
+      tipo: fd.get("tipo") || "compromisso",
+      concluido: fd.get("concluido") === "on",
     };
     try {
       if (editingEventoId) {
@@ -2922,6 +3097,7 @@
       }
       closeEventoModal();
       loadAgenda();
+      loadPlanoBanner();
       toast("Compromisso salvo.");
     } catch (err) { toast("Erro ao salvar: " + err.message, true); }
   });
@@ -2932,6 +3108,7 @@
       await api(`/api/agenda/${editingEventoId}`, { method: "DELETE" });
       closeEventoModal();
       loadAgenda();
+      loadPlanoBanner();
       toast("Compromisso excluído.");
     } catch (err) { toast("Erro ao excluir: " + err.message, true); }
   });

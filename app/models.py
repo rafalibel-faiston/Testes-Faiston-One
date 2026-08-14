@@ -194,8 +194,8 @@ class TeamView(Base):
 
 
 class AgendaEvento(Base):
-    """Compromisso da agenda semanal do time Faiston — só aparece pra quem
-    entra como Faiston, é compartilhada pelo time todo (sem login por pessoa)."""
+    """Compromisso da agenda do time Faiston — só aparece pra quem entra como
+    Faiston, é compartilhada pelo time todo (sem login por pessoa)."""
     __tablename__ = "agenda_eventos"
 
     id = Column(Integer, primary_key=True)
@@ -204,6 +204,12 @@ class AgendaEvento(Base):
     data = Column(String, nullable=False)          # "AAAA-MM-DD"
     hora_inicio = Column(String, nullable=True)    # "HH:MM"
     hora_fim = Column(String, nullable=True)        # "HH:MM"
+    # categoriza o compromisso pra colorir/filtrar na agenda: marco, relatorio,
+    # revisao, checkpoint, reuniao ou compromisso (padrão, genérico).
+    tipo = Column(String, nullable=False, default="compromisso", server_default="compromisso")
+    # marca compromissos recorrentes (ex.: entrega de relatório diário) como
+    # cumpridos, sem precisar excluir o evento da agenda.
+    concluido = Column(Boolean, nullable=False, default=False, server_default=expression.false())
     autor = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())

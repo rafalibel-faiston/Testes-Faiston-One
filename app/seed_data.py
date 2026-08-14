@@ -361,6 +361,14 @@ def migrate_schema(engine):
         if "chamado" not in sit_cols:
             stmts.append("ALTER TABLE situacoes ADD COLUMN chamado VARCHAR")
 
+    if "agenda_eventos" in existing_tables:
+        ag_cols = {c["name"] for c in insp.get_columns("agenda_eventos")}
+        if "tipo" not in ag_cols:
+            stmts.append("ALTER TABLE agenda_eventos ADD COLUMN tipo VARCHAR NOT NULL DEFAULT 'compromisso'")
+        if "concluido" not in ag_cols:
+            stmts.append("ALTER TABLE agenda_eventos ADD COLUMN concluido BOOLEAN NOT NULL DEFAULT "
+                         + ("FALSE" if pg else "0"))
+
     if not stmts:
         return 0
     with engine.begin() as conn:
@@ -750,6 +758,7 @@ AGENDA_OPERACAO_LOGISTICA = [
     dict(
         titulo="Kickoff — Input de todas as bases na ferramenta",
         data="2026-08-14",
+        tipo="marco",
         descricao="Input de todas as bases operacionais na ferramenta, garantindo que "
                    "todas as informações necessárias estejam disponíveis para o início "
                    "dos testes. Marca o início do Plano de Testes – Operação Logística "
@@ -758,6 +767,7 @@ AGENDA_OPERACAO_LOGISTICA = [
     dict(
         titulo="Início Semana 1 — Teste ao vivo do fluxo completo (mesa NTT)",
         data="2026-08-17",
+        tipo="marco",
         descricao="Teste ao vivo com o fluxo completo da operação logística, acompanhando "
                    "o processo de ponta a ponta em cenário real. Mesa para teste: NTT "
                    "(provisória). Objetivo: validar o funcionamento da ferramenta dentro "
@@ -771,6 +781,7 @@ AGENDA_OPERACAO_LOGISTICA = [
             titulo="Entrega do relatório diário — Semana 1",
             data=d,
             hora_inicio="17:30",
+            tipo="relatorio",
             descricao=_RELATORIO_DIARIO_DESC,
         )
         for d in ["2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20", "2026-08-21"]
@@ -778,6 +789,7 @@ AGENDA_OPERACAO_LOGISTICA = [
     dict(
         titulo="Revisão do processo + feedback dos pontos focais (fechamento Semana 1)",
         data="2026-08-21",
+        tipo="revisao",
         descricao="Revisão do processo junto às operações, em paralelo aos testes: avaliar "
                    "se os erros e dificuldades identificados são da ferramenta ou do "
                    "próprio processo operacional. Coletar feedback dos pontos focais das "
@@ -787,6 +799,7 @@ AGENDA_OPERACAO_LOGISTICA = [
     dict(
         titulo="Início Semana 2 — Inversão das duplas",
         data="2026-08-24",
+        tipo="marco",
         descricao="Inversão das responsabilidades dentro das duplas: quem testou a "
                    "ferramenta na Semana 1 passa a alimentar a base operacional, e "
                    "vice-versa — garantindo que todos participem ativamente e tenham "
@@ -797,6 +810,7 @@ AGENDA_OPERACAO_LOGISTICA = [
             titulo="Entrega do relatório diário — Semana 2",
             data=d,
             hora_inicio="17:30",
+            tipo="relatorio",
             descricao=_RELATORIO_DIARIO_DESC,
         )
         for d in ["2026-08-24", "2026-08-25", "2026-08-26", "2026-08-27", "2026-08-28"]
@@ -804,6 +818,7 @@ AGENDA_OPERACAO_LOGISTICA = [
     dict(
         titulo="Checkpoint — erros operacionais x erros de ferramenta",
         data="2026-08-26",
+        tipo="checkpoint",
         descricao="Verificação dos erros operacionais, principalmente relacionados à "
                    "abertura dos chamados, com o objetivo de diferenciar possíveis falhas "
                    "da ferramenta de erros relacionados à execução do processo.",
@@ -811,6 +826,7 @@ AGENDA_OPERACAO_LOGISTICA = [
     dict(
         titulo="Início Semana 3 — Testes finais + Plano de Desmame da Planilha",
         data="2026-08-31",
+        tipo="marco",
         descricao="Testes finais com a operação logística, considerando os ajustes, erros "
                    "e melhorias levantados nas semanas anteriores. Foco em validar a "
                    "estabilidade da ferramenta e avaliar se está preparada para substituir "
@@ -821,6 +837,7 @@ AGENDA_OPERACAO_LOGISTICA = [
     dict(
         titulo="Encerramento — Resultado esperado do Plano de Testes",
         data="2026-09-04",
+        tipo="marco",
         descricao="Ao final das 3 semanas, definir:\n"
                    "- Se a ferramenta está apta para utilização definitiva\n"
                    "- Quais erros ou melhorias ainda precisam ser tratados\n"
@@ -871,6 +888,7 @@ def seed_agenda_operacao_logistica(db):
             data=ev["data"],
             hora_inicio=ev.get("hora_inicio"),
             hora_fim=ev.get("hora_fim"),
+            tipo=ev.get("tipo", "compromisso"),
             autor="Plano de Testes",
         ))
         added += 1
