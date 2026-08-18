@@ -443,7 +443,6 @@
     const busca = $("#f-busca");
     if (busca) busca.value = "";
     render();
-    loadNotes();
     loadActivities();
     if (typeof onFlowChangedForDiagrams === "function") onFlowChangedForDiagrams();
     if (typeof onFlowChangedForSituacoes === "function") onFlowChangedForSituacoes();
@@ -675,31 +674,32 @@
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !modal.hidden) closeCaseModal(); });
 
   // ---------------- pontos para reunião ----------------
-  // Lista solta por fluxo, independente de qualquer caso de teste — pra
-  // anotar na hora um ponto (bug, dúvida, decisão pendente) e levar pra reunião.
+  // Página própria (módulo "Pontos p/ reunião"), sempre no menu — independente
+  // de fluxo, view ou módulo aberto. Não precisa de nenhum caso de teste vinculado.
   let NOTES = [];
-  const notesModal = $("#notes-modal");
+  let notesFlowFilter = "";   // "" = todos os fluxos
 
   async function loadNotes() {
     try {
-      NOTES = await api(`/api/notas?fluxo=${encodeURIComponent(currentFlow)}`);
+      NOTES = await api(`/api/notas${notesFlowFilter ? "?fluxo=" + encodeURIComponent(notesFlowFilter) : ""}`);
     } catch (e) {
       NOTES = [];
     }
     updateNotesCount();
-    if (!notesModal.hidden) renderNotesList();
+    renderNotesList();
   }
 
   function updateNotesCount() {
     const open = NOTES.filter((n) => !n.resolvido).length;
-    const el = $("#notes-count");
-    if (el) el.textContent = open;
+    const el = $("#pontos-tab-count");
+    if (el) { el.textContent = open; el.hidden = open === 0; }
   }
 
   function noteItem(n) {
     const state = n.resolvido ? "resolvido" : (n.cobrado ? "cobrado" : "pendente");
     return `<div class="note-item ${state}" data-id="${n.id}">
       <div class="note-head">
+        <span class="tag note-flow">Fluxo ${esc(n.fluxo)}</span>
         ${n.estagio ? `<span class="tag note-stage">${esc(n.estagio)}</span>` : ""}
         <button type="button" class="note-del" title="Excluir ponto" aria-label="Excluir">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -722,8 +722,9 @@
 
   function renderNotesList() {
     const el = $("#notes-list");
+    if (!el) return;
     if (!NOTES.length) {
-      el.innerHTML = `<div class="notes-empty">Nenhum ponto anotado ainda neste fluxo.</div>`;
+      el.innerHTML = `<div class="notes-empty">Nenhum ponto anotado ainda${notesFlowFilter ? " neste fluxo" : ""}.</div>`;
       return;
     }
     el.innerHTML = NOTES.map(noteItem).join("");
@@ -759,34 +760,30 @@
     } catch (e) { toast("Erro ao excluir ponto: " + e.message, true); }
   }
 
-  function openNotesModal() {
-    $("#notes-flow-label").textContent = "Fluxo " + currentFlow;
-    renderNotesList();
-    notesModal.hidden = false;
-    setTimeout(() => { try { $("#notes-input").focus(); } catch (e) {} }, 30);
-  }
-  function closeNotesModal() { notesModal.hidden = true; }
-
-  $("#btn-notes").addEventListener("click", openNotesModal);
-  $("#notes-close").addEventListener("click", closeNotesModal);
-  notesModal.addEventListener("click", (e) => { if (e.target.id === "notes-modal") closeNotesModal(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !notesModal.hidden) closeNotesModal(); });
+  $$("#pontos-chips-flow .chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      notesFlowFilter = chip.dataset.flow;
+      $$("#pontos-chips-flow .chip").forEach((c) => c.classList.toggle("active", c === chip));
+      loadNotes();
+    });
+  });
 
   $("#notes-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const input = $("#notes-input");
     const estagioInput = $("#notes-estagio");
+    const flowSelect = $("#notes-add-flow");
     const texto = input.value.trim();
     if (!texto) return;
     try {
       const created = await api("/api/notas", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fluxo: currentFlow, texto, autor: testerName() || undefined,
+          fluxo: flowSelect.value, texto, autor: testerName() || undefined,
           estagio: estagioInput.value.trim() || undefined,
         }),
       });
-      NOTES.push(created);
+      if (!notesFlowFilter || notesFlowFilter === created.fluxo) NOTES.push(created);
       input.value = "";
       estagioInput.value = "";
       renderNotesList();
@@ -2793,7 +2790,7 @@
     $("#module-tab-ativos").hidden = !isFaiston;
     $("#module-tab-agenda").hidden = !isFaiston;
     $("#module-tab-todo").hidden = !isFaiston;
-    if (!isFaiston && currentModule !== "dispatcher") switchModule("dispatcher");
+    if (!isFaiston && !["dispatcher", "pontos"].includes(currentModule)) switchModule("dispatcher");
   }
 
   function switchModule(mod) {
@@ -2804,11 +2801,13 @@
       t.setAttribute("aria-selected", on ? "true" : "false");
     });
     $("#module-dispatcher").hidden = mod !== "dispatcher";
+    $("#module-pontos").hidden = mod !== "pontos";
     $("#module-ativos").hidden = mod !== "ativos";
     $("#module-agenda").hidden = mod !== "agenda";
     $("#module-todo").hidden = mod !== "todo";
     if (mod === "agenda") loadAgenda();
     if (mod === "todo") loadTodo();
+    if (mod === "pontos") renderNotesList();
   }
 
   $$(".module-tab").forEach((t) => t.addEventListener("click", () => {
