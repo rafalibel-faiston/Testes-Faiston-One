@@ -674,8 +674,8 @@
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !modal.hidden) closeCaseModal(); });
 
   // ---------------- pontos para reunião ----------------
-  // Página própria (módulo "Pontos p/ reunião"), sempre no menu — independente
-  // de fluxo, view ou módulo aberto. Não precisa de nenhum caso de teste vinculado.
+  // Painel lateral fixo (aba na borda direita), aberto por cima de qualquer
+  // módulo/view — independente de fluxo. Não precisa de caso de teste vinculado.
   let NOTES = [];
   let notesFlowFilter = "";   // "" = todos os fluxos
 
@@ -790,6 +790,29 @@
       updateNotesCount();
     } catch (err) { toast("Erro ao salvar ponto: " + err.message, true); }
   });
+
+  const pontosFab = $("#pontos-fab");
+  const pontosPanel = $("#pontos-panel");
+  const pontosOverlay = $("#pontos-overlay");
+
+  function openPontosPanel() {
+    pontosPanel.hidden = false;
+    pontosOverlay.hidden = false;
+    pontosFab.setAttribute("aria-expanded", "true");
+    pontosFab.classList.add("is-open");
+  }
+  function closePontosPanel() {
+    pontosPanel.hidden = true;
+    pontosOverlay.hidden = true;
+    pontosFab.setAttribute("aria-expanded", "false");
+    pontosFab.classList.remove("is-open");
+  }
+  pontosFab.addEventListener("click", () => {
+    if (pontosPanel.hidden) openPontosPanel(); else closePontosPanel();
+  });
+  $("#pontos-panel-close").addEventListener("click", closePontosPanel);
+  pontosOverlay.addEventListener("click", closePontosPanel);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !pontosPanel.hidden) closePontosPanel(); });
 
   // ---------------- fluxos (diagramas Mermaid) ----------------
   let currentView = "situacoes";     // "testes" | "fluxos" | "situacoes"
@@ -2790,7 +2813,7 @@
     $("#module-tab-ativos").hidden = !isFaiston;
     $("#module-tab-agenda").hidden = !isFaiston;
     $("#module-tab-todo").hidden = !isFaiston;
-    if (!isFaiston && !["dispatcher", "pontos"].includes(currentModule)) switchModule("dispatcher");
+    if (!isFaiston && currentModule !== "dispatcher") switchModule("dispatcher");
   }
 
   function switchModule(mod) {
@@ -2801,13 +2824,11 @@
       t.setAttribute("aria-selected", on ? "true" : "false");
     });
     $("#module-dispatcher").hidden = mod !== "dispatcher";
-    $("#module-pontos").hidden = mod !== "pontos";
     $("#module-ativos").hidden = mod !== "ativos";
     $("#module-agenda").hidden = mod !== "agenda";
     $("#module-todo").hidden = mod !== "todo";
     if (mod === "agenda") loadAgenda();
     if (mod === "todo") loadTodo();
-    if (mod === "pontos") renderNotesList();
   }
 
   $$(".module-tab").forEach((t) => t.addEventListener("click", () => {

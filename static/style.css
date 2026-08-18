@@ -734,9 +734,41 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 .btn-primary:hover { transform:translateY(-1px); box-shadow:0 8px 18px -8px rgba(0,84,236,.55); }
 .btn-primary:disabled { opacity:.6; cursor:default; transform:none; }
 
-/* ---------- página "pontos para reunião" (módulo próprio, sempre no menu) ---------- */
+/* ---------- painel lateral "pontos para reunião" (fixo, aberto por cima de qualquer aba) ---------- */
+.pontos-fab {
+  position:fixed; top:50%; right:0; transform:translateY(-50%); z-index:40;
+  display:flex; align-items:center; gap:8px; cursor:pointer;
+  border:1px solid var(--f-purple); border-right:none; color:var(--f-purple); background:#fffce8;
+  border-radius:12px 0 0 12px; padding:12px 14px; font-size:13px; font-weight:600; font-family:'Roboto',sans-serif;
+  box-shadow:-6px 4px 18px -8px rgba(30,34,80,.25);
+  transition:padding .15s var(--ease), box-shadow .15s var(--ease), background .15s var(--ease);
+}
+.pontos-fab:hover { background:#fff8e8; box-shadow:-8px 6px 22px -8px rgba(30,34,80,.32); }
+.pontos-fab.is-open { padding-right:18px; }
+.pontos-fab-label { writing-mode:vertical-rl; transform:rotate(180deg); white-space:nowrap; }
+.pontos-fab svg { flex-shrink:0; }
+
+.pontos-overlay {
+  position:fixed; inset:0; background:rgba(23,26,46,.28); z-index:49;
+  animation:pontos-fade .15s var(--ease);
+}
+.pontos-overlay[hidden] { display:none; }
+@keyframes pontos-fade { from { opacity:0; } to { opacity:1; } }
+
+.pontos-panel {
+  position:fixed; top:0; right:0; bottom:0; width:min(420px, 92vw); z-index:50;
+  background:var(--bg); border-left:1px solid var(--line); box-shadow:-16px 0 40px -20px rgba(30,34,80,.35);
+  display:flex; flex-direction:column; padding:20px 22px; overflow-y:auto;
+  animation:pontos-slide-in .18s var(--ease);
+}
+.pontos-panel[hidden] { display:none; }
+@keyframes pontos-slide-in { from { transform:translateX(100%); } to { transform:translateX(0); } }
+.pontos-panel-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.pontos-panel-head h3 { font-size:16px; }
+.pontos-panel-hint { font-size:12px; color:var(--text-3); line-height:1.55; margin-bottom:16px; }
+
 .notes-add { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
-.notes-add-top { display:flex; gap:8px; }
+.notes-add-top { display:flex; gap:8px; flex-wrap:wrap; }
 .notes-add-top #notes-estagio {
   flex:1; background:var(--surface-2); border:1px solid var(--line-2); color:var(--text);
   border-radius:9px; padding:8px 12px; font-size:12.5px; font-family:'Roboto',sans-serif;
@@ -753,7 +785,7 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 }
 .notes-add textarea:focus { outline:none; border-color:var(--f-purple); box-shadow:0 0 0 3px rgba(150,10,156,.10); }
 .notes-list { display:flex; flex-direction:column; gap:10px; padding:2px; }
-.notes-list-page { margin-top:18px; max-width:760px; }
+.notes-list-page { margin-top:4px; }
 
 /* cada ponto tem a cara de um post-it: papel amarelado enquanto está solto,
    muda de cor conforme avança (cobrado -> âmbar, resolvido -> verde e apagado) */
@@ -1258,8 +1290,7 @@ body.inline-connecting * { cursor:crosshair !important; }
 }
 .module-tab.active .module-tab-badge { background:rgba(255,255,255,.28); }
 .module-tab-badge[hidden] { display:none; }
-#module-ativos[hidden], #module-agenda[hidden], #module-todo[hidden], #module-dispatcher[hidden],
-#module-pontos[hidden] { display:none; }
+#module-ativos[hidden], #module-agenda[hidden], #module-todo[hidden], #module-dispatcher[hidden] { display:none; }
 
 .module-empty {
   background:var(--surface); border:1px dashed var(--line-2); border-radius:var(--radius-lg);
