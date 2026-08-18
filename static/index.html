@@ -95,15 +95,29 @@
     </button>
   </nav>
 
-  <div class="view-switch" role="tablist" aria-label="Alternar visão">
-    <button type="button" class="view-tab" data-view="fluxos" role="tab" aria-selected="false">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1" transform="translate(0 0)"/><path d="M6 9v6M18 9v6M9 6h6"/></svg>
-      Fluxos (diagramas)
-    </button>
-    <button type="button" class="view-tab active" data-view="situacoes" role="tab" aria-selected="true">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5a2 2 0 0 1 2-2h8.5L20 7.5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M14 3v5h5"/><path d="M8 13h8M8 17h5"/></svg>
-      Situações
-    </button>
+  <div class="view-switch-row">
+    <div class="view-switch" role="tablist" aria-label="Alternar visão">
+      <button type="button" class="view-tab" data-view="fluxos" role="tab" aria-selected="false">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1" transform="translate(0 0)"/><path d="M6 9v6M18 9v6M9 6h6"/></svg>
+        Fluxos (diagramas)
+      </button>
+      <button type="button" class="view-tab active" data-view="situacoes" role="tab" aria-selected="true">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5a2 2 0 0 1 2-2h8.5L20 7.5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M14 3v5h5"/><path d="M8 13h8M8 17h5"/></svg>
+        Situações
+      </button>
+    </div>
+    <div class="global-actions">
+      <button type="button" class="notes-btn" id="btn-notes">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+        Pontos para reunião
+        <span class="notes-count" id="notes-count">0</span>
+      </button>
+      <button type="button" class="activity-btn" id="btn-activity">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Novidades
+        <span class="activity-count" id="activity-count" hidden>0</span>
+      </button>
+    </div>
   </div>
 
   <div id="view-testes" hidden>
@@ -126,19 +140,9 @@
         Ver evidências em sequência
         <span class="present-count" id="present-count">0 prints</span>
       </button>
-      <button type="button" class="notes-btn" id="btn-notes">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
-        Pontos para reunião
-        <span class="notes-count" id="notes-count">0</span>
-      </button>
       <button type="button" class="export-btn" id="btn-export">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Exportar Excel
-      </button>
-      <button type="button" class="activity-btn" id="btn-activity">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        Novidades
-        <span class="activity-count" id="activity-count" hidden>0</span>
       </button>
       <span class="present-hint">Passa print a print, agrupado por estágio</span>
     </div>

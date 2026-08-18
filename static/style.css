@@ -784,8 +784,14 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 .note-meta { font-size:10.5px; color:var(--text-3); margin-top:8px; padding-top:8px; border-top:1px solid rgba(217,119,6,.15); }
 
 /* ---------- view switch (Testes / Fluxos) ---------- */
+.view-switch-row {
+  display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
+  margin-bottom:22px;
+}
+.view-switch-row .view-switch { margin-bottom:0; }
+.global-actions { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
 .view-switch {
-  display:inline-flex; gap:4px; margin-bottom:22px; padding:4px;
+  display:inline-flex; gap:4px; padding:4px;
   background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow-1);
 }
 .view-tab {
