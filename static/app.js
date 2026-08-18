@@ -697,16 +697,26 @@
   }
 
   function noteItem(n) {
-    return `<div class="note-item ${n.resolvido ? "resolvido" : ""}" data-id="${n.id}">
+    const state = n.resolvido ? "resolvido" : (n.cobrado ? "cobrado" : "pendente");
+    return `<div class="note-item ${state}" data-id="${n.id}">
       <div class="note-head">
-        <input type="checkbox" class="note-check" ${n.resolvido ? "checked" : ""} title="Marcar como discutido">
         ${n.estagio ? `<span class="tag note-stage">${esc(n.estagio)}</span>` : ""}
         <button type="button" class="note-del" title="Excluir ponto" aria-label="Excluir">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
         </button>
       </div>
       <div class="note-text">${esc(n.texto)}</div>
-      <div class="note-meta">${n.autor ? esc(n.autor) + " · " : ""}${fmtWhen(n.created_at)}</div>
+      <div class="note-flags">
+        <label class="note-flag">
+          <input type="checkbox" class="note-check-cobrado" ${n.cobrado ? "checked" : ""}>
+          Já cobramos
+        </label>
+        <label class="note-flag">
+          <input type="checkbox" class="note-check-resolvido" ${n.resolvido ? "checked" : ""}>
+          Resolvido
+        </label>
+      </div>
+      <div class="note-meta">${n.autor ? esc(n.autor) + " · " : ""}${fmtWhen(n.created_at)}${n.cobrado ? ` · cobrado ${fmtWhen(n.cobrado_em)}` : ""}${n.resolvido ? ` · resolvido ${fmtWhen(n.resolvido_em)}` : ""}</div>
     </div>`;
   }
 
@@ -717,18 +727,21 @@
       return;
     }
     el.innerHTML = NOTES.map(noteItem).join("");
-    $$(".note-check", el).forEach((chk) => {
-      chk.addEventListener("change", () => toggleNote(chk.closest(".note-item").dataset.id, chk.checked));
+    $$(".note-check-cobrado", el).forEach((chk) => {
+      chk.addEventListener("change", () => toggleNote(chk.closest(".note-item").dataset.id, { cobrado: chk.checked }));
+    });
+    $$(".note-check-resolvido", el).forEach((chk) => {
+      chk.addEventListener("change", () => toggleNote(chk.closest(".note-item").dataset.id, { resolvido: chk.checked }));
     });
     $$(".note-del", el).forEach((btn) => {
       btn.addEventListener("click", () => deleteNote(btn.closest(".note-item").dataset.id));
     });
   }
 
-  async function toggleNote(id, resolvido) {
+  async function toggleNote(id, patch) {
     try {
       const updated = await api(`/api/notas/${id}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resolvido }),
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
       });
       const idx = NOTES.findIndex((n) => n.id === updated.id);
       if (idx >= 0) NOTES[idx] = updated;

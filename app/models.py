@@ -135,7 +135,13 @@ class MeetingNote(Base):
     estagio = Column(String, nullable=True)   # de qual estágio é o ponto, se aplicável
     texto = Column(Text, nullable=False)
     autor = Column(String, nullable=True)
+    # cobrado=True: já foi levado/comunicado pra outra parte (LP, etc.) — passo
+    # intermediário entre "anotado" e "resolvido", pra saber se falta só cobrar
+    # de novo ou se ainda nem foi levantado com eles.
+    cobrado = Column(Boolean, nullable=False, default=False, server_default=expression.false())
+    cobrado_em = Column(DateTime(timezone=True), nullable=True)
     resolvido = Column(Boolean, nullable=False, default=False, server_default=expression.false())
+    resolvido_em = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 

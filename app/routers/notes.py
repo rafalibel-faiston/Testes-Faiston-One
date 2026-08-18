@@ -2,6 +2,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import func
 
 from .. import models, schemas
 from ..activity import log as log_activity, snippet
@@ -15,7 +16,9 @@ def list_notes(fluxo: Optional[str] = None, db: Session = Depends(get_db)):
     q = db.query(models.MeetingNote)
     if fluxo:
         q = q.filter(models.MeetingNote.fluxo == fluxo)
-    return q.order_by(models.MeetingNote.resolvido, models.MeetingNote.created_at).all()
+    return q.order_by(
+        models.MeetingNote.resolvido, models.MeetingNote.cobrado, models.MeetingNote.created_at
+    ).all()
 
 
 @router.post("/notas", response_model=schemas.MeetingNoteOut, status_code=201)
@@ -45,9 +48,19 @@ def update_note(note_id: int, payload: schemas.MeetingNoteUpdate, db: Session = 
         note.texto = texto
     if payload.estagio is not None:
         note.estagio = payload.estagio
+    if payload.cobrado is not None:
+        if payload.cobrado and not note.cobrado:
+            log_activity(db, note.fluxo, "ponto", f'Ponto cobrado: "{snippet(note.texto, 60)}"')
+            note.cobrado_em = func.now()
+        elif not payload.cobrado and note.cobrado:
+            note.cobrado_em = None
+        note.cobrado = payload.cobrado
     if payload.resolvido is not None:
         if payload.resolvido and not note.resolvido:
-            log_activity(db, note.fluxo, "ponto", f'Ponto discutido: "{snippet(note.texto, 60)}"')
+            log_activity(db, note.fluxo, "ponto", f'Ponto resolvido: "{snippet(note.texto, 60)}"')
+            note.resolvido_em = func.now()
+        elif not payload.resolvido and note.resolvido:
+            note.resolvido_em = None
         note.resolvido = payload.resolvido
     db.commit()
     db.refresh(note)

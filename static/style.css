@@ -751,23 +751,21 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 .notes-add textarea:focus { outline:none; border-color:var(--f-purple); box-shadow:0 0 0 3px rgba(150,10,156,.10); }
 .notes-list { display:flex; flex-direction:column; gap:10px; max-height:min(50vh, 420px); overflow-y:auto; padding:2px; }
 
-/* cada ponto tem a cara de um card, igual aos casos de teste (versão compacta) */
+/* cada ponto tem a cara de um post-it: papel amarelado enquanto está solto,
+   muda de cor conforme avança (cobrado -> âmbar, resolvido -> verde e apagado) */
 .notes-empty { font-size:12px; color:var(--text-3); font-style:italic; padding:6px 2px; }
 .note-item {
-  background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--f-purple);
-  border-radius:var(--radius); padding:12px 14px;
-  transition:border-color .15s var(--ease), opacity .2s var(--ease), box-shadow .15s var(--ease);
+  background:#fffce8; border:1px solid rgba(217,119,6,.20); border-left:4px solid var(--f-purple);
+  border-radius:var(--radius); padding:12px 14px; box-shadow:0 2px 6px -3px rgba(30,34,80,.15);
+  transition:border-color .15s var(--ease), background .15s var(--ease), opacity .2s var(--ease), box-shadow .15s var(--ease);
 }
 .note-item:hover { box-shadow:var(--shadow-1); }
-.note-item.resolvido { border-left-color:var(--na); opacity:.6; }
+.note-item.cobrado { border-left-color:var(--warn); background:#fff8e8; }
+.note-item.resolvido { border-left-color:var(--ok); background:var(--surface); opacity:.6; }
 .note-item.resolvido .note-text { text-decoration:line-through; }
 .note-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
-.note-check {
-  flex-shrink:0; width:18px; height:18px; border-radius:6px; cursor:pointer;
-  accent-color:var(--f-purple);
-}
 .note-stage {
-  color:#a3128e; border-color:rgba(150,10,156,.28); background:rgba(150,10,156,.08);
+  color:#a3128e; border-color:rgba(150,10,156,.28); background:rgba(150,10,176,.08);
 }
 .note-del {
   margin-left:auto; flex-shrink:0; width:26px; height:26px; border-radius:7px; cursor:pointer;
@@ -776,7 +774,14 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 }
 .note-del:hover { color:var(--bad); border-color:var(--bad); background:var(--bad-bg); }
 .note-text { font-size:13px; color:var(--text); line-height:1.55; white-space:pre-wrap; word-break:break-word; }
-.note-meta { font-size:10.5px; color:var(--text-3); margin-top:8px; padding-top:8px; border-top:1px solid var(--line); }
+.note-flags { display:flex; gap:14px; margin-top:10px; flex-wrap:wrap; }
+.note-flag {
+  display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-2);
+  cursor:pointer; user-select:none;
+}
+.note-flag input[type="checkbox"] { width:16px; height:16px; border-radius:5px; cursor:pointer; accent-color:var(--warn); }
+.note-flag:has(input.note-check-resolvido) input { accent-color:var(--ok); }
+.note-meta { font-size:10.5px; color:var(--text-3); margin-top:8px; padding-top:8px; border-top:1px solid rgba(217,119,6,.15); }
 
 /* ---------- view switch (Testes / Fluxos) ---------- */
 .view-switch {

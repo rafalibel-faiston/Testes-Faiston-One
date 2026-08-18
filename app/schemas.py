@@ -195,7 +195,10 @@ class MeetingNoteOut(BaseModel):
     estagio: Optional[str] = None
     texto: str
     autor: Optional[str] = None
+    cobrado: bool = False
+    cobrado_em: Optional[datetime] = None
     resolvido: bool = False
+    resolvido_em: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -210,6 +213,7 @@ class MeetingNoteCreate(BaseModel):
 class MeetingNoteUpdate(BaseModel):
     texto: Optional[str] = None
     estagio: Optional[str] = None
+    cobrado: Optional[bool] = None
     resolvido: Optional[bool] = None
 
 

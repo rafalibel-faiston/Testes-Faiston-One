@@ -355,6 +355,15 @@ def migrate_schema(engine):
         note_cols = {c["name"] for c in insp.get_columns("meeting_notes")}
         if "estagio" not in note_cols:
             stmts.append("ALTER TABLE meeting_notes ADD COLUMN estagio VARCHAR")
+        if "cobrado" not in note_cols:
+            stmts.append("ALTER TABLE meeting_notes ADD COLUMN cobrado BOOLEAN NOT NULL DEFAULT "
+                         + ("FALSE" if pg else "0"))
+        if "cobrado_em" not in note_cols:
+            stmts.append("ALTER TABLE meeting_notes ADD COLUMN cobrado_em "
+                         + ("TIMESTAMP WITH TIME ZONE" if pg else "TIMESTAMP"))
+        if "resolvido_em" not in note_cols:
+            stmts.append("ALTER TABLE meeting_notes ADD COLUMN resolvido_em "
+                         + ("TIMESTAMP WITH TIME ZONE" if pg else "TIMESTAMP"))
 
     if "situacoes" in existing_tables:
         sit_cols = {c["name"] for c in insp.get_columns("situacoes")}
