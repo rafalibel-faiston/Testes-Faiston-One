@@ -131,6 +131,11 @@ pedidos em cima dele. Cada ajuste é um item no formato que o time já usa:
 - com área/tela, prioridade, responsável e situação (Levantado → Em análise →
   Em desenvolvimento → Entregue → Validado, ou Descartado).
 
+A lista sai **ordenada por prioridade** (Alta → Média → Baixa → A definir), com o
+número do item como desempate — tela, API e MCP usam o mesmo critério. O número
+não muda de lugar junto: ele é a identidade do ajuste ("o ajuste 4"), não a
+posição na fila.
+
 Os 7 ajustes levantados pra **v2** vêm semeados (`seed_ativos_ajustes` em
 `app/seed_data.py`) — idempotente: redeploy não duplica nem sobrescreve o que o
 time já editou ou moveu de situação na tela.

@@ -1618,3 +1618,9 @@ body.inline-connecting * { cursor:crosshair !important; }
   .ajuste-item-head { flex-wrap:wrap; }
   .ajuste-status { order:3; }
 }
+
+/* a lista vem ordenada por prioridade — a cor da etiqueta deixa isso legível */
+.ajuste-tag.t-prio.p-alta { background:var(--warn-bg); border-color:var(--warn-ln); color:var(--warn); font-weight:700; }
+.ajuste-tag.t-prio.p-media { background:var(--surface-2); border-color:var(--line-2); color:var(--text-2); }
+.ajuste-tag.t-prio.p-baixa,
+.ajuste-tag.t-prio.p-definir { background:var(--na-bg); border-color:var(--na-ln); color:var(--na); }

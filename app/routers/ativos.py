@@ -55,7 +55,10 @@ def list_ajustes(
         q = q.filter(models.AtivoAjuste.tipo == tipo)
     if status:
         q = q.filter(models.AtivoAjuste.status == status)
-    return q.order_by(models.AtivoAjuste.versao, models.AtivoAjuste.numero, models.AtivoAjuste.id).all()
+    return q.order_by(
+        models.AtivoAjuste.versao, models.AJUSTE_PRIORIDADE_ORDEM,
+        models.AtivoAjuste.numero, models.AtivoAjuste.id,
+    ).all()
 
 
 @router.post("/ativos/ajustes", response_model=schemas.AtivoAjusteOut, status_code=201)

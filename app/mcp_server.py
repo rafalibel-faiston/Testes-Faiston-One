@@ -397,8 +397,10 @@ def listar_ajustes_ativos(versao: Optional[str] = None, tipo: Optional[str] = No
             query = query.filter(models.AtivoAjuste.versao == versao.strip().lower())
         if tipo:
             query = query.filter(models.AtivoAjuste.tipo == tipo)
+        # mesma ordem da tela: prioridade primeiro, número do item como desempate
         ajustes = query.order_by(
-            models.AtivoAjuste.versao, models.AtivoAjuste.numero, models.AtivoAjuste.id
+            models.AtivoAjuste.versao, models.AJUSTE_PRIORIDADE_ORDEM,
+            models.AtivoAjuste.numero, models.AtivoAjuste.id,
         ).all()
         return [
             {

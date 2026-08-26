@@ -3270,6 +3270,13 @@
   // o que ainda dá trabalho — usado no contador da aba e no "em aberto" do resumo
   const AJUSTE_ABERTO = new Set(["levantado", "analise", "desenvolvimento", "entregue"]);
 
+  // a lista sai por prioridade: Alta primeiro, "A definir" por último. O número
+  // do item não muda — ele é a identidade do ajuste ("o ajuste 4"), não a ordem.
+  const AJUSTE_PRIORIDADE_ORDEM = { "Alta": 0, "Média": 1, "Baixa": 2, "A definir": 3 };
+  const prioridadeRank = (p) => (p in AJUSTE_PRIORIDADE_ORDEM ? AJUSTE_PRIORIDADE_ORDEM[p] : 3);
+  const AJUSTE_PRIORIDADE_CLASS = { "Alta": "p-alta", "Média": "p-media", "Baixa": "p-baixa" };
+  const prioridadeCls = (p) => AJUSTE_PRIORIDADE_CLASS[p] || "p-definir";
+
   // v10 depois de v9: ordena pelo número da versão, não pelo texto
   function versaoRank(v) {
     const n = parseInt(String(v).replace(/\D/g, ""), 10);
@@ -3367,7 +3374,7 @@
           <div class="ajuste-tags">
             <span class="ajuste-tag ${tipoCls}">${esc(a.tipo)}</span>
             ${a.area ? `<span class="ajuste-tag t-area">${esc(a.area)}</span>` : ""}
-            <span class="ajuste-tag t-prio">${esc(a.prioridade)}</span>
+            <span class="ajuste-tag t-prio ${prioridadeCls(a.prioridade)}">${esc(a.prioridade)}</span>
             ${a.responsavel ? `<span class="ajuste-tag t-resp">${esc(a.responsavel)}</span>` : ""}
           </div>
         </div>
@@ -3393,7 +3400,8 @@
     const itens = ajustesDaVersao()
       .filter((a) => !ajusteFiltros.tipo || a.tipo === ajusteFiltros.tipo)
       .filter((a) => !ajusteFiltros.status || a.status === ajusteFiltros.status)
-      .sort((a, b) => (a.numero || 0) - (b.numero || 0) || a.id - b.id);
+      .sort((a, b) => prioridadeRank(a.prioridade) - prioridadeRank(b.prioridade)
+                      || (a.numero || 0) - (b.numero || 0) || a.id - b.id);
 
     const semNada = !ajustesDaVersao().length;
     $("#ajustes-empty").hidden = !semNada;

@@ -1,4 +1,6 @@
-from sqlalchemy import Column, Integer, String, Text, LargeBinary, DateTime, ForeignKey, Boolean, UniqueConstraint
+from sqlalchemy import (
+    Column, Integer, String, Text, LargeBinary, DateTime, ForeignKey, Boolean, UniqueConstraint, case,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func, expression
 
@@ -266,6 +268,17 @@ class AtivoAjuste(Base):
     autor = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
+# Ordem em que o time ataca os ajustes: Alta primeiro, o que ainda não foi
+# priorizado por último. Usada pela API e pelo MCP pra devolver a lista já na
+# ordem que a tela mostra.
+AJUSTE_PRIORIDADE_ORDEM = case(
+    (AtivoAjuste.prioridade == "Alta", 0),
+    (AtivoAjuste.prioridade == "Média", 1),
+    (AtivoAjuste.prioridade == "Baixa", 2),
+    else_=3,
+)
 
 
 class Observation(Base):
