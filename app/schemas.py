@@ -199,6 +199,9 @@ class MeetingNoteOut(BaseModel):
     cobrado_em: Optional[datetime] = None
     resolvido: bool = False
     resolvido_em: Optional[datetime] = None
+    retorno: Optional[str] = ""
+    prazo: Optional[str] = None
+    retorno_em: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -215,6 +218,8 @@ class MeetingNoteUpdate(BaseModel):
     estagio: Optional[str] = None
     cobrado: Optional[bool] = None
     resolvido: Optional[bool] = None
+    retorno: Optional[str] = None
+    prazo: Optional[str] = None
 
 
 class FlowDiagramOut(BaseModel):
@@ -368,6 +373,9 @@ class AtivoAjusteOut(BaseModel):
     status: str = "levantado"
     responsavel: Optional[str] = None
     autor: Optional[str] = None
+    retorno: Optional[str] = ""
+    prazo: Optional[str] = None
+    retorno_em: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     prints: List[AtivoAjustePrintOut] = []
@@ -400,3 +408,5 @@ class AtivoAjusteUpdate(BaseModel):
     observacao: Optional[str] = None
     status: Optional[str] = None
     responsavel: Optional[str] = None
+    retorno: Optional[str] = None
+    prazo: Optional[str] = None

@@ -364,6 +364,23 @@ def migrate_schema(engine):
         if "resolvido_em" not in note_cols:
             stmts.append("ALTER TABLE meeting_notes ADD COLUMN resolvido_em "
                          + ("TIMESTAMP WITH TIME ZONE" if pg else "TIMESTAMP"))
+        if "retorno" not in note_cols:
+            stmts.append("ALTER TABLE meeting_notes ADD COLUMN retorno TEXT")
+        if "prazo" not in note_cols:
+            stmts.append("ALTER TABLE meeting_notes ADD COLUMN prazo VARCHAR")
+        if "retorno_em" not in note_cols:
+            stmts.append("ALTER TABLE meeting_notes ADD COLUMN retorno_em "
+                         + ("TIMESTAMP WITH TIME ZONE" if pg else "TIMESTAMP"))
+
+    if "ativo_ajustes" in existing_tables:
+        aj_cols = {c["name"] for c in insp.get_columns("ativo_ajustes")}
+        if "retorno" not in aj_cols:
+            stmts.append("ALTER TABLE ativo_ajustes ADD COLUMN retorno TEXT")
+        if "prazo" not in aj_cols:
+            stmts.append("ALTER TABLE ativo_ajustes ADD COLUMN prazo VARCHAR")
+        if "retorno_em" not in aj_cols:
+            stmts.append("ALTER TABLE ativo_ajustes ADD COLUMN retorno_em "
+                         + ("TIMESTAMP WITH TIME ZONE" if pg else "TIMESTAMP"))
 
     if "situacoes" in existing_tables:
         sit_cols = {c["name"] for c in insp.get_columns("situacoes")}

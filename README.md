@@ -158,6 +158,20 @@ O botão **Pauta da reunião**, ao lado do *Exportar Excel*, abre a página do
 fluxo aberto numa aba nova — dá pra projetar direto ou imprimir em PDF (o CSS
 já tem regras de impressão).
 
+### Anotar o retorno do time
+
+Cada **ponto** e cada **ajuste** da pauta tem um campo *Retorno do time*: uma
+data (o prazo que eles prometeram) e um texto livre (o que ficou combinado).
+Dá pra preencher durante a própria reunião, direto na página — o botão salva na
+API na hora, e `Ctrl+Enter` no texto salva sem tirar a mão do teclado.
+
+O retorno fica guardado no ponto/ajuste, então também aparece no painel de
+Pontos e no card do ajuste na tela normal do app; no ajuste dá pra editar
+também pelo modal de edição (✎).
+
+Num arquivo `.html` gerado pelo script não há servidor pra receber, então lá o
+retorno aparece só como leitura — o que já foi anotado continua visível.
+
 A página é montada na hora, a partir do banco: não tem cache e não precisa de
 geração prévia. Como todo o resto do app, é aberta — quem tem o link vê.
 

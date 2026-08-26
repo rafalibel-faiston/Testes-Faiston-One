@@ -759,6 +759,25 @@
     if (el) { el.textContent = open; el.hidden = open === 0; }
   }
 
+  // O que a outra ponta respondeu e pra quando prometeram — anotado na pauta da
+  // reunião (/relatorio) ou, no caso do ajuste, no próprio modal de edição.
+  function retornoLinha(item) {
+    const retorno = (item.retorno || "").trim();
+    const prazo = (item.prazo || "").trim();
+    if (!retorno && !prazo) return "";
+    const dia = prazo ? `<b>Prazo ${esc(fmtDia(prazo))}</b>` : "";
+    const sep = retorno && prazo ? " · " : "";
+    return `<div class="retorno-linha-card"><span class="retorno-tag">Retorno do time</span>
+      ${dia}${sep}${esc(retorno)}</div>`;
+  }
+
+  // "AAAA-MM-DD" -> "DD/MM/AAAA", sem passar por Date (que interpretaria como UTC
+  // e podia voltar um dia no fuso do Brasil).
+  function fmtDia(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : (iso || "");
+  }
+
   function noteItem(n) {
     const state = n.resolvido ? "resolvido" : (n.cobrado ? "cobrado" : "pendente");
     return `<div class="note-item ${state}" data-id="${n.id}">
@@ -780,6 +799,7 @@
           Resolvido
         </label>
       </div>
+      ${retornoLinha(n)}
       <div class="note-meta">${n.autor ? esc(n.autor) + " · " : ""}${fmtWhen(n.created_at)}${n.cobrado ? ` · cobrado ${fmtWhen(n.cobrado_em)}` : ""}${n.resolvido ? ` · resolvido ${fmtWhen(n.resolvido_em)}` : ""}</div>
     </div>`;
   }
@@ -3465,6 +3485,7 @@
         </div>
       </div>
       ${a.observacao ? `<div class="ajuste-obs"><b>Obs.</b> ${esc(a.observacao)}</div>` : ""}
+      ${retornoLinha(a)}
       <div class="ajuste-shots">
         <div class="ajuste-shots-grid">${(a.prints || []).map(ajustePrintThumb).join("")}</div>
         <label class="ajuste-upload" title="Colar com Ctrl+V ou escolher um arquivo">
@@ -3615,6 +3636,8 @@
       ajusteForm.atual.value = a.atual || "";
       ajusteForm.esperado.value = a.esperado || "";
       ajusteForm.observacao.value = a.observacao || "";
+      ajusteForm.prazo.value = a.prazo || "";
+      ajusteForm.retorno.value = a.retorno || "";
     } else {
       ajusteForm.versao.value = ajusteVersao || "v2";
     }
@@ -3650,6 +3673,8 @@
       atual: fd.get("atual") || "",
       esperado: fd.get("esperado") || "",
       observacao: fd.get("observacao") || "",
+      retorno: fd.get("retorno") || "",
+      prazo: fd.get("prazo") || "",
     };
     try {
       if (editingAjusteId) {

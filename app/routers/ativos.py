@@ -14,6 +14,7 @@ from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session, joinedload
 
 from .. import models, schemas
+from ..activity import normaliza_prazo
 from ..database import get_db
 
 router = APIRouter(tags=["ativos"])
@@ -141,6 +142,12 @@ def update_ajuste(ajuste_id: int, payload: schemas.AtivoAjusteUpdate, db: Sessio
         ajuste.status = payload.status
     if payload.responsavel is not None:
         ajuste.responsavel = payload.responsavel.strip() or None
+    if payload.retorno is not None:
+        retorno = payload.retorno.strip()
+        ajuste.retorno = retorno
+        ajuste.retorno_em = sa_func.now() if retorno else None
+    if payload.prazo is not None:
+        ajuste.prazo = normaliza_prazo(payload.prazo)
     db.commit()
     db.refresh(ajuste)
     return ajuste

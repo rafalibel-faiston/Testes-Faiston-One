@@ -415,6 +415,8 @@ def listar_ajustes_ativos(versao: Optional[str] = None, tipo: Optional[str] = No
                 "esperado": a.esperado,
                 "status": a.status,
                 "responsavel": a.responsavel,
+                "retorno": a.retorno,
+                "prazo": a.prazo,
             }
             for a in ajustes
         ]

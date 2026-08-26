@@ -114,6 +114,41 @@ def ordena_prioridade(itens: list, chave="prioridade") -> list:
 # --------------------------------------------------------------------------- seções
 
 
+def bloco_retorno(tipo: str, item_id, retorno: str, prazo: str, editavel: bool) -> str:
+    """O que a outra ponta respondeu sobre este item, e pra quando prometeram.
+
+    Servido pelo app (`/relatorio`), vira formulário: dá pra anotar durante a
+    própria reunião, sem trocar de tela. Num arquivo .html gerado pelo script
+    não há pra onde salvar, então aparece só como leitura."""
+    prazo = (prazo or "").strip()
+    retorno = (retorno or "").strip()
+
+    if not editavel:
+        if not retorno and not prazo:
+            return ""
+        partes = ""
+        if prazo:
+            partes += f'<div><b>Prazo:</b> {data_br(prazo)}</div>'
+        if retorno:
+            partes += f"<div>{nl2br(retorno)}</div>"
+        return (f'<div class="retorno retorno-ro">'
+                f'<div class="label-sec">Retorno do time</div>{partes}</div>')
+
+    return f"""
+      <div class="retorno" data-tipo="{e(tipo)}" data-id="{e(item_id)}">
+        <div class="label-sec">Retorno do time</div>
+        <div class="retorno-linha">
+          <label class="retorno-prazo-wrap">Prazo
+            <input type="date" class="retorno-prazo" value="{e(prazo)}">
+          </label>
+          <textarea class="retorno-texto" rows="2"
+            placeholder="O que ficou combinado na reunião…">{e(retorno)}</textarea>
+          <button type="button" class="retorno-salvar">Salvar</button>
+        </div>
+        <div class="retorno-aviso" aria-live="polite"></div>
+      </div>"""
+
+
 def sec(numero: str, titulo: str, sub: str, corpo: str, anchor: str) -> str:
     if not corpo.strip():
         return ""
@@ -132,7 +167,7 @@ def vazio(msg: str) -> str:
     return f'<div class="card"><p class="muted">{e(msg)}</p></div>'
 
 
-def secao_pontos(notas: list) -> str:
+def secao_pontos(notas: list, editavel: bool = False) -> str:
     """Os pontos em aberto, separados entre os que já foram cobrados da outra
     ponta (falta a devolutiva) e os que ainda nem foram levantados."""
     abertos = [n for n in notas if not n.get("resolvido")]
@@ -156,7 +191,10 @@ def secao_pontos(notas: list) -> str:
                 <span class="titulo" style="font-family:'Roboto',sans-serif;font-weight:400;font-size:15px">{nl2br(n.get("texto"))}</span>
                 {badge(titulo, classe)}
               </div>
-              <div class="item-corpo"><div class="item-meta">{meta}</div></div>
+              <div class="item-corpo">
+                <div class="item-meta">{meta}</div>
+                {bloco_retorno("nota", n.get("id"), n.get("retorno"), n.get("prazo"), editavel)}
+              </div>
             </li>"""
         return f"""
       <div class="callout {'info' if classe == 'b-info' else ''}" style="margin-bottom:14px"><b>{e(titulo)}</b> — {e(nota)}</div>
@@ -309,7 +347,7 @@ def secao_situacoes(situacoes: list, multi_fluxo: bool = False) -> str:
     return f'<div class="grid g2" style="align-items:start">{blocos}</div>'
 
 
-def secao_ajustes(ajustes: list) -> str:
+def secao_ajustes(ajustes: list, editavel: bool = False) -> str:
     """Os ajustes pendentes em lista, na ordem em que o time ataca (prioridade e
     depois o número do item) — é por esse número que eles se referem ao ajuste na
     reunião."""
@@ -346,6 +384,7 @@ def secao_ajustes(ajustes: list) -> str:
                 <div class="hoje"><b>Hoje:</b> {nl2br(a.get("atual"))}</div>
                 <div class="deveria"><b>Deveria ser:</b> {nl2br(a.get("esperado"))}</div>
                 {f'<div class="item-meta">{obs}</div>' if obs else ""}
+                {bloco_retorno("ajuste", a.get("id"), a.get("retorno"), a.get("prazo"), editavel)}
               </div>
             </li>"""
         blocos += f"""
@@ -388,6 +427,62 @@ def secao_nao_executados(casos: list) -> str:
 # --------------------------------------------------------------------------- página
 
 
+SCRIPT_RETORNO = """
+<script>
+(function () {
+  var ROTA = { nota: "/api/notas/", ajuste: "/api/ativos/ajustes/" };
+
+  function avisar(caixa, texto, classe) {
+    var aviso = caixa.querySelector(".retorno-aviso");
+    aviso.textContent = texto;
+    aviso.className = "retorno-aviso" + (classe ? " " + classe : "");
+  }
+
+  async function salvar(caixa) {
+    var botao = caixa.querySelector(".retorno-salvar");
+    var rota = ROTA[caixa.dataset.tipo];
+    if (!rota) return;
+    botao.disabled = true;
+    avisar(caixa, "Salvando...", "");
+    try {
+      var resposta = await fetch(rota + caixa.dataset.id, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          retorno: caixa.querySelector(".retorno-texto").value,
+          prazo: caixa.querySelector(".retorno-prazo").value,
+        }),
+      });
+      if (!resposta.ok) {
+        var erro = await resposta.json().catch(function () { return {}; });
+        throw new Error(erro.detail || ("HTTP " + resposta.status));
+      }
+      var agora = new Date();
+      avisar(caixa, "Salvo às " + agora.toTimeString().slice(0, 5), "ok");
+    } catch (e) {
+      avisar(caixa, "Não salvou: " + e.message, "erro");
+    } finally {
+      botao.disabled = false;
+    }
+  }
+
+  document.querySelectorAll(".retorno").forEach(function (caixa) {
+    var botao = caixa.querySelector(".retorno-salvar");
+    if (!botao) return;
+    botao.addEventListener("click", function () { salvar(caixa); });
+    // Ctrl+Enter salva sem tirar a mão do teclado — em reunião isso conta.
+    caixa.querySelector(".retorno-texto").addEventListener("keydown", function (ev) {
+      if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") { ev.preventDefault(); salvar(caixa); }
+    });
+    caixa.querySelectorAll(".retorno-texto, .retorno-prazo").forEach(function (campo) {
+      campo.addEventListener("input", function () { avisar(caixa, "", ""); });
+    });
+  });
+})();
+</script>
+"""
+
+
 def kpi(label: str, valor, ico: str, nota: str = "", classe: str = "") -> str:
     tag = f'<span class="badge {classe}">{e(nota)}</span>' if nota else ""
     return f"""
@@ -398,7 +493,9 @@ def kpi(label: str, valor, ico: str, nota: str = "", classe: str = "") -> str:
       </div>"""
 
 
-def montar_html(dados: dict, fonte: str) -> str:
+def montar_html(dados: dict, fonte: str, editavel: bool = False) -> str:
+    """`editavel` liga os campos de retorno — só faz sentido quando a página é
+    servida pelo app, que tem pra onde salvar."""
     casos = dados.get("cases") or []
     notas = dados.get("notas") or []
     ajustes = dados.get("ativos_ajustes") or []
@@ -454,15 +551,19 @@ def montar_html(dados: dict, fonte: str) -> str:
         ]
     )
 
+    # O botão salva direto na API do app. Fora do app (arquivo .html gerado pelo
+    # script) não há servidor pra receber, e o bloco de retorno já vem só-leitura.
+    script = SCRIPT_RETORNO if editavel else ""
+
     corpo = "".join([
         sec("01", "Pontos para a reunião", "levantados durante os testes e ainda não resolvidos",
-            secao_pontos(notas), "pontos"),
+            secao_pontos(notas, editavel), "pontos"),
         sec("02", "Reprovados e bloqueados", "casos de teste e estágios de situação que falharam",
             secao_reprovados(casos, situacoes, multi_fluxo), "problemas"),
         sec("03", "Situações — onde cada cenário parou", "os próximos estágios da fila de cada situação",
             secao_situacoes(situacoes, multi_fluxo), "situacoes"),
         sec("04", "Ajustes da Gestão de Ativos", "hoje é assim / deveria ser assim — pendentes de validação",
-            secao_ajustes(ajustes), "ajustes"),
+            secao_ajustes(ajustes, editavel), "ajustes"),
         sec("05", "Testes ainda não executados", "fila de execução, agrupada por estágio",
             secao_nao_executados(casos), "pendentes"),
     ])
@@ -504,6 +605,33 @@ def montar_html(dados: dict, fonte: str) -> str:
 .anotacoes li{{position:relative;padding:5px 0 5px 16px;font-size:14px}}
 .anotacoes li::before{{content:"";position:absolute;left:0;top:13px;width:5px;height:5px;
   border-radius:50%;background:var(--f-magenta)}}
+
+/* retorno do time — o que responderam e pra quando prometeram */
+.retorno{{margin-top:12px;padding:12px 14px;border-radius:var(--r-sm);
+  background:var(--surface-2);border:1px solid var(--border)}}
+.retorno .label-sec{{margin-bottom:8px}}
+.retorno-linha{{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}}
+.retorno-prazo-wrap{{display:flex;flex-direction:column;gap:4px;font-size:11px;
+  text-transform:uppercase;letter-spacing:.7px;color:var(--muted);font-weight:500}}
+.retorno-prazo{{font-family:'Roboto',sans-serif;font-size:14px;color:var(--text);
+  padding:8px 10px;border:1px solid var(--border-strong);border-radius:var(--r-sm);
+  background:var(--surface)}}
+.retorno-texto{{flex:1;min-width:220px;font-family:'Roboto',sans-serif;font-size:14px;
+  color:var(--text);padding:8px 10px;border:1px solid var(--border-strong);
+  border-radius:var(--r-sm);background:var(--surface);resize:vertical}}
+.retorno-prazo:focus,.retorno-texto:focus{{outline:none;border-color:var(--f-blue);
+  box-shadow:0 0 0 3px rgba(0,84,236,.12)}}
+.retorno-salvar{{align-self:stretch;background:var(--grad-brand);color:#fff;border:none;
+  padding:9px 18px;border-radius:var(--r-sm);font-family:'Roboto',sans-serif;font-size:14px;
+  font-weight:500;cursor:pointer}}
+.retorno-salvar:hover{{filter:brightness(1.06)}}
+.retorno-salvar:disabled{{opacity:.55;cursor:default;filter:none}}
+.retorno-aviso{{font-size:13px;margin-top:8px;min-height:1px}}
+.retorno-aviso.ok{{color:#04795c}}
+.retorno-aviso.erro{{color:#c02234}}
+.retorno-ro{{background:transparent;border-left:3px solid var(--f-blue);border-radius:0;
+  border-top:none;border-right:none;border-bottom:none;padding:2px 0 2px 14px;font-size:14px}}
+@media print{{.retorno-salvar{{display:none}}}}
 @media(max-width:720px){{.item-corpo{{padding-left:0}}}}
 </style>
 </head>
@@ -530,6 +658,8 @@ def montar_html(dados: dict, fonte: str) -> str:
 
   {corpo}
 </main>
+
+{script}
 
 <footer>
   Faiston · gerado em {agora.strftime("%d/%m/%Y às %H:%M")} (BRT) · fonte: {e(fonte)}

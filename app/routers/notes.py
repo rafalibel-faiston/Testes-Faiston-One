@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 
 from .. import models, schemas
-from ..activity import log as log_activity, snippet
+from ..activity import log as log_activity, normaliza_prazo, snippet
 from ..database import get_db
 
 router = APIRouter(tags=["notes"])
@@ -62,6 +62,15 @@ def update_note(note_id: int, payload: schemas.MeetingNoteUpdate, db: Session = 
         elif not payload.resolvido and note.resolvido:
             note.resolvido_em = None
         note.resolvido = payload.resolvido
+    if payload.retorno is not None:
+        retorno = payload.retorno.strip()
+        if retorno and retorno != (note.retorno or ""):
+            log_activity(db, note.fluxo, "ponto",
+                         f'Retorno no ponto "{snippet(note.texto, 40)}": {snippet(retorno, 60)}')
+        note.retorno = retorno
+        note.retorno_em = func.now() if retorno else None
+    if payload.prazo is not None:
+        note.prazo = normaliza_prazo(payload.prazo)
     db.commit()
     db.refresh(note)
     return note

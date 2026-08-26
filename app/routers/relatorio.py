@@ -94,7 +94,8 @@ def _coletar(db: Session, fluxo: Optional[str]) -> dict:
 @router.get("/relatorio", response_class=HTMLResponse)
 def relatorio(fluxo: Optional[str] = None, db: Session = Depends(get_db)):
     fonte = f"Console de Teste — Fluxo {fluxo}" if fluxo else "Console de Teste — todos os fluxos"
-    html = montar_html(_coletar(db, fluxo), fonte)
+    # servida pelo app: os campos de retorno salvam direto na API
+    html = montar_html(_coletar(db, fluxo), fonte, editavel=True)
     return HTMLResponse(
         content=html,
         headers={"Cache-Control": "no-cache, no-store, must-revalidate"},

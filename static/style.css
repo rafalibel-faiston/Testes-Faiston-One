@@ -526,6 +526,18 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 }
 .export-btn:hover { transform:translateY(-2px); background:rgba(13,157,108,.16); box-shadow:0 10px 22px -14px rgba(13,157,108,.5); }
 
+/* ---------- retorno do time (ponto e ajuste) ---------- */
+.retorno-linha-card {
+  margin-top:10px; padding:9px 12px; border-left:3px solid var(--f-blue);
+  background:rgba(0,84,236,.05); border-radius:0 10px 10px 0;
+  font-size:13.5px; line-height:1.55; color:var(--text-2);
+}
+.retorno-linha-card b { color:var(--f-blue-dark); font-weight:600; }
+.retorno-tag {
+  display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.8px;
+  color:var(--text-3); font-weight:600; margin-bottom:3px;
+}
+
 /* ---------- botão "Pauta da reunião" ---------- */
 .pauta-btn {
   display:inline-flex; align-items:center; gap:9px; cursor:pointer;

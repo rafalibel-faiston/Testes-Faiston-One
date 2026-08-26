@@ -144,6 +144,12 @@ class MeetingNote(Base):
     cobrado_em = Column(DateTime(timezone=True), nullable=True)
     resolvido = Column(Boolean, nullable=False, default=False, server_default=expression.false())
     resolvido_em = Column(DateTime(timezone=True), nullable=True)
+    # o que a outra ponta respondeu quando o ponto foi levado pra reunião, e a
+    # data que eles se comprometeram a resolver. Fica separado do `texto` de
+    # propósito: um é o que a Faiston levantou, o outro é o que eles devolveram.
+    retorno = Column(Text, nullable=True, default="")
+    prazo = Column(String, nullable=True)          # "AAAA-MM-DD"
+    retorno_em = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
@@ -266,6 +272,11 @@ class AtivoAjuste(Base):
     status = Column(String, nullable=False, default="levantado", server_default="levantado")
     responsavel = Column(String, nullable=True)
     autor = Column(String, nullable=True)
+    # retorno do time de dev na reunião e a data prometida — mesma ideia do
+    # MeetingNote: o que eles responderam, separado do que a gente pediu.
+    retorno = Column(Text, nullable=True, default="")
+    prazo = Column(String, nullable=True)          # "AAAA-MM-DD"
+    retorno_em = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
