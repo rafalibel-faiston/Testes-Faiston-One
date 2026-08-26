@@ -3256,6 +3256,9 @@
   // versão que ainda não existia, a aba dela aparece sozinha aqui.
   let AJUSTES = [];
   let ajusteVersao = "";                         // "" enquanto não carregou nada
+  // ajuste que recebe o Ctrl+V: o card em que a pessoa clicou por último. Sem
+  // isso não dá pra saber em qual dos sete ajustes da tela a imagem deve entrar.
+  let ajustePasteAlvo = null;
   const ajusteFiltros = { tipo: "", status: "" };
 
   const AJUSTE_STATUS = [
@@ -3366,7 +3369,7 @@
     const st = AJUSTE_STATUS_META[a.status] || AJUSTE_STATUS[0];
     const opts = AJUSTE_STATUS.map((s) =>
       `<option value="${s.key}"${s.key === a.status ? " selected" : ""}>${esc(s.label)}</option>`).join("");
-    return `<article class="ajuste-item ${tipoCls} ${st.cls}" data-id="${a.id}">
+    return `<article class="ajuste-item ${tipoCls} ${st.cls}${a.id === ajustePasteAlvo ? " paste-alvo" : ""}" data-id="${a.id}">
       <header class="ajuste-item-head">
         <span class="ajuste-num">${String(a.numero || 0).padStart(2, "0")}</span>
         <div class="ajuste-item-copy">
@@ -3392,7 +3395,22 @@
         </div>
       </div>
       ${a.observacao ? `<div class="ajuste-obs"><b>Obs.</b> ${esc(a.observacao)}</div>` : ""}
+      <div class="ajuste-shots">
+        <div class="ajuste-shots-grid">${(a.prints || []).map(ajustePrintThumb).join("")}</div>
+        <label class="ajuste-upload" title="Colar com Ctrl+V ou escolher um arquivo">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span class="ajuste-upload-txt">${a.id === ajustePasteAlvo ? "Ctrl+V pra colar aqui" : "Colar ou anexar print"}</span>
+          <input type="file" accept="image/*" class="ajuste-shot-input">
+        </label>
+      </div>
     </article>`;
+  }
+
+  function ajustePrintThumb(pr) {
+    return `<div class="ajuste-shot" data-print="${pr.id}">
+      <img src="/api/ativos/prints/${pr.id}" alt="${esc(pr.filename)}" loading="lazy">
+      <button type="button" class="del" data-del-print="${pr.id}" title="Remover print">✕</button>
+    </div>`;
   }
 
   function renderAjusteList() {
@@ -3416,6 +3434,38 @@
       $(".ajuste-edit", card).addEventListener("click", () => openAjusteModal(id));
       $(".ajuste-item-copy h3", card).addEventListener("click", () => openAjusteModal(id));
       $(".ajuste-status", card).addEventListener("change", (e) => setAjusteStatus(id, e.target.value));
+      // clicar no card o elege como destino do Ctrl+V
+      card.addEventListener("click", () => marcarAlvoDeColagem(id));
+
+      const zone = $(".ajuste-upload", card);
+      $(".ajuste-shot-input", card).addEventListener("change", (e) => {
+        if (e.target.files[0]) uploadAjustePrint(id, e.target.files[0]);
+        e.target.value = "";
+      });
+      ["dragover", "dragenter"].forEach((ev) => zone.addEventListener(ev, (e) => {
+        e.preventDefault(); zone.classList.add("dragover");
+      }));
+      ["dragleave", "drop"].forEach((ev) => zone.addEventListener(ev, (e) => {
+        e.preventDefault(); zone.classList.remove("dragover");
+      }));
+      zone.addEventListener("drop", (e) => {
+        const f = e.dataTransfer.files[0];
+        if (f) uploadAjustePrint(id, f);
+      });
+
+      $$(".ajuste-shot", card).forEach((thumb) => {
+        const pid = Number(thumb.dataset.print);
+        $("img", thumb).addEventListener("click", () => openLightbox(`/api/ativos/prints/${pid}`));
+        $(".del", thumb).addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (!confirm("Remover este print?")) return;
+          try {
+            substituiAjusteLocal(await api(`/api/ativos/prints/${pid}`, { method: "DELETE" }));
+            renderAjustes();
+            toast("Print removido.");
+          } catch (err) { toast("Erro ao remover: " + err.message, true); }
+        });
+      });
     });
   }
 
@@ -3425,6 +3475,33 @@
     const abertos = AJUSTES.filter((a) => AJUSTE_ABERTO.has(a.status)).length;
     badge.textContent = abertos;
     badge.hidden = !abertos;
+  }
+
+  function substituiAjusteLocal(atualizado) {
+    const i = AJUSTES.findIndex((x) => x.id === atualizado.id);
+    if (i >= 0) AJUSTES[i] = atualizado;
+  }
+
+  function marcarAlvoDeColagem(id) {
+    if (ajustePasteAlvo === id) return;
+    ajustePasteAlvo = id;
+    renderAjusteList();
+  }
+
+  async function uploadAjustePrint(id, file) {
+    if (!file || !file.type.startsWith("image/")) {
+      toast("Só dá pra anexar imagem.", true);
+      return;
+    }
+    try {
+      const fd = new FormData();
+      fd.append("file", file, file.name || "print.png");
+      if (testerName()) fd.append("uploaded_by", testerName());
+      substituiAjusteLocal(await api(`/api/ativos/ajustes/${id}/prints`, { method: "POST", body: fd }));
+      ajustePasteAlvo = id;
+      renderAjustes();
+      toast("Print anexado.");
+    } catch (e) { toast("Erro ao anexar print: " + e.message, true); }
   }
 
   async function setAjusteStatus(id, status) {
@@ -3476,6 +3553,22 @@
   $("#ajuste-cancel").addEventListener("click", closeAjusteModal);
   $("#ajuste-modal-close").addEventListener("click", closeAjusteModal);
   ajusteModal.addEventListener("click", (e) => { if (e.target.id === "ajuste-modal") closeAjusteModal(); });
+
+  // Ctrl+V em qualquer lugar da aba cola a imagem no ajuste selecionado. Ignora
+  // quando o modal está aberto — lá o Ctrl+V é pra colar texto nos campos.
+  document.addEventListener("paste", (e) => {
+    if (currentModule !== "ativos" || !ajusteModal.hidden) return;
+    const item = Array.from((e.clipboardData && e.clipboardData.items) || [])
+      .find((i) => i.kind === "file" && i.type.startsWith("image/"));
+    if (!item) return;
+    e.preventDefault();
+    if (!ajustePasteAlvo) {
+      toast("Clique antes no ajuste onde quer colar o print.", true);
+      return;
+    }
+    const file = item.getAsFile();
+    if (file) uploadAjustePrint(ajustePasteAlvo, file);
+  });
 
   $$("#ajustes-chips-tipo .chip").forEach((c) => c.addEventListener("click", () => {
     ajusteFiltros.tipo = c.dataset.tipo;

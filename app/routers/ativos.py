@@ -5,11 +5,13 @@ Melhoria e agrupado por versão da leva (v2, v3...). A tela lê tudo daqui — n
 nada de v2 chumbado no código: para abrir a próxima rodada de ajustes basta
 cadastrar itens com a versão nova.
 """
+import io
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func as sa_func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from .. import models, schemas
 from ..database import get_db
@@ -20,6 +22,10 @@ TIPOS = {"Bug", "Melhoria"}
 PRIORIDADES = {"Alta", "Média", "Baixa", "A definir"}
 # ciclo de vida do ajuste, do levantamento até a validação na tela do Faiston One
 STATUSES = {"levantado", "analise", "desenvolvimento", "entregue", "validado", "descartado"}
+
+# mesmos limites dos prints dos casos de teste
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+ALLOWED_CONTENT_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"}
 
 
 def _norm_versao(valor: Optional[str], padrao: str = "v2") -> str:
@@ -48,7 +54,7 @@ def list_ajustes(
     status: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    q = db.query(models.AtivoAjuste)
+    q = db.query(models.AtivoAjuste).options(joinedload(models.AtivoAjuste.prints))
     if versao:
         q = q.filter(models.AtivoAjuste.versao == _norm_versao(versao))
     if tipo:
@@ -148,3 +154,57 @@ def delete_ajuste(ajuste_id: int, db: Session = Depends(get_db)):
     db.delete(ajuste)
     db.commit()
     return {"deleted": ajuste_id}
+
+
+def _get_ajuste_or_404(db: Session, ajuste_id: int) -> models.AtivoAjuste:
+    ajuste = db.query(models.AtivoAjuste).filter(models.AtivoAjuste.id == ajuste_id).first()
+    if not ajuste:
+        raise HTTPException(status_code=404, detail="Ajuste não encontrado")
+    return ajuste
+
+
+@router.post("/ativos/ajustes/{ajuste_id}/prints", response_model=schemas.AtivoAjusteOut)
+async def upload_print(
+    ajuste_id: int,
+    file: UploadFile = File(...),
+    uploaded_by: str = Form(default=None),
+    db: Session = Depends(get_db),
+):
+    """Anexa um print ao ajuste. É por aqui que passa o Ctrl+V da tela: o
+    navegador entrega a imagem da área de transferência como arquivo."""
+    ajuste = _get_ajuste_or_404(db, ajuste_id)
+    if file.content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail="Envie apenas imagens (png, jpg, webp, gif).")
+    data = await file.read()
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="Imagem maior que 8MB.")
+    db.add(models.AtivoAjustePrint(
+        ajuste_id=ajuste.id,
+        filename=file.filename or "print.png",
+        content_type=file.content_type,
+        data=data,
+        uploaded_by=(uploaded_by or "").strip() or None,
+    ))
+    db.commit()
+    db.refresh(ajuste)
+    return ajuste
+
+
+@router.get("/ativos/prints/{print_id}")
+def get_print(print_id: int, db: Session = Depends(get_db)):
+    shot = db.query(models.AtivoAjustePrint).filter(models.AtivoAjustePrint.id == print_id).first()
+    if not shot:
+        raise HTTPException(status_code=404, detail="Print não encontrado")
+    return StreamingResponse(io.BytesIO(shot.data), media_type=shot.content_type)
+
+
+@router.delete("/ativos/prints/{print_id}", response_model=schemas.AtivoAjusteOut)
+def delete_print(print_id: int, db: Session = Depends(get_db)):
+    shot = db.query(models.AtivoAjustePrint).filter(models.AtivoAjustePrint.id == print_id).first()
+    if not shot:
+        raise HTTPException(status_code=404, detail="Print não encontrado")
+    ajuste = _get_ajuste_or_404(db, shot.ajuste_id)
+    db.delete(shot)
+    db.commit()
+    db.refresh(ajuste)
+    return ajuste

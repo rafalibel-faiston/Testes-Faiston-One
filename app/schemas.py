@@ -342,6 +342,16 @@ class FlowDiagramUpdate(BaseModel):
     atualizado_por: Optional[str] = None
 
 
+class AtivoAjustePrintOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    filename: str
+    content_type: str
+    uploaded_by: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
 class AtivoAjusteOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -360,6 +370,7 @@ class AtivoAjusteOut(BaseModel):
     autor: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    prints: List[AtivoAjustePrintOut] = []
 
 
 class AtivoAjusteCreate(BaseModel):

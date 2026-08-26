@@ -269,6 +269,28 @@ class AtivoAjuste(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
+    prints = relationship(
+        "AtivoAjustePrint", back_populates="ajuste", cascade="all, delete-orphan",
+        order_by="AtivoAjustePrint.id",
+    )
+
+
+class AtivoAjustePrint(Base):
+    """Print colado (Ctrl+V) ou anexado num ajuste — a imagem do sistema mostrando
+    o comportamento atual vale mais que o parágrafo descrevendo ele. Guardado como
+    bytes no próprio banco, igual aos prints dos casos de teste."""
+    __tablename__ = "ativo_ajuste_prints"
+
+    id = Column(Integer, primary_key=True)
+    ajuste_id = Column(Integer, ForeignKey("ativo_ajustes.id", ondelete="CASCADE"), nullable=False)
+    filename = Column(String, nullable=False)
+    content_type = Column(String, nullable=False)
+    data = Column(LargeBinary, nullable=False)
+    uploaded_by = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    ajuste = relationship("AtivoAjuste", back_populates="prints")
+
 
 # Ordem em que o time ataca os ajustes: Alta primeiro, o que ainda não foi
 # priorizado por último. Usada pela API e pelo MCP pra devolver a lista já na

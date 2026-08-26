@@ -1624,3 +1624,35 @@ body.inline-connecting * { cursor:crosshair !important; }
 .ajuste-tag.t-prio.p-media { background:var(--surface-2); border-color:var(--line-2); color:var(--text-2); }
 .ajuste-tag.t-prio.p-baixa,
 .ajuste-tag.t-prio.p-definir { background:var(--na-bg); border-color:var(--na-ln); color:var(--na); }
+
+/* prints do ajuste — colados com Ctrl+V, arrastados ou escolhidos no disco */
+.ajuste-shots {
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  margin-top:12px; padding-top:11px; border-top:1px dashed var(--line-2);
+}
+.ajuste-shots-grid { display:flex; gap:8px; flex-wrap:wrap; }
+.ajuste-shot {
+  position:relative; width:64px; height:64px; border-radius:var(--radius-sm); overflow:hidden;
+  border:1px solid var(--line-2); background:var(--surface-2); cursor:pointer; flex-shrink:0;
+}
+.ajuste-shot img { width:100%; height:100%; object-fit:cover; display:block; transition:transform .2s var(--ease); }
+.ajuste-shot:hover img { transform:scale(1.08); }
+.ajuste-shot .del {
+  position:absolute; top:3px; right:3px; width:17px; height:17px; border-radius:50%;
+  background:rgba(20,20,40,.72); color:#fff; font-size:10px; line-height:17px; text-align:center;
+  border:none; cursor:pointer; opacity:0; transition:opacity .15s;
+}
+.ajuste-shot:hover .del { opacity:1; }
+.ajuste-upload {
+  display:inline-flex; align-items:center; gap:7px; height:34px; padding:0 13px;
+  border-radius:var(--radius-sm); border:1.5px dashed var(--line-2); background:transparent;
+  color:var(--text-3); cursor:pointer; font-size:12px; font-weight:600;
+  transition:all .15s var(--ease);
+}
+.ajuste-upload:hover, .ajuste-upload.dragover { border-color:var(--f-blue); color:var(--f-blue); background:rgba(0,84,236,.05); }
+.ajuste-upload input { display:none; }
+/* o card selecionado é quem recebe o Ctrl+V — precisa dar pra ver qual é */
+.ajuste-item.paste-alvo { border-color:var(--f-blue); box-shadow:0 0 0 3px rgba(0,84,236,.10), var(--shadow-1); }
+.ajuste-item.paste-alvo .ajuste-upload {
+  border-style:solid; border-color:var(--f-blue); color:var(--f-blue); background:rgba(0,84,236,.06);
+}

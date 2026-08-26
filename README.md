@@ -146,12 +146,24 @@ existe (`v3`, `v4`…), a aba dessa versão aparece sozinha na tela, com o hist�
 das anteriores intacto ao lado. Dá pra cadastrar pela tela (**Novo ajuste**) ou
 pelo Claude, via a tool MCP `criar_ajuste_ativos`.
 
+### Prints no ajuste (Ctrl+V)
+
+Cada ajuste aceita imagens — normalmente o print da tela do Faiston One mostrando
+o comportamento atual. Clique no card do ajuste (ele fica destacado, e o botão
+passa a dizer *Ctrl+V pra colar aqui*) e cole a imagem direto da área de
+transferência; arrastar o arquivo pra cima do botão ou clicar nele pra escolher
+no disco também funciona. As imagens ficam salvas como bytes no próprio banco,
+igual aos prints dos casos de teste, e somem junto se o ajuste for excluído.
+
 ### API
 
-- `GET  /api/ativos/ajustes` — lista os ajustes (filtros opcionais: `versao`, `tipo`, `status`)
+- `GET  /api/ativos/ajustes` — lista os ajustes com seus prints (filtros opcionais: `versao`, `tipo`, `status`)
 - `POST /api/ativos/ajustes` — cadastra um ajuste (sem `numero`, ele entra na sequência da versão)
 - `PATCH /api/ativos/ajustes/{id}` — edita qualquer campo, inclusive mover de versão
-- `DELETE /api/ativos/ajustes/{id}` — remove o ajuste
+- `DELETE /api/ativos/ajustes/{id}` — remove o ajuste (e os prints dele)
+- `POST /api/ativos/ajustes/{id}/prints` — anexa um print (multipart, campo `file`; até 8MB, só imagem)
+- `GET  /api/ativos/prints/{id}` — exibe o print
+- `DELETE /api/ativos/prints/{id}` — remove o print
 
 ## API
 
