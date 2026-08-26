@@ -99,116 +99,6 @@ def ordena_prioridade(itens: list, chave="prioridade") -> list:
 # --------------------------------------------------------------------------- seções
 
 
-def anel(pct: float, legenda: str, detalhe: str) -> str:
-    """Medidor de um número só: o quanto do plano de testes já foi executado.
-    O valor vai escrito no centro — o anel dá a leitura de relance, o número dá a
-    precisão."""
-    raio, traco = 52, 12
-    volta = 2 * 3.141592653589793 * raio
-    preenchido = volta * max(0.0, min(pct, 100.0)) / 100
-    return f"""
-      <div class="anel">
-        <svg viewBox="0 0 140 140" role="img" aria-label="{e(legenda)}: {pct:.0f}%">
-          <circle cx="70" cy="70" r="{raio}" fill="none" stroke="var(--border)" stroke-width="{traco}"/>
-          <circle cx="70" cy="70" r="{raio}" fill="none" stroke="url(#g-anel)" stroke-width="{traco}"
-                  stroke-linecap="round" stroke-dasharray="{preenchido:.2f} {volta:.2f}"
-                  transform="rotate(-90 70 70)"/>
-          <defs><linearGradient id="g-anel" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#2226c0"/><stop offset="52%" stop-color="#960a9c"/>
-            <stop offset="100%" stop-color="#fd11a4"/></linearGradient></defs>
-          <text x="70" y="70" class="anel-n">{pct:.0f}<tspan class="anel-pc">%</tspan></text>
-        </svg>
-        <div class="anel-legenda">{e(legenda)}</div>
-        <div class="anel-detalhe">{e(detalhe)}</div>
-      </div>"""
-
-
-def barra_status(counts: dict, total: int) -> str:
-    """Uma barra só com a distribuição dos casos por status — a foto da semana
-    inteira antes de entrar em qualquer detalhe."""
-    if not total:
-        return ""
-    faixas, legenda = "", ""
-    for status in STATUS_ORDEM:
-        n = counts.get(status, 0)
-        if not n:
-            continue
-        pct = n / total * 100
-        cor = STATUS_COR[status]
-        texto = STATUS_COR_TEXTO.get(status, "#ffffff")
-        rotulo = f'<span style="color:{texto}">{n}</span>' if pct >= 6 else ""
-        faixas += (f'<div class="faixa" style="flex:{n};background:{cor}" '
-                   f'title="{e(status)}: {n} ({pct:.0f}%)">{rotulo}</div>')
-        legenda += (f'<span class="leg"><i style="background:{cor}"></i>'
-                    f'{e(status)} <b>{n}</b> <span class="muted">({pct:.0f}%)</span></span>')
-    return f'<div class="barra">{faixas}</div><div class="legenda">{legenda}</div>'
-
-
-def barra_mini(feito: int, total: int, cor: str = "var(--f-blue)") -> str:
-    """Régua de progresso curta — usada dentro dos cards de situação."""
-    pct = (feito / total * 100) if total else 0
-    return (f'<div class="mini"><div class="mini-fill" style="width:{pct:.1f}%;background:{cor}"></div></div>')
-
-
-def barra_linha(n: int, maximo: int, cor: str = "var(--f-blue)") -> str:
-    """Barra proporcional dentro de uma linha de tabela — dá a comparação entre
-    estágios de relance, que a coluna de número sozinha não dá."""
-    pct = (n / maximo * 100) if maximo else 0
-    return (f'<div class="linha-barra"><div class="linha-fill" style="width:{max(pct, 3):.1f}%;'
-            f'background:{cor}"></div></div>')
-
-
-def barras_por_area(ajustes: list) -> str:
-    """Onde os ajustes se concentram. Bug e melhoria empilhados na mesma barra:
-    uma área com cinco melhorias é um assunto diferente de uma com cinco bugs.
-
-    Com poucos itens por área a barra não diz nada que a contagem já não diga —
-    aí vira uma linha de chips, que ocupa menos espaço e lê igual."""
-    areas: dict = {}
-    for a in ajustes:
-        area = (a.get("area") or "Sem área").strip() or "Sem área"
-        slot = areas.setdefault(area, {"Bug": 0, "Melhoria": 0})
-        slot["Bug" if a.get("tipo") == "Bug" else "Melhoria"] += 1
-    if len(areas) < 2:
-        return ""
-    ordenadas = sorted(areas.items(), key=lambda kv: -(kv[1]["Bug"] + kv[1]["Melhoria"]))
-    maximo = max(v["Bug"] + v["Melhoria"] for v in areas.values())
-
-    if maximo < 3:
-        chips = " ".join(
-            f'<span class="pill">{e(area)} · <b>{v["Bug"] + v["Melhoria"]}</b>'
-            + (f' <span style="color:#c02234">({v["Bug"]} bug)</span>' if v["Bug"] else "")
-            + "</span>"
-            for area, v in ordenadas
-        )
-        return f'<div class="card" style="margin-bottom:16px"><div class="label-sec">Por área do módulo</div>{chips}</div>'
-
-    linhas = ""
-    for area, v in ordenadas:
-        total = v["Bug"] + v["Melhoria"]
-        partes = ""
-        for tipo, cor in (("Bug", "#c02234"), ("Melhoria", "#0054ec")):
-            if v[tipo]:
-                partes += (f'<div class="faixa" style="flex:{v[tipo]};background:{cor}" '
-                           f'title="{e(area)} — {tipo}: {v[tipo]}"></div>')
-        linhas += f"""
-        <div class="area-linha">
-          <div class="area-nome">{e(area)}</div>
-          <div class="area-track"><div class="area-barra" style="width:{total / maximo * 100:.1f}%">{partes}</div></div>
-          <div class="area-n">{total}</div>
-        </div>"""
-    return f"""
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-head"><h3>Onde os ajustes se concentram</h3>
-          <span class="sub">por área do módulo</span></div>
-        {linhas}
-        <div class="legenda" style="margin-top:12px">
-          <span class="leg"><i style="background:#c02234"></i>Bug</span>
-          <span class="leg"><i style="background:#0054ec"></i>Melhoria</span>
-        </div>
-      </div>"""
-
-
 def sec(numero: str, titulo: str, sub: str, corpo: str, anchor: str) -> str:
     if not corpo.strip():
         return ""
@@ -228,6 +118,8 @@ def vazio(msg: str) -> str:
 
 
 def secao_pontos(notas: list) -> str:
+    """Os pontos em aberto, separados entre os que já foram cobrados da outra
+    ponta (falta a devolutiva) e os que ainda nem foram levantados."""
     abertos = [n for n in notas if not n.get("resolvido")]
     if not abertos:
         return vazio("Nenhum ponto em aberto — tudo que foi levantado já está resolvido.")
@@ -237,23 +129,23 @@ def secao_pontos(notas: list) -> str:
     def bloco(titulo: str, itens: list, classe: str, nota: str) -> str:
         if not itens:
             return ""
-        cards = ""
+        linhas = ""
         for n in itens:
-            meta = " · ".join(
-                filter(None, [e(n.get("estagio")), e(n.get("autor")), data_br(n.get("created_at"))])
-            )
-            extra = ""
+            meta = " · ".join(filter(None, [e(n.get("autor")), data_br(n.get("created_at"))]))
             if n.get("cobrado_em"):
-                extra = f'<div class="muted" style="font-size:12.5px;margin-top:8px">Cobrado em {data_br(n["cobrado_em"])}</div>'
-            cards += f"""
-          <div class="card hover">
-            <div class="row" style="margin-bottom:10px">{badge(titulo, classe)}
-              <span class="muted" style="font-size:12.5px">{meta}</span></div>
-            <div style="color:var(--text-2)">{nl2br(n.get("texto"))}</div>{extra}
-          </div>"""
+                meta += f' · cobrado em {data_br(n["cobrado_em"])}'
+            linhas += f"""
+            <li>
+              <div class="item-head">
+                <span class="num">{e(n.get("estagio") or "—")}</span>
+                <span class="titulo" style="font-family:'Roboto',sans-serif;font-weight:400;font-size:15px">{nl2br(n.get("texto"))}</span>
+                {badge(titulo, classe)}
+              </div>
+              <div class="item-corpo"><div class="item-meta">{meta}</div></div>
+            </li>"""
         return f"""
       <div class="callout {'info' if classe == 'b-info' else ''}" style="margin-bottom:14px"><b>{e(titulo)}</b> — {e(nota)}</div>
-      <div class="grid g2" style="align-items:start;margin-bottom:26px">{cards}</div>"""
+      <div class="card" style="margin-bottom:26px"><ul class="itens">{linhas}</ul></div>"""
 
     return (
         bloco("Aguardando retorno", cobrados, "b-info",
@@ -263,46 +155,87 @@ def secao_pontos(notas: list) -> str:
     )
 
 
-def secao_casos_problema(casos: list) -> str:
-    itens = [c for c in casos if c.get("status") in STATUS_PROBLEMA]
+def secao_reprovados(casos: list, situacoes: list) -> str:
+    """Tudo que está reprovado ou bloqueado numa lista só — caso de teste solto e
+    estágio de situação lado a lado. Estavam em seções separadas, mas na reunião
+    é a mesma conversa: o que falhou e o que vai ser feito."""
+    itens = []
+    for c in casos:
+        if c.get("status") in STATUS_PROBLEMA:
+            itens.append({
+                "chave": c.get("code"),
+                "contexto": c.get("estagio"),
+                "titulo": c.get("resultado_esperado"),
+                "status": c.get("status"),
+                "prioridade": c.get("prioridade"),
+                "frente": c.get("frente"),
+                "problema": c.get("problema_encontrado"),
+                "obs": ultima_obs(c),
+                "prints": len(c.get("screenshots") or []),
+                "quem": c.get("testado_por"),
+                "origem": None,
+            })
+    for sit in situacoes:
+        for x in (sit.get("estagios") or []):
+            if x.get("status") in STATUS_PROBLEMA:
+                itens.append({
+                    "chave": sit.get("code"),
+                    "contexto": x.get("nome"),
+                    "titulo": x.get("resultado_esperado"),
+                    "status": x.get("status"),
+                    "prioridade": None,
+                    "frente": x.get("frente"),
+                    "problema": None,
+                    "obs": ultima_obs(x),
+                    "prints": len(x.get("screenshots") or []),
+                    "quem": x.get("testado_por"),
+                    "origem": sit.get("titulo"),
+                })
     if not itens:
-        return vazio("Nenhum caso reprovado ou bloqueado no momento.")
-    itens = sorted(itens, key=lambda c: (c.get("status") != "Reprovado",
-                                         PRIORIDADE_ORDEM.get(c.get("prioridade"), 3),
-                                         c.get("code", "")))
+        return vazio("Nada reprovado nem bloqueado no momento.")
+
+    itens.sort(key=lambda i: (i["status"] != "Reprovado",
+                              PRIORIDADE_ORDEM.get(i["prioridade"], 3),
+                              i["chave"] or ""))
     linhas = ""
-    for c in itens:
-        obs = ultima_obs(c)
-        problema = e(c.get("problema_encontrado"))
-        detalhe = ""
-        if problema:
-            detalhe += f'<div style="margin-top:6px"><b>Problema:</b> {problema}</div>'
-        if obs:
-            detalhe += f'<div class="muted" style="margin-top:6px;font-size:13.5px">{obs}</div>'
-        prints = len(c.get("screenshots") or [])
-        anexo = f' {badge(f"{prints} print(s)", "b-info")}' if prints else ""
+    for i in itens:
+        etiquetas = badge(i["status"], STATUS_BADGE.get(i["status"], "b-neutral"))
+        if i["prioridade"]:
+            etiquetas += " " + badge(i["prioridade"], PRIORIDADE_BADGE.get(i["prioridade"], "b-neutral"))
+        if i["frente"]:
+            etiquetas += f' <span class="item-meta">{e(i["frente"])}</span>'
+        if i["prints"]:
+            etiquetas += " " + badge(f'{i["prints"]} print(s)', "b-info")
+
+        corpo = ""
+        if i["origem"]:
+            corpo += f'<div class="item-meta">Situação: {e(i["origem"])}</div>'
+        if i["problema"]:
+            corpo += f'<div><b>Problema:</b> {nl2br(i["problema"])}</div>'
+        if i["obs"]:
+            corpo += f'<div class="item-meta">{i["obs"]}</div>'
+        if i["quem"]:
+            corpo += f'<div class="item-meta">Testado por {e(i["quem"])}</div>'
+
         linhas += f"""
-        <tr>
-          <td><b class="mono">{e(c.get("code"))}</b><br><span class="muted" style="font-size:12.5px">{e(c.get("estagio"))}</span></td>
-          <td>{e(c.get("frente"))}<br>{badge(c.get("prioridade") or "—", PRIORIDADE_BADGE.get(c.get("prioridade"), "b-neutral"))}</td>
-          <td><b>{e(c.get("resultado_esperado"))}</b>{detalhe}</td>
-          <td>{badge(c.get("status"), STATUS_BADGE.get(c.get("status"), "b-neutral"))}{anexo}<br>
-              <span class="muted" style="font-size:12.5px">{e(c.get("testado_por"))}</span></td>
-        </tr>"""
-    return f"""
-      <div class="card" style="padding:0;overflow:hidden">
-        <table>
-          <thead><tr><th style="width:17%">Caso</th><th style="width:15%">Frente</th>
-            <th>O que era esperado / o que aconteceu</th><th style="width:16%">Status</th></tr></thead>
-          <tbody>{linhas}</tbody>
-        </table>
-      </div>"""
+        <li>
+          <div class="item-head">
+            <span class="num mono">{e(i["chave"])}</span>
+            <span class="titulo">{e(i["titulo"])}</span>
+            {etiquetas}
+          </div>
+          <div class="item-corpo">
+            <div class="item-meta">{e(i["contexto"])}</div>
+            {corpo}
+          </div>
+        </li>"""
+    return f'<div class="card"><ul class="itens">{linhas}</ul></div>'
 
 
 def secao_situacoes(situacoes: list) -> str:
-    """Mostra só o que trava a situação: estágios reprovados/bloqueados primeiro e,
-    quando não há nenhum, os próximos da fila — a lista inteira de pendentes vira
-    parede de texto e ninguém lê numa reunião."""
+    """Onde cada cenário ponta a ponta está parado. Os estágios reprovados já
+    aparecem na lista acima; aqui fica o que vem a seguir, no máximo três por
+    situação — a lista inteira de pendentes vira parede de texto."""
     blocos = ""
     for s in situacoes:
         estagios = s.get("estagios") or []
@@ -310,30 +243,32 @@ def secao_situacoes(situacoes: list) -> str:
         if not pendentes:
             continue
         problemas = [x for x in pendentes if x.get("status") in STATUS_PROBLEMA]
+        fila = [x for x in pendentes if x.get("status") not in STATUS_PROBLEMA]
         total = len(estagios)
         ok = total - len(pendentes)
-        destaque = problemas or pendentes[:3]
-        resto = len(pendentes) - len(destaque)
-        rotulo = "trava aqui" if problemas else "próximos da fila"
+        destaque = fila[:3]
+        resto = len(fila) - len(destaque)
         linhas = ""
         for x in destaque:
             obs = ultima_obs(x)
             linhas += f"""
-            <li class="{'no' if x.get('status') in STATUS_PROBLEMA else ''}">
+            <li>
               <b>{e(x.get("nome"))}</b> {badge(x.get("status"), STATUS_BADGE.get(x.get("status"), "b-neutral"))}
               <div class="muted" style="font-size:13.5px">{e(x.get("resultado_esperado"))}</div>
               {f'<div style="font-size:13.5px;margin-top:4px">{obs}</div>' if obs else ""}
             </li>"""
         rodape = ""
+        if problemas:
+            rodape += (f'<div style="font-size:13px;margin-top:10px;color:#c02234">'
+                       f'{len(problemas)} estágio(s) reprovado(s) ou bloqueado(s) — na lista acima</div>')
         if resto > 0:
-            rodape = f'<div class="muted" style="font-size:13px;margin-top:10px">+ {resto} estágio(s) pendente(s) nesta situação</div>'
+            rodape += f'<div class="muted" style="font-size:13px;margin-top:6px">+ {resto} estágio(s) na fila</div>'
         blocos += f"""
         <div class="card hover">
           <div class="card-head"><h3>{e(s.get("code"))} · {e(s.get("titulo"))}</h3>
             <span class="spacer">{badge(f"{ok}/{total} estágios ok", "b-alert" if problemas else "b-neutral")}</span></div>
-          {barra_mini(ok, total, "#c02234" if problemas else "var(--f-blue)")}
-          <p class="muted" style="font-size:13.5px;margin:12px 0">{e(s.get("descricao"))}</p>
-          <div class="label" style="font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:4px">{e(rotulo)}</div>
+          <p class="muted" style="font-size:13.5px;margin:10px 0">{e(s.get("descricao"))}</p>
+          {'<div class="label-sec">Próximos da fila</div>' if linhas else ""}
           <ul class="list">{linhas}</ul>{rodape}
         </div>"""
     if not blocos:
@@ -342,42 +277,47 @@ def secao_situacoes(situacoes: list) -> str:
 
 
 def secao_ajustes(ajustes: list) -> str:
+    """Os ajustes pendentes em lista, na ordem em que o time ataca (prioridade e
+    depois o número do item) — é por esse número que eles se referem ao ajuste na
+    reunião."""
     abertos = [a for a in ajustes if a.get("status") not in AJUSTE_FECHADO]
     if not abertos:
         return vazio("Nenhum ajuste em aberto na Gestão de Ativos.")
-    versoes = {}
+    versoes: dict = {}
     for a in abertos:
         versoes.setdefault(a.get("versao") or "—", []).append(a)
+
     blocos = ""
     for versao in sorted(versoes, reverse=True):
         itens = ordena_prioridade(versoes[versao])
         bugs = sum(1 for a in itens if a.get("tipo") == "Bug")
-        cards = ""
+        linhas = ""
         for a in itens:
             status = a.get("status") or "levantado"
+            etiquetas = badge(a.get("tipo"), "b-alert" if a.get("tipo") == "Bug" else "b-info")
+            etiquetas += " " + badge(a.get("prioridade"), PRIORIDADE_BADGE.get(a.get("prioridade"), "b-neutral"))
+            etiquetas += " " + badge(AJUSTE_LABEL.get(status, status), AJUSTE_BADGE.get(status, "b-neutral"))
+            if a.get("area"):
+                etiquetas += f' <span class="item-meta">{e(a.get("area"))}</span>'
+            if a.get("prints"):
+                etiquetas += " " + badge(f'{len(a["prints"])} print(s)', "b-info")
             obs = e(a.get("observacao"))
-            prints = len(a.get("prints") or [])
-            cards += f"""
-          <div class="card hover">
-            <div class="row" style="margin-bottom:12px">
-              <span class="mono" style="color:var(--f-purple);font-weight:600">#{e(a.get("numero"))}</span>
-              {badge(a.get("tipo"), "b-alert" if a.get("tipo") == "Bug" else "b-info")}
-              {badge(a.get("prioridade"), PRIORIDADE_BADGE.get(a.get("prioridade"), "b-neutral"))}
-              {badge(AJUSTE_LABEL.get(status, status), AJUSTE_BADGE.get(status, "b-neutral"))}
-              <span class="spacer muted" style="font-size:12.5px">{e(a.get("area"))}</span>
-            </div>
-            <h3 style="margin-bottom:10px">{e(a.get("titulo"))}</h3>
-            <div style="font-size:14px;color:var(--text-2)">
-              <div style="margin-bottom:8px"><b style="color:#c02234">Hoje:</b> {nl2br(a.get("atual"))}</div>
-              <div><b style="color:#04795c">Deveria ser:</b> {nl2br(a.get("esperado"))}</div>
-              {f'<div class="muted" style="margin-top:8px;font-size:13.5px">{obs}</div>' if obs else ""}
-            </div>
-            {f'<div style="margin-top:10px">{badge(f"{prints} print(s)", "b-info")}</div>' if prints else ""}
-          </div>"""
+            linhas += f"""
+            <li>
+              <div class="item-head">
+                <span class="num">#{e(a.get("numero"))}</span>
+                <span class="titulo">{e(a.get("titulo"))}</span>
+                {etiquetas}
+              </div>
+              <div class="item-corpo">
+                <div class="hoje"><b>Hoje:</b> {nl2br(a.get("atual"))}</div>
+                <div class="deveria"><b>Deveria ser:</b> {nl2br(a.get("esperado"))}</div>
+                {f'<div class="item-meta">{obs}</div>' if obs else ""}
+              </div>
+            </li>"""
         blocos += f"""
         <div class="callout" style="margin-bottom:14px"><b>Leva {e(versao)}</b> — {len(itens)} ajuste(s) em aberto, sendo {bugs} bug(s).</div>
-        {barras_por_area(itens)}
-        <div class="grid g2" style="align-items:start;margin-bottom:26px">{cards}</div>"""
+        <div class="card" style="margin-bottom:26px"><ul class="itens">{linhas}</ul></div>"""
     return blocos
 
 
@@ -389,7 +329,6 @@ def secao_nao_executados(casos: list) -> str:
     for c in pendentes:
         chave = (c.get("estagio_num") if c.get("estagio_num") is not None else 99, c.get("estagio") or "—")
         por_estagio.setdefault(chave, []).append(c)
-    maximo = max(len(i) for i in por_estagio.values())
     linhas = ""
     for (_num, estagio), itens in sorted(por_estagio.items()):
         frentes = {}
@@ -400,14 +339,13 @@ def secao_nao_executados(casos: list) -> str:
         linhas += f"""
         <tr>
           <td><b>{e(estagio)}</b><br><span style="font-size:12px">{codigos}</span></td>
-          <td style="width:26%">{chips}</td>
-          <td style="width:22%">{barra_linha(len(itens), maximo)}</td>
-          <td style="width:7%;text-align:right"><b style="font-size:18px">{len(itens)}</b></td>
+          <td style="width:34%">{chips}</td>
+          <td style="width:8%;text-align:right"><b style="font-size:18px">{len(itens)}</b></td>
         </tr>"""
     return f"""
       <div class="card" style="padding:0;overflow:hidden">
         <table>
-          <thead><tr><th>Estágio · casos</th><th>Frente</th><th>Volume</th>
+          <thead><tr><th>Estágio · casos</th><th>Frente</th>
             <th style="text-align:right">Qtde</th></tr></thead>
           <tbody>{linhas}</tbody>
         </table>
@@ -435,7 +373,10 @@ def montar_html(dados: dict, fonte: str) -> str:
     summary = dados.get("summary") or {}
 
     pontos_abertos = [n for n in notas if not n.get("resolvido")]
-    casos_problema = [c for c in casos if c.get("status") in STATUS_PROBLEMA]
+    reprovados = [c for c in casos if c.get("status") in STATUS_PROBLEMA] + [
+        x for sit in situacoes for x in (sit.get("estagios") or [])
+        if x.get("status") in STATUS_PROBLEMA
+    ]
     casos_pendentes = [c for c in casos if c.get("status") == "Não testado"]
     ajustes_abertos = [a for a in ajustes if a.get("status") not in AJUSTE_FECHADO]
     situacoes_pendentes = sum(
@@ -451,14 +392,14 @@ def montar_html(dados: dict, fonte: str) -> str:
         logo = logo.replace("<svg", '<svg class="logo" style="height:34px;width:auto"', 1)
 
     agora = datetime.now(BRT)
-    total_pauta = len(pontos_abertos) + len(casos_problema) + len(ajustes_abertos)
+    total_pauta = len(pontos_abertos) + len(reprovados) + len(ajustes_abertos)
 
     kpis = "".join([
         kpi("Pontos em aberto", len(pontos_abertos), "◆",
             f'{sum(1 for n in pontos_abertos if n.get("cobrado"))} já cobrados', "b-info" if pontos_abertos else ""),
-        kpi("Testes com problema", len(casos_problema), "✕",
-            f'{sum(1 for c in casos_problema if c.get("status") == "Reprovado")} reprovados',
-            "b-alert" if casos_problema else "b-ok"),
+        kpi("Reprovados / bloqueados", len(reprovados), "✕",
+            f'{sum(1 for c in reprovados if c.get("status") == "Reprovado")} reprovados',
+            "b-alert" if reprovados else "b-ok"),
         kpi("Ajustes em aberto", len(ajustes_abertos), "▤",
             f'{sum(1 for a in ajustes_abertos if a.get("tipo") == "Bug")} bugs',
             "b-warn" if ajustes_abertos else "b-ok"),
@@ -470,7 +411,7 @@ def montar_html(dados: dict, fonte: str) -> str:
         f'<a class="tab" href="#{a}">{e(t)}</a>'
         for a, t in [
             ("pontos", f"Pontos ({len(pontos_abertos)})"),
-            ("problemas", f"Testes com problema ({len(casos_problema)})"),
+            ("problemas", f"Reprovados / bloqueados ({len(reprovados)})"),
             ("situacoes", f"Situações ({situacoes_pendentes})"),
             ("ajustes", f"Ajustes ({len(ajustes_abertos)})"),
             ("pendentes", f"Por executar ({len(casos_pendentes)})"),
@@ -480,9 +421,9 @@ def montar_html(dados: dict, fonte: str) -> str:
     corpo = "".join([
         sec("01", "Pontos para a reunião", "levantados durante os testes e ainda não resolvidos",
             secao_pontos(notas), "pontos"),
-        sec("02", "Testes reprovados e bloqueados", "o que falhou e precisa de decisão do time",
-            secao_casos_problema(casos), "problemas"),
-        sec("03", "Situações com estágio pendente", "cenários ponta a ponta que ainda não fecham",
+        sec("02", "Reprovados e bloqueados", "casos de teste e estágios de situação que falharam",
+            secao_reprovados(casos, situacoes), "problemas"),
+        sec("03", "Situações — onde cada cenário parou", "os próximos estágios da fila de cada situação",
             secao_situacoes(situacoes), "situacoes"),
         sec("04", "Ajustes da Gestão de Ativos", "hoje é assim / deveria ser assim — pendentes de validação",
             secao_ajustes(ajustes), "ajustes"),
@@ -507,47 +448,23 @@ def montar_html(dados: dict, fonte: str) -> str:
 .hero{{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);
   padding:26px 28px;box-shadow:var(--shadow-sm);margin-bottom:24px}}
 .hero h2{{margin-bottom:6px}}
-.hero-grid{{display:grid;grid-template-columns:180px 1fr;gap:28px;align-items:center}}
-
-/* anel de execução */
-.anel{{text-align:center}}
-.anel svg{{width:150px;height:150px;display:block;margin:0 auto}}
-.anel-n{{font-family:'Roboto Slab',serif;font-size:34px;font-weight:700;fill:var(--text);
-  text-anchor:middle;dominant-baseline:central}}
-.anel-pc{{font-size:18px;fill:var(--muted)}}
-.anel-legenda{{font-size:11.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);
-  font-weight:500;margin-top:6px}}
-.anel-detalhe{{font-size:13px;color:var(--text-2)}}
-
-/* barra de status empilhada — 2px de respiro entre as faixas */
-.barra{{display:flex;gap:2px;height:34px;border-radius:var(--r-sm);overflow:hidden}}
-.barra .faixa{{display:flex;align-items:center;justify-content:center;min-width:3px;
-  font-size:12.5px;font-weight:600}}
-.barra .faixa:first-child{{border-radius:6px 0 0 6px}}
-.barra .faixa:last-child{{border-radius:0 6px 6px 0}}
-.legenda{{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:12px;font-size:13px;color:var(--text-2)}}
-.legenda .leg{{display:inline-flex;align-items:center;gap:7px}}
-.legenda .leg i{{width:10px;height:10px;border-radius:3px;display:inline-block}}
-.legenda .leg b{{color:var(--text);font-weight:600}}
-
-/* réguas de progresso */
-.mini{{height:6px;background:var(--surface-2);border-radius:999px;overflow:hidden}}
-.mini-fill{{height:100%;border-radius:999px}}
-.linha-barra{{height:10px;background:var(--surface-2);border-radius:999px;overflow:hidden}}
-.linha-fill{{height:100%;border-radius:999px}}
-
-/* ajustes por área */
-.area-linha{{display:flex;align-items:center;gap:12px;margin-bottom:9px}}
-.area-nome{{width:120px;flex-shrink:0;font-size:13.5px;color:var(--text-2);text-align:right}}
-.area-track{{flex:1;min-width:0}}
-.area-barra{{display:flex;gap:2px;height:14px;border-radius:5px;overflow:hidden;min-width:8px}}
-.area-barra .faixa{{min-width:4px}}
-.area-n{{width:24px;text-align:right;font-size:13.5px;font-weight:600;color:var(--text)}}
-.label-sec{{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);
-  font-weight:500;margin-bottom:10px}}
-
-@media(max-width:720px){{.hero-grid{{grid-template-columns:1fr}}.area-nome{{width:80px}}}}
-@media print{{.navbar{{display:none}}.topbar{{position:static}}}}
+/* lista de itens — uma linha por assunto, pra ler de cima pra baixo */
+.itens{{list-style:none;counter-reset:item}}
+.itens li{{padding:18px 0;border-bottom:1px solid var(--border)}}
+.itens li:first-child{{padding-top:4px}}
+.itens li:last-child{{border-bottom:none;padding-bottom:4px}}
+.item-head{{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}}
+.item-head .num{{font-family:'Roboto Slab',serif;font-size:13px;font-weight:700;color:var(--f-purple);
+  min-width:38px;flex-shrink:0}}
+.item-head .titulo{{font-family:'Roboto Slab',serif;font-size:16px;font-weight:700;color:var(--text);
+  flex:1;min-width:240px}}
+.item-corpo{{padding-left:48px;font-size:14.5px;color:var(--text-2)}}
+.item-corpo .hoje b{{color:#c02234}}
+.item-corpo .deveria b{{color:#04795c}}
+.item-corpo>div{{margin-bottom:6px}}
+.item-corpo>div:last-child{{margin-bottom:0}}
+.item-meta{{color:var(--muted);font-size:13px}}
+@media(max-width:720px){{.item-corpo{{padding-left:0}}}}
 </style>
 </head>
 <body>
@@ -565,16 +482,10 @@ def montar_html(dados: dict, fonte: str) -> str:
   <div class="accent"></div>
 
   <div class="hero">
-    <div class="hero-grid">
-      {anel(pct, "executado", f"{len(casos) - len(casos_pendentes)} de {len(casos)} casos")}
-      <div>
-        <h2>O que precisa de decisão nesta reunião</h2>
-        <p class="lead" style="margin-bottom:18px">{len(pontos_abertos)} ponto(s) em aberto ·
-          {len(casos_problema)} teste(s) reprovado(s) ou bloqueado(s) ·
-          {len(ajustes_abertos)} ajuste(s) da Gestão de Ativos pendente(s).</p>
-        {barra_status(summary.get("counts") or {{}}, len(casos))}
-      </div>
-    </div>
+    <h2>O que precisa de decisão nesta reunião</h2>
+    <p class="lead">{len(pontos_abertos)} ponto(s) em aberto · {len(reprovados)} item(ns) reprovado(s) ou bloqueado(s) ·
+      {len(ajustes_abertos)} ajuste(s) da Gestão de Ativos pendente(s) · {len(casos_pendentes)} teste(s) na fila de execução
+      ({pct:.0f}% do plano já executado).</p>
   </div>
 
   <div class="grid g4" style="margin-bottom:8px">{kpis}</div>

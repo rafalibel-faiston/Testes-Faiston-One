@@ -133,25 +133,19 @@ Faiston, com tudo que está em aberto, na ordem em que interessa discutir:
 
 1. **Pontos para a reunião** — os que ainda não foram resolvidos, separados
    entre *aguardando retorno* (já cobrados da outra ponta) e *a levantar*.
-2. **Testes reprovados e bloqueados** — o que falhou, com o problema
-   encontrado e a última observação de quem testou.
-3. **Situações com estágio pendente** — de cada cenário, só o que trava (os
-   estágios reprovados/bloqueados) ou, quando não há nenhum, os próximos da
-   fila. A lista inteira de pendentes viraria parede de texto.
+2. **Reprovados e bloqueados** — tudo que falhou numa lista só, caso de teste
+   solto e estágio de situação lado a lado, com o problema encontrado e a
+   última observação de quem testou. Na reunião é a mesma conversa.
+3. **Situações — onde cada cenário parou** — os próximos estágios da fila de
+   cada situação (no máximo três; a lista inteira viraria parede de texto). O
+   que está reprovado já apareceu no item 2.
 4. **Ajustes da Gestão de Ativos** — os que ainda não foram validados, no
    formato *hoje é assim / deveria ser assim*, agrupados por leva.
 5. **Testes ainda não executados** — a fila, resumida por estágio.
 
-No topo, a leitura da semana em imagem: o anel de execução (quantos casos já
-saíram do "não testado"), a barra de status com a distribuição dos 5 estados e
-os números em aberto. Dentro das seções, cada situação mostra uma régua de
-progresso, a fila de execução ganha barra por estágio e os ajustes têm a
-distribuição por área do módulo, com bug e melhoria separados.
-
-As cores da barra de status (verde/vermelho/roxo) foram escolhidas por
-separação de daltonismo — o magenta da marca ficava perto demais do vermelho
-pra distinguir — e toda faixa vem com rótulo e contagem na legenda, nunca só a
-cor.
+No topo ficam os números da semana em aberto. O resto é lista: cada seção é
+uma sequência de linhas pra ler de cima pra baixo, sem gráfico nenhum — numa
+reunião projetada o que conta é conseguir ler o item e decidir.
 
 O botão **Pauta da reunião**, ao lado do *Exportar Excel*, abre a página do
 fluxo aberto numa aba nova — dá pra projetar direto ou imprimir em PDF (o CSS
