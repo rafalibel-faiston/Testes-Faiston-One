@@ -340,3 +340,52 @@ class FlowDiagramUpdate(BaseModel):
     mermaid: Optional[str] = None
     ordem: Optional[int] = None
     atualizado_por: Optional[str] = None
+
+
+class AtivoAjusteOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    versao: str = "v2"
+    numero: int = 0
+    titulo: str
+    tipo: str = "Melhoria"
+    area: Optional[str] = None
+    prioridade: str = "Média"
+    atual: Optional[str] = ""
+    esperado: Optional[str] = ""
+    observacao: Optional[str] = ""
+    status: str = "levantado"
+    responsavel: Optional[str] = None
+    autor: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class AtivoAjusteCreate(BaseModel):
+    versao: Optional[str] = "v2"
+    numero: Optional[int] = None      # None = próximo número livre da versão
+    titulo: str
+    tipo: Optional[str] = "Melhoria"
+    area: Optional[str] = None
+    prioridade: Optional[str] = "Média"
+    atual: Optional[str] = ""
+    esperado: Optional[str] = ""
+    observacao: Optional[str] = ""
+    status: Optional[str] = "levantado"
+    responsavel: Optional[str] = None
+    autor: Optional[str] = None
+
+
+class AtivoAjusteUpdate(BaseModel):
+    versao: Optional[str] = None
+    numero: Optional[int] = None
+    titulo: Optional[str] = None
+    tipo: Optional[str] = None
+    area: Optional[str] = None
+    prioridade: Optional[str] = None
+    atual: Optional[str] = None
+    esperado: Optional[str] = None
+    observacao: Optional[str] = None
+    status: Optional[str] = None
+    responsavel: Optional[str] = None

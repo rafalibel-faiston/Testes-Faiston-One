@@ -236,6 +236,38 @@ class TodoTarefa(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
 
+class AtivoAjuste(Base):
+    """Um ajuste pedido no módulo Gestão de Ativos do Faiston One.
+
+    Cada linha é um item do tipo "hoje é assim / deveria ser assim", classificado
+    como Bug (está quebrado) ou Melhoria (funciona, mas precisa evoluir). O campo
+    `versao` agrupa a leva de ajustes ("v2" agora) — quando surgir a próxima
+    rodada, é só cadastrar com versao="v3" que a tela ganha a aba nova sozinha,
+    sem mexer no código.
+    """
+    __tablename__ = "ativo_ajustes"
+
+    id = Column(Integer, primary_key=True)
+    versao = Column(String, nullable=False, default="v2", server_default="v2")
+    # número do item dentro da versão (1, 2, 3...) — é o "#" da lista que o time usa
+    # pra se referir ao ajuste em reunião; também define a ordem na tela.
+    numero = Column(Integer, nullable=False, default=0, server_default="0")
+    titulo = Column(String, nullable=False)
+    tipo = Column(String, nullable=False, default="Melhoria", server_default="Melhoria")  # Bug / Melhoria
+    # área/tela do sistema afetada (Entrada, Cotação, Tracking, Estoque...) — texto
+    # livre de propósito: o vocabulário do módulo ainda está mudando.
+    area = Column(String, nullable=True)
+    prioridade = Column(String, nullable=False, default="Média", server_default="Média")
+    atual = Column(Text, nullable=False, default="")      # como está hoje
+    esperado = Column(Text, nullable=False, default="")   # como deve ser
+    observacao = Column(Text, nullable=True, default="")  # detalhes, decisões, links
+    status = Column(String, nullable=False, default="levantado", server_default="levantado")
+    responsavel = Column(String, nullable=True)
+    autor = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
 class Observation(Base):
     """Uma nota do historico de observacoes de um caso — cada uma com seu proprio autor,
     diferente do campo antigo `TestCase.observacao` (unico, qualquer um sobrescrevia)."""

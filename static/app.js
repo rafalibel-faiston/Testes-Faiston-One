@@ -2827,6 +2827,7 @@
     $("#module-ativos").hidden = mod !== "ativos";
     $("#module-agenda").hidden = mod !== "agenda";
     $("#module-todo").hidden = mod !== "todo";
+    if (mod === "ativos") loadAjustes();
     if (mod === "agenda") loadAgenda();
     if (mod === "todo") loadTodo();
   }
@@ -3249,6 +3250,279 @@
     if (ok) closeTarefaModal();
   });
 
+  // ---------------- Gestão de Ativos — ajustes (v2 e as próximas levas) ----------------
+  // Cada ajuste é um "como está hoje / como deve ser" classificado como Bug ou
+  // Melhoria. A versão (v2, v3…) vem dos próprios dados: cadastrou um item numa
+  // versão que ainda não existia, a aba dela aparece sozinha aqui.
+  let AJUSTES = [];
+  let ajusteVersao = "";                         // "" enquanto não carregou nada
+  const ajusteFiltros = { tipo: "", status: "" };
+
+  const AJUSTE_STATUS = [
+    { key: "levantado",       label: "Levantado",         cls: "st-levantado" },
+    { key: "analise",         label: "Em análise",        cls: "st-analise" },
+    { key: "desenvolvimento", label: "Em desenvolvimento", cls: "st-dev" },
+    { key: "entregue",        label: "Entregue",           cls: "st-entregue" },
+    { key: "validado",        label: "Validado",           cls: "st-validado" },
+    { key: "descartado",      label: "Descartado",         cls: "st-descartado" },
+  ];
+  const AJUSTE_STATUS_META = Object.fromEntries(AJUSTE_STATUS.map((s) => [s.key, s]));
+  // o que ainda dá trabalho — usado no contador da aba e no "em aberto" do resumo
+  const AJUSTE_ABERTO = new Set(["levantado", "analise", "desenvolvimento", "entregue"]);
+
+  // v10 depois de v9: ordena pelo número da versão, não pelo texto
+  function versaoRank(v) {
+    const n = parseInt(String(v).replace(/\D/g, ""), 10);
+    return isNaN(n) ? 0 : n;
+  }
+
+  async function loadAjustes() {
+    try {
+      AJUSTES = await api("/api/ativos/ajustes");
+    } catch (e) {
+      AJUSTES = [];
+      toast("Erro ao carregar ajustes: " + e.message, true);
+    }
+    const versoes = versoesDisponiveis();
+    if (!versoes.includes(ajusteVersao)) ajusteVersao = versoes[0] || "v2";
+    renderAjustes();
+  }
+
+  function versoesDisponiveis() {
+    return Array.from(new Set(AJUSTES.map((a) => a.versao))).sort((a, b) => versaoRank(b) - versaoRank(a));
+  }
+
+  function ajustesDaVersao() {
+    return AJUSTES.filter((a) => a.versao === ajusteVersao);
+  }
+
+  function renderAjustes() {
+    renderAjusteVersoes();
+    renderAjusteStats();
+    renderAjusteStatusChips();
+    renderAjusteList();
+    atualizaContadorAba();
+    // datalist do modal: as versões que já existem, pra não digitar errado
+    $("#ajuste-versao-opts").innerHTML = versoesDisponiveis().map((v) => `<option value="${esc(v)}">`).join("");
+  }
+
+  function renderAjusteVersoes() {
+    const versoes = versoesDisponiveis();
+    const nav = $("#ajustes-versoes");
+    if (!versoes.length) { nav.innerHTML = ""; return; }
+    nav.innerHTML = versoes.map((v) => {
+      const itens = AJUSTES.filter((a) => a.versao === v);
+      const abertos = itens.filter((a) => AJUSTE_ABERTO.has(a.status)).length;
+      return `<button type="button" class="ajuste-versao${v === ajusteVersao ? " active" : ""}" data-versao="${esc(v)}">
+        <span class="ajuste-versao-name">Ajustes ${esc(v)}</span>
+        <span class="ajuste-versao-sub">${itens.length} ${itens.length === 1 ? "item" : "itens"} · ${abertos} em aberto</span>
+      </button>`;
+    }).join("");
+    $$(".ajuste-versao", nav).forEach((b) => b.addEventListener("click", () => {
+      ajusteVersao = b.dataset.versao;
+      renderAjustes();
+    }));
+  }
+
+  function renderAjusteStats() {
+    const itens = ajustesDaVersao();
+    const bugs = itens.filter((a) => a.tipo === "Bug").length;
+    const melhorias = itens.filter((a) => a.tipo === "Melhoria").length;
+    const abertos = itens.filter((a) => AJUSTE_ABERTO.has(a.status)).length;
+    const prontos = itens.filter((a) => a.status === "validado").length;
+    $("#ajustes-stats").innerHTML = `
+      <div class="stat"><span class="stat-n">${itens.length}</span><span class="stat-l">Ajustes</span></div>
+      <div class="stat bad"><span class="stat-n">${bugs}</span><span class="stat-l">Bugs</span></div>
+      <div class="stat"><span class="stat-n">${melhorias}</span><span class="stat-l">Melhorias</span></div>
+      <div class="stat warn"><span class="stat-n">${abertos}</span><span class="stat-l">Em aberto</span></div>
+      <div class="stat ok"><span class="stat-n">${prontos}</span><span class="stat-l">Validados</span></div>`;
+  }
+
+  function renderAjusteStatusChips() {
+    const itens = ajustesDaVersao();
+    const box = $("#ajustes-chips-status");
+    const chips = [`<button type="button" class="chip${ajusteFiltros.status ? "" : " active"}" data-status="">Todas</button>`];
+    AJUSTE_STATUS.forEach((st) => {
+      const n = itens.filter((a) => a.status === st.key).length;
+      if (!n && ajusteFiltros.status !== st.key) return;   // só mostra situação que existe na versão
+      chips.push(`<button type="button" class="chip${ajusteFiltros.status === st.key ? " active" : ""}" data-status="${st.key}">${esc(st.label)} <b>${n}</b></button>`);
+    });
+    box.innerHTML = chips.join("");
+    $$(".chip", box).forEach((c) => c.addEventListener("click", () => {
+      ajusteFiltros.status = c.dataset.status;
+      renderAjustes();
+    }));
+  }
+
+  function ajusteCard(a) {
+    const tipoCls = a.tipo === "Bug" ? "t-bug" : "t-melhoria";
+    const st = AJUSTE_STATUS_META[a.status] || AJUSTE_STATUS[0];
+    const opts = AJUSTE_STATUS.map((s) =>
+      `<option value="${s.key}"${s.key === a.status ? " selected" : ""}>${esc(s.label)}</option>`).join("");
+    return `<article class="ajuste-item ${tipoCls} ${st.cls}" data-id="${a.id}">
+      <header class="ajuste-item-head">
+        <span class="ajuste-num">${String(a.numero || 0).padStart(2, "0")}</span>
+        <div class="ajuste-item-copy">
+          <h3>${esc(a.titulo)}</h3>
+          <div class="ajuste-tags">
+            <span class="ajuste-tag ${tipoCls}">${esc(a.tipo)}</span>
+            ${a.area ? `<span class="ajuste-tag t-area">${esc(a.area)}</span>` : ""}
+            <span class="ajuste-tag t-prio">${esc(a.prioridade)}</span>
+            ${a.responsavel ? `<span class="ajuste-tag t-resp">${esc(a.responsavel)}</span>` : ""}
+          </div>
+        </div>
+        <select class="ajuste-status ${st.cls}" title="Situação do ajuste">${opts}</select>
+        <button type="button" class="ajuste-edit" aria-label="Editar ajuste" title="Editar">✎</button>
+      </header>
+      <div class="ajuste-cols">
+        <div class="ajuste-col col-atual">
+          <span class="ajuste-col-label">Como está hoje</span>
+          <p>${esc(a.atual) || "<span class=\"ajuste-vazio\">—</span>"}</p>
+        </div>
+        <div class="ajuste-col col-esperado">
+          <span class="ajuste-col-label">Como deve ser</span>
+          <p>${esc(a.esperado) || "<span class=\"ajuste-vazio\">—</span>"}</p>
+        </div>
+      </div>
+      ${a.observacao ? `<div class="ajuste-obs"><b>Obs.</b> ${esc(a.observacao)}</div>` : ""}
+    </article>`;
+  }
+
+  function renderAjusteList() {
+    const lista = $("#ajustes-list");
+    const itens = ajustesDaVersao()
+      .filter((a) => !ajusteFiltros.tipo || a.tipo === ajusteFiltros.tipo)
+      .filter((a) => !ajusteFiltros.status || a.status === ajusteFiltros.status)
+      .sort((a, b) => (a.numero || 0) - (b.numero || 0) || a.id - b.id);
+
+    const semNada = !ajustesDaVersao().length;
+    $("#ajustes-empty").hidden = !semNada;
+    if (semNada) { lista.innerHTML = ""; return; }
+
+    lista.innerHTML = itens.length
+      ? itens.map(ajusteCard).join("")
+      : '<div class="ajustes-nofilter">Nenhum ajuste com esses filtros.</div>';
+
+    $$(".ajuste-item", lista).forEach((card) => {
+      const id = Number(card.dataset.id);
+      $(".ajuste-edit", card).addEventListener("click", () => openAjusteModal(id));
+      $(".ajuste-item-copy h3", card).addEventListener("click", () => openAjusteModal(id));
+      $(".ajuste-status", card).addEventListener("change", (e) => setAjusteStatus(id, e.target.value));
+    });
+  }
+
+  function atualizaContadorAba() {
+    const badge = $("#module-tab-ativos-count");
+    if (!badge) return;
+    const abertos = AJUSTES.filter((a) => AJUSTE_ABERTO.has(a.status)).length;
+    badge.textContent = abertos;
+    badge.hidden = !abertos;
+  }
+
+  async function setAjusteStatus(id, status) {
+    try {
+      await api(`/api/ativos/ajustes/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const a = AJUSTES.find((x) => x.id === id);
+      if (a) a.status = status;
+      renderAjustes();
+      toast("Situação atualizada.");
+    } catch (e) { toast("Erro ao atualizar: " + e.message, true); }
+  }
+
+  let editingAjusteId = null;
+  const ajusteModal = $("#ajuste-modal");
+  const ajusteForm = $("#ajuste-form");
+
+  function openAjusteModal(id) {
+    editingAjusteId = id || null;
+    ajusteForm.reset();
+    const a = id ? AJUSTES.find((x) => x.id === id) : null;
+    $("#ajuste-modal-title").textContent = id ? "Editar ajuste" : "Novo ajuste";
+    $("#ajuste-modal-code").textContent = a
+      ? `${esc(a.versao)} · item ${String(a.numero || 0).padStart(2, "0")}`
+      : `${esc(ajusteVersao || "v2")} · novo item`;
+    $("#ajuste-delete").hidden = !id;
+    if (a) {
+      ajusteForm.titulo.value = a.titulo;
+      ajusteForm.tipo.value = a.tipo;
+      ajusteForm.versao.value = a.versao;
+      ajusteForm.prioridade.value = a.prioridade;
+      ajusteForm.area.value = a.area || "";
+      ajusteForm.status.value = a.status;
+      ajusteForm.responsavel.value = a.responsavel || "";
+      ajusteForm.atual.value = a.atual || "";
+      ajusteForm.esperado.value = a.esperado || "";
+      ajusteForm.observacao.value = a.observacao || "";
+    } else {
+      ajusteForm.versao.value = ajusteVersao || "v2";
+    }
+    ajusteModal.hidden = false;
+  }
+  function closeAjusteModal() { ajusteModal.hidden = true; editingAjusteId = null; }
+
+  $("#btn-add-ajuste").addEventListener("click", () => openAjusteModal(null));
+  $("#btn-add-ajuste-vazio").addEventListener("click", () => openAjusteModal(null));
+  $("#ajuste-cancel").addEventListener("click", closeAjusteModal);
+  $("#ajuste-modal-close").addEventListener("click", closeAjusteModal);
+  ajusteModal.addEventListener("click", (e) => { if (e.target.id === "ajuste-modal") closeAjusteModal(); });
+
+  $$("#ajustes-chips-tipo .chip").forEach((c) => c.addEventListener("click", () => {
+    ajusteFiltros.tipo = c.dataset.tipo;
+    $$("#ajustes-chips-tipo .chip").forEach((o) => o.classList.toggle("active", o === c));
+    renderAjusteList();
+  }));
+
+  ajusteForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(ajusteForm);
+    const titulo = (fd.get("titulo") || "").trim();
+    if (!titulo) return;
+    const payload = {
+      titulo,
+      tipo: fd.get("tipo"),
+      versao: (fd.get("versao") || "").trim() || ajusteVersao || "v2",
+      prioridade: fd.get("prioridade"),
+      area: fd.get("area") || null,
+      status: fd.get("status"),
+      responsavel: fd.get("responsavel") || null,
+      atual: fd.get("atual") || "",
+      esperado: fd.get("esperado") || "",
+      observacao: fd.get("observacao") || "",
+    };
+    try {
+      if (editingAjusteId) {
+        await api(`/api/ativos/ajustes/${editingAjusteId}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        const criado = await api("/api/ativos/ajustes", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, autor: testerName() || null }),
+        });
+        // cadastrou numa versão nova: já pula pra ela
+        ajusteVersao = criado.versao;
+      }
+      closeAjusteModal();
+      await loadAjustes();
+      toast("Ajuste salvo.");
+    } catch (err) { toast("Erro ao salvar: " + err.message, true); }
+  });
+
+  $("#ajuste-delete").addEventListener("click", async () => {
+    if (!editingAjusteId) return;
+    if (!confirm("Excluir este ajuste?")) return;
+    try {
+      await api(`/api/ativos/ajustes/${editingAjusteId}`, { method: "DELETE" });
+      closeAjusteModal();
+      await loadAjustes();
+      toast("Ajuste excluído.");
+    } catch (e) { toast("Erro ao excluir: " + e.message, true); }
+  });
+
   // na entrada: aplica o chip e, se ninguém escolheu ainda, força a escolha do perfil
   applyPerfilChip();
   applyModuleVisibility();
@@ -3266,4 +3540,5 @@
   });
   loadNotes();
   loadSituacoes();
+  loadAjustes();
 })();

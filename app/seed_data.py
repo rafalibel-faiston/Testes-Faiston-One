@@ -931,3 +931,134 @@ def seed_todo_desmame_planilha(db):
     if added:
         db.commit()
     return added
+
+
+# ---------------------------------------------------------------------------
+# Gestão de Ativos — ajustes da v2
+# ---------------------------------------------------------------------------
+# Levantamento feito pela Faiston sobre o módulo de Gestão de Ativos que já está
+# no ar: cada item traz "como está hoje" (atual) e "como deve ser" (esperado),
+# classificado como Bug (está quebrado) ou Melhoria (funciona, mas precisa
+# evoluir). As próximas levas entram como versao="v3" etc. — pela tela ou aqui.
+AJUSTES_GESTAO_ATIVOS_V2 = [
+    {
+        "numero": 1,
+        "titulo": "Entrada Manual não atribui Cliente e Valor",
+        "tipo": "Bug",
+        "area": "Entrada",
+        "prioridade": "Alta",
+        "atual": "Ao criar uma entrada manual (manual entry) de ativo, os campos Cliente e Valor "
+                 "não são preenchidos/associados ao registro.",
+        "esperado": "A entrada manual deve gravar corretamente Cliente e Valor no momento do "
+                    "cadastro, igual acontece nos outros fluxos de entrada.",
+    },
+    {
+        "numero": 2,
+        "titulo": "Cotação por Email — múltiplas modalidades no mesmo envio",
+        "tipo": "Melhoria",
+        "area": "Cotação",
+        "prioridade": "Média",
+        "atual": "O fluxo de cotação por email não suporta pedir duas modalidades (Convencional + "
+                 "Emergencial) pra mesma transportadora num único email.",
+        "esperado": "Permitir que, num mesmo envio de cotação, sejam solicitados os dois tipos de "
+                    "frete (Convencional e Emergencial), com as duas respostas capturadas/associadas "
+                    "corretamente ao chamado.",
+    },
+    {
+        "numero": 3,
+        "titulo": "Tracking — responsável, sinalização de tratamento e alerta de prazo",
+        "tipo": "Melhoria",
+        "area": "Tracking",
+        "prioridade": "Alta",
+        "atual": "• Não existe controle de responsável (owner) pelo chamado — o sistema só identifica "
+                 "se houve alguma atualização no dia, sem exigir isso nem indicar quem está tratando.\n"
+                 "• Não há sinalização visual (flag/status) mostrando se o chamado já foi tratado ou "
+                 "ainda está pendente.\n"
+                 "• Não existe alerta (notification/alert) quando o chamado está se aproximando da "
+                 "data de entrega.",
+        "esperado": "• Campo de responsável por chamado, com atualização diária obrigatória.\n"
+                    "• Indicador visual claro (badge ou cor) mostrando se o chamado foi tratado hoje "
+                    "ou está pendente.\n"
+                    "• Alerta automático quando a data de entrega estiver próxima (definir prazo de "
+                    "antecedência — ex.: 1 ou 2 dias antes).",
+    },
+    {
+        "numero": 4,
+        "titulo": "Técnico Retira — falta opção de seguir com GRM",
+        "tipo": "Bug",
+        "area": "Expedição",
+        "prioridade": "Alta",
+        "atual": "Ao abrir um ticket com a opção de entrega \"Técnico Retira\", o sistema pula direto "
+                 "pra emissão de Nota Fiscal, sem oferecer a opção de seguir com GRM.",
+        "esperado": "Ao selecionar \"Técnico Retira\", o sistema deve oferecer as duas opções de saída "
+                    "— GRM ou Nota Fiscal.",
+    },
+    {
+        "numero": 5,
+        "titulo": "Localização detalhada dentro do estoque",
+        "tipo": "Melhoria",
+        "area": "Estoque",
+        "prioridade": "Média",
+        "atual": "O item fica vinculado apenas ao estoque (warehouse) como um todo, sem sublocalização.",
+        "esperado": "Criar um nível de localização dentro do estoque (pallet 1, pallet 2, armário 1, "
+                    "armário 2, etc.), pra saber onde exatamente o item está fisicamente, não só em "
+                    "qual estoque.",
+    },
+    {
+        "numero": 6,
+        "titulo": "Status/histórico de condição do equipamento (GOOD/BAD)",
+        "tipo": "Melhoria",
+        "area": "Reversa",
+        "prioridade": "Média",
+        "atual": "Não existe controle histórico da condição de saída/retorno do equipamento — alguns "
+                 "equipamentos costumam sair GOOD e voltar como reversa BAD, mas isso não é rastreado.",
+        "esperado": "Registrar o status de condição (GOOD/BAD) a cada movimentação/reversa do "
+                    "equipamento, permitindo ver o histórico e identificar equipamentos com tendência "
+                    "recorrente de retorno BAD.",
+    },
+    {
+        "numero": 7,
+        "titulo": "Travar valor do equipamento até vínculo com cotação",
+        "tipo": "Melhoria",
+        "area": "Entrada",
+        "prioridade": "Média",
+        "atual": "Não há trava (lock) do valor lançado na entrada do equipamento.",
+        "esperado": "Travar o valor informado na entrada até que o serial seja vinculado a uma cotação; "
+                    "nesse momento, o sistema deve preencher automaticamente esse valor na cotação "
+                    "(auto-fill), evitando divergência manual.",
+    },
+]
+
+
+def seed_ativos_ajustes(db):
+    """Os ajustes levantados pra v2 da Gestão de Ativos. Idempotente por
+    (versao, titulo): só insere o que ainda não existe, então redeploy não
+    duplica nem sobrescreve o que o time editou/moveu de status na tela."""
+    from .models import AtivoAjuste
+
+    added = 0
+    for item in AJUSTES_GESTAO_ATIVOS_V2:
+        exists = (
+            db.query(AtivoAjuste)
+            .filter(AtivoAjuste.versao == "v2", AtivoAjuste.titulo == item["titulo"])
+            .first()
+        )
+        if exists:
+            continue
+        db.add(AtivoAjuste(
+            versao="v2",
+            numero=item["numero"],
+            titulo=item["titulo"],
+            tipo=item["tipo"],
+            area=item.get("area"),
+            prioridade=item.get("prioridade", "Média"),
+            atual=item["atual"],
+            esperado=item["esperado"],
+            observacao="",
+            status="levantado",
+            autor="Levantamento Faiston",
+        ))
+        added += 1
+    if added:
+        db.commit()
+    return added

@@ -59,6 +59,7 @@ app/
   schemas.py            # Pydantic
   seed_data.py           # os 51 casos de teste (fonte: dashboard LP 02/07) + migração de observações antigas
   routers/cases.py        # API: listar/atualizar casos, observações, upload/download/remover print, resumo
+  routers/ativos.py        # API: ajustes do módulo Gestão de Ativos (v2 e as próximas levas)
   mcp_server.py           # servidor MCP (ver seção "Conectar no Claude/Cowork" abaixo)
 static/
   index.html, style.css, app.js   # frontend
@@ -109,13 +110,43 @@ Com o app rodando (local ou no domínio do Railway), a URL do servidor MCP é
 
 Depois disso as ferramentas (`listar_casos`, `obter_caso`,
 `atualizar_status_caso`, `adicionar_observacao`, `resumo_execucao`,
-`listar_tarefas`, `criar_tarefa`) ficam disponíveis pra pedir direto na
+`listar_tarefas`, `criar_tarefa`, `listar_ajustes_ativos`, `criar_ajuste_ativos`)
+ficam disponíveis pra pedir direto na
 conversa, tipo "marca o FC-12 como aprovado" ou "lista os casos reprovados do
 Grupo B".
 
 Detalhe técnico: o "login" fica guardado em memória do processo — se o
 serviço reiniciar no Railway, o conector pode precisar ser vinculado de novo
 (o token de acesso emitido dura 30 dias, sem renovação automática).
+
+## Gestão de Ativos — ajustes (v2 e as próximas)
+
+O módulo **Gestão de Ativos** do Faiston One já está no ar; a aba *Gestão de
+Ativos* aqui no console (visível só pro perfil Faiston) é o backlog dos ajustes
+pedidos em cima dele. Cada ajuste é um item no formato que o time já usa:
+
+- **como está hoje** (`atual`) × **como deve ser** (`esperado`);
+- classificado como **Bug** (está quebrado) ou **Melhoria** (funciona, mas
+  precisa evoluir);
+- com área/tela, prioridade, responsável e situação (Levantado → Em análise →
+  Em desenvolvimento → Entregue → Validado, ou Descartado).
+
+Os 7 ajustes levantados pra **v2** vêm semeados (`seed_ativos_ajustes` em
+`app/seed_data.py`) — idempotente: redeploy não duplica nem sobrescreve o que o
+time já editou ou moveu de situação na tela.
+
+**Próximas levas:** o campo `versao` agrupa a rodada de ajustes e não tem nada
+chumbado no código. Ao cadastrar um ajuste digitando uma versão que ainda não
+existe (`v3`, `v4`…), a aba dessa versão aparece sozinha na tela, com o histórico
+das anteriores intacto ao lado. Dá pra cadastrar pela tela (**Novo ajuste**) ou
+pelo Claude, via a tool MCP `criar_ajuste_ativos`.
+
+### API
+
+- `GET  /api/ativos/ajustes` — lista os ajustes (filtros opcionais: `versao`, `tipo`, `status`)
+- `POST /api/ativos/ajustes` — cadastra um ajuste (sem `numero`, ele entra na sequência da versão)
+- `PATCH /api/ativos/ajustes/{id}` — edita qualquer campo, inclusive mover de versão
+- `DELETE /api/ativos/ajustes/{id}` — remove o ajuste
 
 ## API
 

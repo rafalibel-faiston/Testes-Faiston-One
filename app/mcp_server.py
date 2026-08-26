@@ -384,3 +384,89 @@ def criar_tarefa(
         return {"id": tarefa.id, "titulo": tarefa.titulo, "status": tarefa.status}
     finally:
         db.close()
+
+
+@mcp.tool()
+def listar_ajustes_ativos(versao: Optional[str] = None, tipo: Optional[str] = None) -> list[dict]:
+    """Lista os ajustes pedidos no módulo Gestão de Ativos do Faiston One.
+    versao opcional (ex.: "v2", "v3"); tipo opcional: "Bug" ou "Melhoria"."""
+    db = SessionLocal()
+    try:
+        query = db.query(models.AtivoAjuste)
+        if versao:
+            query = query.filter(models.AtivoAjuste.versao == versao.strip().lower())
+        if tipo:
+            query = query.filter(models.AtivoAjuste.tipo == tipo)
+        ajustes = query.order_by(
+            models.AtivoAjuste.versao, models.AtivoAjuste.numero, models.AtivoAjuste.id
+        ).all()
+        return [
+            {
+                "id": a.id,
+                "versao": a.versao,
+                "numero": a.numero,
+                "titulo": a.titulo,
+                "tipo": a.tipo,
+                "area": a.area,
+                "prioridade": a.prioridade,
+                "atual": a.atual,
+                "esperado": a.esperado,
+                "status": a.status,
+                "responsavel": a.responsavel,
+            }
+            for a in ajustes
+        ]
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def criar_ajuste_ativos(
+    titulo: str,
+    atual: str,
+    esperado: str,
+    tipo: str = "Melhoria",
+    versao: str = "v2",
+    area: Optional[str] = None,
+    prioridade: str = "Média",
+    autor: Optional[str] = None,
+) -> dict:
+    """Cadastra um ajuste do módulo Gestão de Ativos: `atual` é como está hoje e
+    `esperado` é como deve ser. tipo: "Bug" (está quebrado) ou "Melhoria".
+    versao agrupa a leva de ajustes — usar uma versão nova (v3, v4...) abre a
+    próxima rodada na tela automaticamente. O número do item é atribuído
+    sozinho, na sequência da versão."""
+    titulo = (titulo or "").strip()
+    if not titulo:
+        return {"erro": "Título vazio."}
+    if tipo not in {"Bug", "Melhoria"}:
+        return {"erro": 'Tipo inválido — use "Bug" ou "Melhoria".'}
+    versao = (versao or "v2").strip().lower() or "v2"
+    if versao.isdigit():
+        versao = "v" + versao
+    db = SessionLocal()
+    try:
+        maior = (
+            db.query(func.max(models.AtivoAjuste.numero))
+            .filter(models.AtivoAjuste.versao == versao)
+            .scalar()
+        )
+        ajuste = models.AtivoAjuste(
+            versao=versao,
+            numero=(maior or 0) + 1,
+            titulo=titulo,
+            tipo=tipo,
+            area=(area or "").strip() or None,
+            prioridade=prioridade if prioridade in {"Alta", "Média", "Baixa", "A definir"} else "Média",
+            atual=atual or "",
+            esperado=esperado or "",
+            status="levantado",
+            autor=autor,
+        )
+        db.add(ajuste)
+        db.commit()
+        db.refresh(ajuste)
+        return {"id": ajuste.id, "versao": ajuste.versao, "numero": ajuste.numero,
+                "titulo": ajuste.titulo, "tipo": ajuste.tipo}
+    finally:
+        db.close()

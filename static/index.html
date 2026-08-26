@@ -72,7 +72,7 @@
   <nav class="module-tabs" id="module-tabs" aria-label="Selecionar módulo">
     <button type="button" class="module-tab active" data-module="dispatcher" aria-selected="true">Dispatcher</button>
     <button type="button" class="module-tab" data-module="ativos" id="module-tab-ativos" aria-selected="false" hidden>
-      Gestão de Ativos <span class="module-tab-soon">em breve</span>
+      Gestão de Ativos <span class="module-tab-count" id="module-tab-ativos-count" hidden>0</span>
     </button>
     <button type="button" class="module-tab" data-module="agenda" id="module-tab-agenda" aria-selected="false" hidden>Agenda</button>
     <button type="button" class="module-tab" data-module="todo" id="module-tab-todo" aria-selected="false" hidden>Todo</button>
@@ -292,10 +292,47 @@
   </div><!-- /module-dispatcher -->
 
   <div id="module-ativos" hidden>
-    <section class="module-empty">
-      <h2>Gestão de Ativos</h2>
-      <p>Em breve. Esse módulo vai reunir o controle de ativos do Faiston One, separado do Dispatcher.</p>
+    <section class="diagrams-head">
+      <div class="diagrams-head-copy">
+        <h2>Gestão de Ativos — Ajustes</h2>
+        <p>O módulo de Gestão de Ativos já está no ar; aqui ficam os ajustes pedidos em cima dele.
+        Cada item conta <b>como está hoje</b> e <b>como deve ser</b>, e é classificado como
+        <b>Bug</b> (está quebrado) ou <b>Melhoria</b> (funciona, mas precisa evoluir).
+        As próximas levas entram como uma versão nova — v3, v4… — sem perder o histórico das anteriores.</p>
+      </div>
+      <button type="button" class="add-btn" id="btn-add-ajuste">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Novo ajuste
+      </button>
     </section>
+
+    <nav class="ajustes-versoes" id="ajustes-versoes" aria-label="Selecionar versão dos ajustes"></nav>
+
+    <div class="ajustes-stats" id="ajustes-stats"></div>
+
+    <div class="ajustes-filters">
+      <div class="chip-row">
+        <span class="chip-row-label">Tipo</span>
+        <div class="chips" id="ajustes-chips-tipo">
+          <button type="button" class="chip active" data-tipo="">Todos</button>
+          <button type="button" class="chip" data-tipo="Bug">Bug</button>
+          <button type="button" class="chip" data-tipo="Melhoria">Melhoria</button>
+        </div>
+      </div>
+      <div class="chip-row">
+        <span class="chip-row-label">Situação</span>
+        <div class="chips" id="ajustes-chips-status"></div>
+      </div>
+    </div>
+
+    <div class="ajustes-list" id="ajustes-list"></div>
+    <div class="ajustes-empty" id="ajustes-empty" hidden>
+      <p>Nenhum ajuste nesta versão ainda.</p>
+      <button type="button" class="add-btn" id="btn-add-ajuste-vazio">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Cadastrar o primeiro
+      </button>
+    </div>
   </div>
 
   <div id="module-agenda" hidden>
@@ -729,6 +766,76 @@
         <button type="button" class="btn-ghost" id="tarefa-delete" hidden>Excluir</button>
         <button type="button" class="btn-ghost" id="tarefa-cancel">Cancelar</button>
         <button type="submit" class="btn-primary" id="tarefa-save">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal" id="ajuste-modal" hidden aria-modal="true" role="dialog">
+  <div class="modal-card ajuste-card">
+    <div class="modal-head">
+      <h3 id="ajuste-modal-title">Novo ajuste</h3>
+      <span class="modal-code" id="ajuste-modal-code"></span>
+      <button type="button" class="modal-close" id="ajuste-modal-close" aria-label="Fechar">✕</button>
+    </div>
+    <form id="ajuste-form" class="modal-body">
+      <label class="fld fld-wide">Item <b>*</b>
+        <input name="titulo" placeholder="ex.: Entrada Manual não atribui Cliente e Valor" required>
+      </label>
+      <div class="form-grid">
+        <label class="fld">Tipo
+          <select name="tipo">
+            <option value="Bug">Bug</option>
+            <option value="Melhoria" selected>Melhoria</option>
+          </select>
+        </label>
+        <label class="fld">Versão
+          <input name="versao" list="ajuste-versao-opts" placeholder="v2" autocomplete="off">
+          <datalist id="ajuste-versao-opts"></datalist>
+          <span class="fld-hint">Digite uma versão nova (v3, v4…) pra abrir a próxima leva.</span>
+        </label>
+        <label class="fld">Prioridade
+          <select name="prioridade">
+            <option>Alta</option><option selected>Média</option><option>Baixa</option><option>A definir</option>
+          </select>
+        </label>
+      </div>
+      <div class="form-grid">
+        <label class="fld">Área / tela
+          <input name="area" list="ajuste-area-opts" placeholder="ex.: Entrada, Cotação, Tracking" autocomplete="off">
+          <datalist id="ajuste-area-opts">
+            <option value="Entrada"><option value="Cotação"><option value="Tracking">
+            <option value="Expedição"><option value="Estoque"><option value="Reversa">
+          </datalist>
+        </label>
+        <label class="fld">Situação
+          <select name="status">
+            <option value="levantado">Levantado</option>
+            <option value="analise">Em análise</option>
+            <option value="desenvolvimento">Em desenvolvimento</option>
+            <option value="entregue">Entregue</option>
+            <option value="validado">Validado</option>
+            <option value="descartado">Descartado</option>
+          </select>
+        </label>
+        <label class="fld">Responsável
+          <input name="responsavel" placeholder="quem está tocando (opcional)" autocomplete="off">
+        </label>
+      </div>
+      <label class="fld">Como está hoje <b>*</b>
+        <textarea name="atual" rows="4" placeholder="O comportamento atual do sistema" required></textarea>
+        <span class="fld-hint">Pra listar mais de um ponto, use uma linha por item começando com “•”.</span>
+      </label>
+      <label class="fld">Como deve ser <b>*</b>
+        <textarea name="esperado" rows="4" placeholder="O comportamento esperado depois do ajuste" required></textarea>
+      </label>
+      <label class="fld">Observações
+        <textarea name="observacao" rows="2" placeholder="decisões, dúvidas, links (opcional)"></textarea>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="ajuste-delete" hidden>Excluir</button>
+        <button type="button" class="btn-ghost" id="ajuste-cancel">Cancelar</button>
+        <button type="submit" class="btn-primary" id="ajuste-save">Salvar ajuste</button>
       </div>
     </form>
   </div>
