@@ -1651,8 +1651,21 @@ body.inline-connecting * { cursor:crosshair !important; }
 }
 .ajuste-upload:hover, .ajuste-upload.dragover { border-color:var(--f-blue); color:var(--f-blue); background:rgba(0,84,236,.05); }
 .ajuste-upload input { display:none; }
-/* o card selecionado é quem recebe o Ctrl+V — precisa dar pra ver qual é */
-.ajuste-item.paste-alvo { border-color:var(--f-blue); box-shadow:0 0 0 3px rgba(0,84,236,.10), var(--shadow-1); }
+/* ---------- alvo do Ctrl+V ----------
+   Vale pro caso de teste, pro estágio da situação e pro ajuste: o card clicado
+   por último é quem recebe a imagem colada, então precisa dar pra ver qual é. */
+.paste-alvo { box-shadow:0 0 0 3px rgba(0,84,236,.10), var(--shadow-1) !important; }
+/* só as bordas de cima/lado/baixo: a da esquerda é a cor do status do card */
+.case.paste-alvo, .estagio.paste-alvo {
+  border-top-color:var(--f-blue); border-right-color:var(--f-blue); border-bottom-color:var(--f-blue);
+}
+.ajuste-item.paste-alvo { border-color:var(--f-blue); }
+/* a caixinha "+" do Dispatcher vira o aviso de que dá pra colar ali */
+.paste-alvo .upload-zone {
+  width:auto; padding:0 12px; gap:6px; font-size:12px; font-weight:600; letter-spacing:.2px;
+  border-style:solid; border-color:var(--f-blue); color:var(--f-blue); background:rgba(0,84,236,.06);
+}
+.paste-alvo .upload-zone::after { content:"Ctrl+V pra colar"; }
 .ajuste-item.paste-alvo .ajuste-upload {
   border-style:solid; border-color:var(--f-blue); color:var(--f-blue); background:rgba(0,84,236,.06);
 }

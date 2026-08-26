@@ -119,6 +119,22 @@ Detalhe técnico: o "login" fica guardado em memória do processo — se o
 serviço reiniciar no Railway, o conector pode precisar ser vinculado de novo
 (o token de acesso emitido dura 30 dias, sem renovação automática).
 
+## Colar print (Ctrl+V)
+
+Print é a evidência mais rápida de anexar e a mais difícil de contestar, então dá
+pra colar imagem direto da área de transferência em três lugares: **caso de
+teste** e **estágio de situação** (Dispatcher) e **ajuste** (Gestão de Ativos).
+
+Como a tela mostra vários cards ao mesmo tempo, colar precisa de um destino:
+clique no card onde a imagem deve entrar — ele ganha uma borda azul e a caixinha
+de anexo passa a dizer *Ctrl+V pra colar* — e cole. Colar sem ter escolhido um
+card mostra um aviso em vez de anexar em algum lugar aleatório. Arrastar o
+arquivo pra cima da caixinha ou clicar nela pra escolher no disco continua
+funcionando como antes.
+
+Com um modal aberto o Ctrl+V volta a ser colagem de texto nos campos dele, sem
+anexar imagem.
+
 ## Gestão de Ativos — ajustes (v2 e as próximas)
 
 O módulo **Gestão de Ativos** do Faiston One já está no ar; a aba *Gestão de
@@ -146,14 +162,11 @@ existe (`v3`, `v4`…), a aba dessa versão aparece sozinha na tela, com o hist�
 das anteriores intacto ao lado. Dá pra cadastrar pela tela (**Novo ajuste**) ou
 pelo Claude, via a tool MCP `criar_ajuste_ativos`.
 
-### Prints no ajuste (Ctrl+V)
+### Prints no ajuste
 
 Cada ajuste aceita imagens — normalmente o print da tela do Faiston One mostrando
-o comportamento atual. Clique no card do ajuste (ele fica destacado, e o botão
-passa a dizer *Ctrl+V pra colar aqui*) e cole a imagem direto da área de
-transferência; arrastar o arquivo pra cima do botão ou clicar nele pra escolher
-no disco também funciona. As imagens ficam salvas como bytes no próprio banco,
-igual aos prints dos casos de teste, e somem junto se o ajuste for excluído.
+o comportamento atual (ver **Colar print (Ctrl+V)** acima). Ficam salvas no
+próprio banco e somem junto se o ajuste for excluído.
 
 ### API
 

@@ -54,6 +54,51 @@
     return $("#input-tester").value.trim() || localStorage.getItem(TESTER_KEY) || "";
   }
 
+  // ---------------- colar print (Ctrl+V) ----------------
+  // A tela mostra vários cards de uma vez, então colar precisa de um destino: o
+  // card em que a pessoa clicou por último vira o alvo (fica com a borda azul) e
+  // recebe a imagem da área de transferência. Serve caso de teste, estágio de
+  // situação e ajuste da Gestão de Ativos — cada um registra em ENVIAR_PRINT
+  // como sobe o print dele.
+  const ENVIAR_PRINT = {};
+  let alvoPrint = null;   // { kind, id }
+
+  function marcarAlvoPrint(kind, id) {
+    const key = String(id);
+    if (alvoPrint && alvoPrint.kind === kind && alvoPrint.id === key) return;
+    alvoPrint = { kind, id: key };
+    aplicarAlvoPrint();
+  }
+
+  function ehAlvoPrint(kind, id) {
+    return !!alvoPrint && alvoPrint.kind === kind && alvoPrint.id === String(id);
+  }
+
+  // reaplica a marca depois de cada render — o elemento anterior já foi trocado
+  function aplicarAlvoPrint() {
+    $$(".paste-alvo").forEach((el) => el.classList.remove("paste-alvo"));
+    if (!alvoPrint) return;
+    const chave = `${alvoPrint.kind}:${alvoPrint.id}`;
+    const el = $$("[data-paste-key]").find((e) => e.dataset.pasteKey === chave);
+    if (el) el.classList.add("paste-alvo");
+  }
+
+  document.addEventListener("paste", (e) => {
+    const item = Array.from((e.clipboardData && e.clipboardData.items) || [])
+      .find((i) => i.kind === "file" && i.type.startsWith("image/"));
+    if (!item) return;
+    // com um modal aberto, Ctrl+V é pra colar texto nos campos dele
+    if ($$(".modal").some((m) => !m.hidden)) return;
+    e.preventDefault();
+    const enviar = alvoPrint && ENVIAR_PRINT[alvoPrint.kind];
+    if (!enviar) {
+      toast("Clique antes no card onde quer colar o print.", true);
+      return;
+    }
+    const file = item.getAsFile();
+    if (file) enviar(alvoPrint.id, file);
+  });
+
   // ---------------- load ----------------
   async function loadCases() {
     CASES = await api("/api/cases");
@@ -114,7 +159,7 @@
     // em vez de um indice global, que por coincidencia podia parecer o numero do estagio.
     const seqMatch = c.code.match(/-(\d+)$/);
     const idx = seqMatch ? parseInt(seqMatch[1], 10) : (CASES.indexOf(c) + 1);
-    return `<article class="case st-${stCode}" data-code="${c.code}"
+    return `<article class="case st-${stCode}" data-code="${c.code}" data-paste-key="caso:${esc(c.code)}"
         data-grupo="${esc(c.grupo)}" data-estagio="${esc(c.estagio)}" data-frente="${esc(c.frente)}" data-status="${esc(c.status)}"
         data-search="${esc((c.code + " " + c.resultado_esperado + " " + c.estagio).toLowerCase())}">
       <div class="case-head">
@@ -194,6 +239,7 @@
     });
     $("#cases").innerHTML = html;
     attachCardHandlers();
+    aplicarAlvoPrint();
     buildFilters(flowCases);
     applyFilters();
     updateStats();
@@ -292,6 +338,8 @@
       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitObs(); }
     });
 
+    card.addEventListener("click", () => marcarAlvoPrint("caso", code));
+
     const fileInput = $(".shot-input", card);
     const zone = $(".upload-zone", card);
     fileInput.addEventListener("change", () => { if (fileInput.files[0]) uploadShot(code, fileInput.files[0], card); });
@@ -335,6 +383,7 @@
     const fresh = wrap.firstElementChild;
     old.replaceWith(fresh);
     attachOneCardHandlers(fresh);
+    aplicarAlvoPrint();
     applyFilters();
     updatePresentCount();
   }
@@ -357,6 +406,11 @@
       zone.textContent = "+";
     }
   }
+
+  ENVIAR_PRINT.caso = (code, file) => {
+    const card = $$(".case").find((el) => el.dataset.code === code);
+    if (card) uploadShot(code, file, card);
+  };
 
   function openLightbox(src) {
     $("#lightbox-img").src = src;
@@ -2019,6 +2073,7 @@
     // o texto buscado não apareça no estágio em si
     const search = (sit.titulo + " " + sit.descricao + " " + e.nome + " " + e.resultado_esperado).toLowerCase();
     return `<article class="estagio st-${stCode}" data-sit="${esc(sit.code)}" data-estagio-id="${e.id}"
+        data-paste-key="estagio:${e.id}"
         data-frente="${esc(e.frente)}" data-status="${esc(e.status)}" data-search="${esc(search)}">
       <div class="estagio-head">
         <span class="estagio-num">Estágio ${idx}</span>
@@ -2128,6 +2183,7 @@
     emptyEl.hidden = true;
     $("#situacoes").innerHTML = flowSits.map(situacaoCard).join("");
     attachSituacaoHandlers();
+    aplicarAlvoPrint();
     buildSituacaoFilters(flowSits);
     applySituacaoFilters();
     updateSituacaoStats(flowSits);
@@ -2342,6 +2398,8 @@
       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitObs(); }
     });
 
+    row.addEventListener("click", () => marcarAlvoPrint("estagio", estagioId));
+
     const fileInput = $(".shot-input", row);
     const zone = $(".upload-zone", row);
     fileInput.addEventListener("change", () => { if (fileInput.files[0]) uploadEstagioShot(sitCode, estagioId, fileInput.files[0], zone); });
@@ -2389,6 +2447,11 @@
     if (i >= 0) SITUACOES[i] = updated; else SITUACOES.push(updated);
     renderSituacoes();
   }
+
+  ENVIAR_PRINT.estagio = (estagioId, file) => {
+    const row = $$(".estagio").find((el) => el.dataset.estagioId === String(estagioId));
+    if (row) uploadEstagioShot(row.dataset.sit, Number(estagioId), file, $(".upload-zone", row));
+  };
 
   async function uploadEstagioShot(sitCode, estagioId, file, zone) {
     zone.textContent = "…";
@@ -3256,9 +3319,6 @@
   // versão que ainda não existia, a aba dela aparece sozinha aqui.
   let AJUSTES = [];
   let ajusteVersao = "";                         // "" enquanto não carregou nada
-  // ajuste que recebe o Ctrl+V: o card em que a pessoa clicou por último. Sem
-  // isso não dá pra saber em qual dos sete ajustes da tela a imagem deve entrar.
-  let ajustePasteAlvo = null;
   const ajusteFiltros = { tipo: "", status: "" };
 
   const AJUSTE_STATUS = [
@@ -3369,7 +3429,7 @@
     const st = AJUSTE_STATUS_META[a.status] || AJUSTE_STATUS[0];
     const opts = AJUSTE_STATUS.map((s) =>
       `<option value="${s.key}"${s.key === a.status ? " selected" : ""}>${esc(s.label)}</option>`).join("");
-    return `<article class="ajuste-item ${tipoCls} ${st.cls}${a.id === ajustePasteAlvo ? " paste-alvo" : ""}" data-id="${a.id}">
+    return `<article class="ajuste-item ${tipoCls} ${st.cls}" data-id="${a.id}" data-paste-key="ajuste:${a.id}">
       <header class="ajuste-item-head">
         <span class="ajuste-num">${String(a.numero || 0).padStart(2, "0")}</span>
         <div class="ajuste-item-copy">
@@ -3399,7 +3459,7 @@
         <div class="ajuste-shots-grid">${(a.prints || []).map(ajustePrintThumb).join("")}</div>
         <label class="ajuste-upload" title="Colar com Ctrl+V ou escolher um arquivo">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          <span class="ajuste-upload-txt">${a.id === ajustePasteAlvo ? "Ctrl+V pra colar aqui" : "Colar ou anexar print"}</span>
+          <span class="ajuste-upload-txt">${ehAlvoPrint("ajuste", a.id) ? "Ctrl+V pra colar aqui" : "Colar ou anexar print"}</span>
           <input type="file" accept="image/*" class="ajuste-shot-input">
         </label>
       </div>
@@ -3428,6 +3488,8 @@
     lista.innerHTML = itens.length
       ? itens.map(ajusteCard).join("")
       : '<div class="ajustes-nofilter">Nenhum ajuste com esses filtros.</div>';
+
+    aplicarAlvoPrint();
 
     $$(".ajuste-item", lista).forEach((card) => {
       const id = Number(card.dataset.id);
@@ -3483,10 +3545,12 @@
   }
 
   function marcarAlvoDeColagem(id) {
-    if (ajustePasteAlvo === id) return;
-    ajustePasteAlvo = id;
-    renderAjusteList();
+    if (ehAlvoPrint("ajuste", id)) return;
+    marcarAlvoPrint("ajuste", id);
+    renderAjusteList();   // o rótulo do botão do card muda junto
   }
+
+  ENVIAR_PRINT.ajuste = (id, file) => uploadAjustePrint(Number(id), file);
 
   async function uploadAjustePrint(id, file) {
     if (!file || !file.type.startsWith("image/")) {
@@ -3498,7 +3562,7 @@
       fd.append("file", file, file.name || "print.png");
       if (testerName()) fd.append("uploaded_by", testerName());
       substituiAjusteLocal(await api(`/api/ativos/ajustes/${id}/prints`, { method: "POST", body: fd }));
-      ajustePasteAlvo = id;
+      marcarAlvoPrint("ajuste", id);
       renderAjustes();
       toast("Print anexado.");
     } catch (e) { toast("Erro ao anexar print: " + e.message, true); }
@@ -3553,22 +3617,6 @@
   $("#ajuste-cancel").addEventListener("click", closeAjusteModal);
   $("#ajuste-modal-close").addEventListener("click", closeAjusteModal);
   ajusteModal.addEventListener("click", (e) => { if (e.target.id === "ajuste-modal") closeAjusteModal(); });
-
-  // Ctrl+V em qualquer lugar da aba cola a imagem no ajuste selecionado. Ignora
-  // quando o modal está aberto — lá o Ctrl+V é pra colar texto nos campos.
-  document.addEventListener("paste", (e) => {
-    if (currentModule !== "ativos" || !ajusteModal.hidden) return;
-    const item = Array.from((e.clipboardData && e.clipboardData.items) || [])
-      .find((i) => i.kind === "file" && i.type.startsWith("image/"));
-    if (!item) return;
-    e.preventDefault();
-    if (!ajustePasteAlvo) {
-      toast("Clique antes no ajuste onde quer colar o print.", true);
-      return;
-    }
-    const file = item.getAsFile();
-    if (file) uploadAjustePrint(ajustePasteAlvo, file);
-  });
 
   $$("#ajustes-chips-tipo .chip").forEach((c) => c.addEventListener("click", () => {
     ajusteFiltros.tipo = c.dataset.tipo;
