@@ -134,14 +134,21 @@ Faiston, com tudo que está em aberto, na ordem em que interessa discutir:
 1. **Pontos para a reunião** — os que ainda não foram resolvidos, separados
    entre *aguardando retorno* (já cobrados da outra ponta) e *a levantar*.
 2. **Reprovados e bloqueados** — tudo que falhou numa lista só, caso de teste
-   solto e estágio de situação lado a lado, com o problema encontrado e a
-   última observação de quem testou. Na reunião é a mesma conversa.
+   solto e estágio de situação lado a lado, com o problema encontrado e
+   **todas** as observações anotadas. Num estágio reprovado cada observação
+   costuma ser um ajuste diferente sendo pedido, não variação do mesmo
+   comentário — mostrar só a última perdia o resto da conversa.
 3. **Situações — onde cada cenário parou** — os próximos estágios da fila de
    cada situação (no máximo três; a lista inteira viraria parede de texto). O
    que está reprovado já apareceu no item 2.
 4. **Ajustes da Gestão de Ativos** — os que ainda não foram validados, no
    formato *hoje é assim / deveria ser assim*, agrupados por leva.
 5. **Testes ainda não executados** — a fila, resumida por estágio.
+
+A pauta cobre **os três fluxos de uma vez**: a reunião é uma só, e um estágio
+reprovado no Fluxo B precisa da mesma conversa que um do Fluxo C. Quando há
+item de mais de um fluxo, cada linha ganha a etiqueta do fluxo. Pra ver um
+fluxo isolado, `/relatorio?fluxo=C`.
 
 No topo ficam os números da semana em aberto. O resto é lista: cada seção é
 uma sequência de linhas pra ler de cima pra baixo, sem gráfico nenhum — numa

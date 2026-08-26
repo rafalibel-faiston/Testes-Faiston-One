@@ -84,12 +84,27 @@ def badge(texto: str, classe: str = "b-neutral") -> str:
 
 
 def ultima_obs(item: dict) -> str:
+    """Só a última observação — pra onde cabe uma linha (cards de situação)."""
     obs = item.get("observations") or []
     if obs:
         o = obs[-1]
         autor = f" — {e(o.get('autor'))}" if o.get("autor") else ""
         return f"{e(o.get('texto'))}{autor}"
     return e(item.get("observacao"))
+
+
+def todas_obs(item: dict) -> list:
+    """Todas as observações do item, em ordem. Num estágio reprovado cada
+    observação costuma ser um ajuste diferente sendo pedido — mostrar só a
+    última perdia o resto da conversa."""
+    linhas = []
+    for o in (item.get("observations") or []):
+        assinatura = " · ".join(filter(None, [e(o.get("autor")), data_br(o.get("created_at"))]))
+        linhas.append((nl2br(o.get("texto")), assinatura))
+    solta = (item.get("observacao") or "").strip()
+    if not linhas and solta:
+        linhas.append((nl2br(solta), ""))
+    return linhas
 
 
 def ordena_prioridade(itens: list, chave="prioridade") -> list:
@@ -155,24 +170,29 @@ def secao_pontos(notas: list) -> str:
     )
 
 
-def secao_reprovados(casos: list, situacoes: list) -> str:
+def secao_reprovados(casos: list, situacoes: list, multi_fluxo: bool = False) -> str:
     """Tudo que está reprovado ou bloqueado numa lista só — caso de teste solto e
     estágio de situação lado a lado. Estavam em seções separadas, mas na reunião
-    é a mesma conversa: o que falhou e o que vai ser feito."""
+    é a mesma conversa: o que falhou e o que vai ser feito.
+
+    Cada observação vira uma linha própria: num estágio reprovado elas costumam
+    ser ajustes diferentes sendo pedidos, não variações do mesmo comentário."""
     itens = []
     for c in casos:
         if c.get("status") in STATUS_PROBLEMA:
             itens.append({
                 "chave": c.get("code"),
+                "fluxo": c.get("fluxo"),
                 "contexto": c.get("estagio"),
                 "titulo": c.get("resultado_esperado"),
                 "status": c.get("status"),
                 "prioridade": c.get("prioridade"),
                 "frente": c.get("frente"),
                 "problema": c.get("problema_encontrado"),
-                "obs": ultima_obs(c),
+                "obs": todas_obs(c),
                 "prints": len(c.get("screenshots") or []),
                 "quem": c.get("testado_por"),
+                "chamado": c.get("chamado"),
                 "origem": None,
             })
     for sit in situacoes:
@@ -180,15 +200,17 @@ def secao_reprovados(casos: list, situacoes: list) -> str:
             if x.get("status") in STATUS_PROBLEMA:
                 itens.append({
                     "chave": sit.get("code"),
+                    "fluxo": sit.get("fluxo"),
                     "contexto": x.get("nome"),
                     "titulo": x.get("resultado_esperado"),
                     "status": x.get("status"),
                     "prioridade": None,
                     "frente": x.get("frente"),
                     "problema": None,
-                    "obs": ultima_obs(x),
+                    "obs": todas_obs(x),
                     "prints": len(x.get("screenshots") or []),
                     "quem": x.get("testado_por"),
+                    "chamado": sit.get("chamado"),
                     "origem": sit.get("titulo"),
                 })
     if not itens:
@@ -196,10 +218,12 @@ def secao_reprovados(casos: list, situacoes: list) -> str:
 
     itens.sort(key=lambda i: (i["status"] != "Reprovado",
                               PRIORIDADE_ORDEM.get(i["prioridade"], 3),
-                              i["chave"] or ""))
+                              i["fluxo"] or "", i["chave"] or ""))
     linhas = ""
     for i in itens:
         etiquetas = badge(i["status"], STATUS_BADGE.get(i["status"], "b-neutral"))
+        if multi_fluxo and i["fluxo"]:
+            etiquetas += " " + badge(f'Fluxo {i["fluxo"]}', "b-neutral")
         if i["prioridade"]:
             etiquetas += " " + badge(i["prioridade"], PRIORIDADE_BADGE.get(i["prioridade"], "b-neutral"))
         if i["frente"]:
@@ -213,9 +237,18 @@ def secao_reprovados(casos: list, situacoes: list) -> str:
         if i["problema"]:
             corpo += f'<div><b>Problema:</b> {nl2br(i["problema"])}</div>'
         if i["obs"]:
-            corpo += f'<div class="item-meta">{i["obs"]}</div>'
-        if i["quem"]:
-            corpo += f'<div class="item-meta">Testado por {e(i["quem"])}</div>'
+            anotacoes = ""
+            for texto, assinatura in i["obs"]:
+                credito = f'<span class="item-meta"> \u2014 {assinatura}</span>' if assinatura else ""
+                anotacoes += f"<li>{texto}{credito}</li>"
+            corpo += ('<div class="label-sec" style="margin:12px 0 4px">O que foi anotado</div>'
+                      f'<ul class="anotacoes">{anotacoes}</ul>')
+        rodape = " · ".join(filter(None, [
+            f'Testado por {e(i["quem"])}' if i["quem"] else "",
+            f'Chamado {e(i["chamado"])}' if i["chamado"] else "",
+        ]))
+        if rodape:
+            corpo += f'<div class="item-meta" style="margin-top:8px">{rodape}</div>'
 
         linhas += f"""
         <li>
@@ -232,7 +265,7 @@ def secao_reprovados(casos: list, situacoes: list) -> str:
     return f'<div class="card"><ul class="itens">{linhas}</ul></div>'
 
 
-def secao_situacoes(situacoes: list) -> str:
+def secao_situacoes(situacoes: list, multi_fluxo: bool = False) -> str:
     """Onde cada cenário ponta a ponta está parado. Os estágios reprovados já
     aparecem na lista acima; aqui fica o que vem a seguir, no máximo três por
     situação — a lista inteira de pendentes vira parede de texto."""
@@ -266,7 +299,7 @@ def secao_situacoes(situacoes: list) -> str:
         blocos += f"""
         <div class="card hover">
           <div class="card-head"><h3>{e(s.get("code"))} · {e(s.get("titulo"))}</h3>
-            <span class="spacer">{badge(f"{ok}/{total} estágios ok", "b-alert" if problemas else "b-neutral")}</span></div>
+            <span class="spacer">{badge(f'Fluxo {s.get("fluxo")}', "b-neutral") + " " if multi_fluxo and s.get("fluxo") else ""}{badge(f"{ok}/{total} estágios ok", "b-alert" if problemas else "b-neutral")}</span></div>
           <p class="muted" style="font-size:13.5px;margin:10px 0">{e(s.get("descricao"))}</p>
           {'<div class="label-sec">Próximos da fila</div>' if linhas else ""}
           <ul class="list">{linhas}</ul>{rodape}
@@ -373,6 +406,10 @@ def montar_html(dados: dict, fonte: str) -> str:
     summary = dados.get("summary") or {}
 
     pontos_abertos = [n for n in notas if not n.get("resolvido")]
+    fluxos = sorted({f for f in ({c.get("fluxo") for c in casos}
+                                 | {s.get("fluxo") for s in situacoes}) if f})
+    multi_fluxo = len(fluxos) > 1
+    escopo = "todos os fluxos" if multi_fluxo else (f"Fluxo {fluxos[0]}" if fluxos else "sem fluxo")
     reprovados = [c for c in casos if c.get("status") in STATUS_PROBLEMA] + [
         x for sit in situacoes for x in (sit.get("estagios") or [])
         if x.get("status") in STATUS_PROBLEMA
@@ -422,9 +459,9 @@ def montar_html(dados: dict, fonte: str) -> str:
         sec("01", "Pontos para a reunião", "levantados durante os testes e ainda não resolvidos",
             secao_pontos(notas), "pontos"),
         sec("02", "Reprovados e bloqueados", "casos de teste e estágios de situação que falharam",
-            secao_reprovados(casos, situacoes), "problemas"),
+            secao_reprovados(casos, situacoes, multi_fluxo), "problemas"),
         sec("03", "Situações — onde cada cenário parou", "os próximos estágios da fila de cada situação",
-            secao_situacoes(situacoes), "situacoes"),
+            secao_situacoes(situacoes, multi_fluxo), "situacoes"),
         sec("04", "Ajustes da Gestão de Ativos", "hoje é assim / deveria ser assim — pendentes de validação",
             secao_ajustes(ajustes), "ajustes"),
         sec("05", "Testes ainda não executados", "fila de execução, agrupada por estágio",
@@ -464,6 +501,10 @@ def montar_html(dados: dict, fonte: str) -> str:
 .item-corpo>div{{margin-bottom:6px}}
 .item-corpo>div:last-child{{margin-bottom:0}}
 .item-meta{{color:var(--muted);font-size:13px}}
+.anotacoes{{list-style:none;margin:0}}
+.anotacoes li{{position:relative;padding:5px 0 5px 16px;font-size:14px}}
+.anotacoes li::before{{content:"";position:absolute;left:0;top:13px;width:5px;height:5px;
+  border-radius:50%;background:var(--f-magenta)}}
 @media(max-width:720px){{.item-corpo{{padding-left:0}}}}
 </style>
 </head>
@@ -472,7 +513,7 @@ def montar_html(dados: dict, fonte: str) -> str:
   {logo}
   <div class="titles">
     <h1>Pauta da reunião semanal</h1>
-    <div class="sub">Console de Teste · tudo que ainda não está aprovado</div>
+    <div class="sub">Console de Teste · {e(escopo)} · tudo que ainda não está aprovado</div>
   </div>
   <div class="spacer"></div>
   <span class="badge b-warn">{total_pauta} itens em pauta</span>

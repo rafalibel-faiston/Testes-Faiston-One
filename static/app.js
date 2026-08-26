@@ -619,11 +619,13 @@
   }
 
   // ---------------- pauta da reunião ----------------
-  // Abre a página /relatorio do fluxo aberto — tudo que ainda não está aprovado
-  // (pontos, testes reprovados/bloqueados/não executados e ajustes pendentes),
-  // pronto pra projetar na reunião semanal.
+  // Abre a página /relatorio — tudo que ainda não está aprovado (pontos, testes
+  // reprovados/bloqueados/não executados e ajustes pendentes), pronto pra
+  // projetar na reunião semanal. Sem filtro de fluxo de propósito: a reunião é
+  // uma só, e um estágio reprovado no Fluxo B precisa da mesma conversa que um
+  // do Fluxo C. Quem quiser um fluxo isolado usa /relatorio?fluxo=C.
   $("#btn-pauta").addEventListener("click", () => {
-    window.open(`/relatorio?fluxo=${encodeURIComponent(currentFlow)}`, "_blank", "noopener");
+    window.open("/relatorio", "_blank", "noopener");
   });
 
   // ---------------- exportar excel ----------------
