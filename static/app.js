@@ -618,6 +618,14 @@
     if (btn) btn.disabled = n === 0;
   }
 
+  // ---------------- pauta da reunião ----------------
+  // Abre a página /relatorio do fluxo aberto — tudo que ainda não está aprovado
+  // (pontos, testes reprovados/bloqueados/não executados e ajustes pendentes),
+  // pronto pra projetar na reunião semanal.
+  $("#btn-pauta").addEventListener("click", () => {
+    window.open(`/relatorio?fluxo=${encodeURIComponent(currentFlow)}`, "_blank", "noopener");
+  });
+
   // ---------------- exportar excel ----------------
   // Baixa o fluxo aberto no formato da planilha de acompanhamento (# / Estágio /
   // Problema encontrado / Ajuste solicitado / Status) — o servidor monta o .xlsx.

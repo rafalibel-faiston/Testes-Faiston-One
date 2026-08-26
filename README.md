@@ -60,9 +60,14 @@ app/
   seed_data.py           # os 51 casos de teste (fonte: dashboard LP 02/07) + migração de observações antigas
   routers/cases.py        # API: listar/atualizar casos, observações, upload/download/remover print, resumo
   routers/ativos.py        # API: ajustes do módulo Gestão de Ativos (v2 e as próximas levas)
-  mcp_server.py           # servidor MCP (ver seção "Conectar no Claude/Cowork" abaixo)
+  routers/relatorio.py      # página /relatorio — a pauta da reunião semanal
+  relatorio.py               # monta o HTML da pauta (usado pela rota e pelo script)
+  assets/                     # CSS e logo da marca Faiston embutidos na pauta
+  mcp_server.py                # servidor MCP (ver seção "Conectar no Claude/Cowork" abaixo)
 static/
   index.html, style.css, app.js   # frontend
+tools/
+  relatorio_reuniao.py            # gera a pauta como arquivo .html
 ```
 
 ## Conectar no Claude/Cowork via MCP
@@ -118,6 +123,50 @@ Grupo B".
 Detalhe técnico: o "login" fica guardado em memória do processo — se o
 serviço reiniciar no Railway, o conector pode precisar ser vinculado de novo
 (o token de acesso emitido dura 30 dias, sem renovação automática).
+
+## Pauta da reunião semanal (`/relatorio`)
+
+Toda semana a conversa com o time de dev começa pela mesma pergunta — *o que
+ainda não está aprovado?*. Em vez de garimpar isso na tela caso a caso, o app
+serve a resposta pronta em **`/relatorio`**: uma página só, no padrão visual da
+Faiston, com tudo que está em aberto, na ordem em que interessa discutir:
+
+1. **Pontos para a reunião** — os que ainda não foram resolvidos, separados
+   entre *aguardando retorno* (já cobrados da outra ponta) e *a levantar*.
+2. **Testes reprovados e bloqueados** — o que falhou, com o problema
+   encontrado e a última observação de quem testou.
+3. **Situações com estágio pendente** — de cada cenário, só o que trava (os
+   estágios reprovados/bloqueados) ou, quando não há nenhum, os próximos da
+   fila. A lista inteira de pendentes viraria parede de texto.
+4. **Ajustes da Gestão de Ativos** — os que ainda não foram validados, no
+   formato *hoje é assim / deveria ser assim*, agrupados por leva.
+5. **Testes ainda não executados** — a fila, resumida por estágio.
+
+No topo ficam os números da semana (pontos em aberto, testes com problema,
+ajustes pendentes, fila de execução e % de execução). O botão **Pauta da
+reunião**, ao lado do *Exportar Excel*, abre a página do fluxo aberto numa aba
+nova — dá pra projetar direto ou imprimir em PDF (o CSS já tem regras de
+impressão).
+
+A página é montada na hora, a partir do banco: não tem cache e não precisa de
+geração prévia. Como todo o resto do app, é aberta — quem tem o link vê.
+
+Pra ter a mesma pauta como **arquivo** (mandar por e-mail, anexar na ata,
+guardar a foto da semana):
+
+```bash
+python3 tools/relatorio_reuniao.py --base-url https://SEU-APP.up.railway.app
+# gera relatorio-reuniao.html na pasta atual
+
+# guardando também os JSONs que originaram a pauta
+python3 tools/relatorio_reuniao.py --base-url https://SEU-APP.up.railway.app --dump-dir ./dump
+
+# e, depois, remontar a mesma pauta sem rede
+python3 tools/relatorio_reuniao.py --json-dir ./dump --out pauta-11-08.html
+```
+
+O HTML é autocontido (CSS e logo embutidos, sem CDN) — abre offline e pode ser
+anexado num e-mail sem quebrar.
 
 ## Colar print (Ctrl+V)
 

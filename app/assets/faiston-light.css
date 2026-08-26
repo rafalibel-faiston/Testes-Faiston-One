@@ -1,0 +1,238 @@
+/* ============================================================
+   FAISTON — Design System (tema claro)
+   Padrão visual do Faiston OPS / Torre de Controle.
+   Cole este CSS inline em <style> nos HTMLs de entrega.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;500;700&family=Roboto:wght@300;400;500;700&display=swap');
+
+:root{
+  /* --- Cores oficiais da marca (não alterar) --- */
+  --f-blue-dark:#2226c0;
+  --f-blue:#0054ec;
+  --f-cyan:#00fafb;
+  --f-purple:#960a9c;
+  --f-magenta:#fd11a4;
+  --f-pink:#fd5665;
+
+  /* --- Neutros do tema claro --- */
+  --bg:#f6f7fb;
+  --surface:#ffffff;
+  --surface-2:#f1f3fa;
+  --border:#e6e9f4;
+  --border-strong:#d5dae9;
+  --text:#151720;
+  --text-2:#3f4661;
+  --muted:#7a839c;
+
+  /* --- Gradientes --- */
+  --grad-brand:linear-gradient(135deg,#2226c0 0%,#960a9c 52%,#fd11a4 100%);
+  --grad-blue:linear-gradient(135deg,#2226c0 0%,#0054ec 40%,#00fafb 100%);
+  --grad-magenta:linear-gradient(135deg,#960a9c 0%,#fd11a4 80%,#fd5665 100%);
+  --grad-line:linear-gradient(90deg,#2226c0,#0054ec,#960a9c,#fd11a4);
+
+  /* --- Elevação e forma --- */
+  --shadow-sm:0 1px 2px rgba(21,23,32,.06);
+  --shadow:0 4px 18px rgba(21,23,32,.07);
+  --shadow-lg:0 14px 40px rgba(21,23,32,.12);
+  --r-sm:10px; --r:14px; --r-lg:20px; --r-pill:999px;
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Roboto',system-ui,sans-serif;
+  font-weight:400;
+  font-size:16px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* Grade sutil de fundo — usar em telas de destaque (capa, login, hero) */
+.bg-grid{
+  background-image:
+    linear-gradient(rgba(34,38,192,.045) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(34,38,192,.045) 1px,transparent 1px);
+  background-size:34px 34px;
+}
+
+/* ---------------- Tipografia ---------------- */
+h1,h2,h3,h4{font-family:'Roboto Slab',Georgia,serif;color:var(--text);letter-spacing:-.01em}
+h1{font-size:26px;font-weight:700;line-height:1.25}
+h2{font-size:20px;font-weight:700;line-height:1.3}
+h3{font-size:16px;font-weight:700}
+.lead{color:var(--muted);font-size:15px}
+.muted{color:var(--muted)}
+.mono{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:13px}
+.grad-text{
+  background:var(--grad-brand);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+}
+
+/* ---------------- Layout ---------------- */
+.shell{display:flex;min-height:100vh}
+.wrap{max-width:1180px;margin:0 auto;padding:32px}
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.g4{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.spacer{margin-left:auto}
+
+/* ---------------- Topbar ---------------- */
+.topbar{
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  padding:16px 32px;
+  display:flex;align-items:center;gap:20px;flex-wrap:wrap;
+  position:sticky;top:0;z-index:20;
+}
+.topbar .logo{height:34px;width:auto;display:block}
+.topbar .titles h1{font-size:22px}
+.topbar .titles .sub{color:var(--muted);font-size:13px}
+
+/* ---------------- Sidebar ---------------- */
+.sidebar{
+  width:250px;flex-shrink:0;background:var(--surface);
+  border-right:1px solid var(--border);padding:20px 14px;
+}
+.sidebar .group{
+  font-size:11px;text-transform:uppercase;letter-spacing:1px;
+  color:var(--muted);font-weight:500;padding:16px 10px 8px;
+}
+.nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:11px 14px;border-radius:var(--r-sm);
+  color:var(--text-2);font-size:15px;text-decoration:none;cursor:pointer;
+}
+.nav-item:hover{background:var(--surface-2)}
+.nav-item.active{background:var(--grad-brand);color:#fff;font-weight:500;box-shadow:var(--shadow-sm)}
+.nav-sub{padding:7px 14px 7px 28px;font-size:14px;color:var(--text-2);position:relative}
+.nav-sub::before{content:'';position:absolute;left:14px;top:50%;width:6px;height:6px;border-radius:50%;background:var(--f-magenta);transform:translateY(-50%)}
+
+/* ---------------- Cards ---------------- */
+.card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  padding:22px 24px;
+  box-shadow:var(--shadow-sm);
+}
+.card.hover:hover{box-shadow:var(--shadow);transition:box-shadow .18s}
+.card-head{display:flex;align-items:baseline;gap:10px;margin-bottom:14px}
+.card-head .sub{color:var(--muted);font-size:13.5px}
+
+/* KPI tile — fita de gradiente no topo, ícone e badge */
+.kpi{
+  position:relative;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);padding:20px 22px 22px;box-shadow:var(--shadow-sm);overflow:hidden;
+}
+.kpi::before{content:'';position:absolute;inset:0 0 auto 0;height:3px;background:var(--grad-line)}
+.kpi .top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}
+.kpi .ico{
+  width:38px;height:38px;border-radius:var(--r-sm);
+  background:var(--surface-2);display:flex;align-items:center;justify-content:center;
+  font-size:18px;color:var(--f-blue-dark);
+}
+.kpi .label{font-size:11.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);font-weight:500}
+.kpi .value{font-family:'Roboto Slab',serif;font-size:32px;font-weight:700;line-height:1.1;margin-top:4px}
+.kpi .value small{font-size:16px;color:var(--muted);font-weight:400}
+
+/* ---------------- Badges / tags ---------------- */
+.badge{
+  display:inline-block;font-size:11px;font-weight:500;letter-spacing:.3px;
+  padding:4px 11px;border-radius:var(--r-pill);white-space:nowrap;
+}
+.b-info   {background:rgba(0,84,236,.09);  color:#0044c4; border:1px solid rgba(0,84,236,.20)}
+.b-ok     {background:rgba(4,160,120,.10); color:#04795c; border:1px solid rgba(4,160,120,.22)}
+.b-warn   {background:rgba(253,17,164,.09);color:#b3096f; border:1px solid rgba(253,17,164,.22)}
+.b-alert  {background:rgba(253,86,101,.11);color:#c02234; border:1px solid rgba(253,86,101,.26)}
+.b-neutral{background:var(--surface-2);    color:var(--muted); border:1px solid var(--border-strong)}
+.pill{display:inline-block;background:var(--surface-2);border:1px solid var(--border-strong);color:var(--text-2);font-size:12.5px;padding:4px 11px;border-radius:var(--r-sm);margin:2px 4px 2px 0}
+
+/* ---------------- Botões ---------------- */
+.btn{
+  display:inline-flex;align-items:center;gap:8px;
+  background:var(--grad-brand);color:#fff;border:none;
+  padding:11px 22px;border-radius:var(--r-sm);
+  font-family:'Roboto',sans-serif;font-size:15px;font-weight:500;
+  cursor:pointer;box-shadow:0 4px 14px rgba(150,10,156,.22);
+}
+.btn:hover{filter:brightness(1.06)}
+.btn-ghost{
+  background:var(--surface);color:var(--text-2);
+  border:1px solid var(--border-strong);box-shadow:var(--shadow-sm);
+}
+
+/* ---------------- Tabs (pílulas) ---------------- */
+.tabs{display:inline-flex;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:5px;box-shadow:var(--shadow-sm)}
+.tab{padding:9px 18px;border-radius:var(--r-sm);font-size:14.5px;color:var(--muted);cursor:pointer}
+.tab.active{background:var(--surface-2);color:var(--text);font-weight:500}
+
+/* ---------------- Tabelas ---------------- */
+table{width:100%;border-collapse:collapse;font-size:14.5px}
+th{
+  text-align:left;font-family:'Roboto',sans-serif;font-size:11.5px;font-weight:500;
+  text-transform:uppercase;letter-spacing:.8px;color:var(--muted);
+  padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-2);
+}
+th:first-child{border-top-left-radius:var(--r-sm)}
+th:last-child{border-top-right-radius:var(--r-sm)}
+td{padding:13px 14px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--text-2)}
+td b,td strong{color:var(--text);font-weight:500}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:#fafbff}
+
+/* ---------------- Listas ---------------- */
+.list{list-style:none}
+.list li{padding:9px 0 9px 24px;position:relative;border-bottom:1px solid var(--border);color:var(--text-2)}
+.list li:last-child{border-bottom:none}
+.list li::before{content:'';position:absolute;left:6px;top:17px;width:7px;height:7px;border-radius:50%;background:var(--f-blue)}
+.list li.ok::before{content:'✓';background:none;left:2px;top:8px;width:auto;height:auto;color:#04795c;font-weight:700}
+.list li.no::before{content:'✕';background:none;left:2px;top:8px;width:auto;height:auto;color:#c02234;font-weight:700}
+
+/* ---------------- Seções ---------------- */
+.sec{margin-bottom:36px}
+.sec-head{display:flex;align-items:baseline;gap:12px;margin-bottom:16px;padding-left:14px;border-left:3px solid transparent;border-image:var(--grad-line) 1}
+.sec-head .n{font-family:'Roboto Slab',serif;font-size:12px;letter-spacing:1.2px;color:var(--f-purple)}
+.accent{height:3px;background:var(--grad-line);border-radius:2px;margin-bottom:28px}
+
+/* ---------------- Callout ---------------- */
+.callout{
+  border-left:3px solid var(--f-magenta);
+  background:linear-gradient(90deg,rgba(253,17,164,.05),rgba(253,17,164,0));
+  padding:14px 18px;border-radius:0 var(--r-sm) var(--r-sm) 0;font-size:14.5px;color:var(--text-2);
+}
+.callout b{color:var(--f-purple);font-weight:500}
+.callout.info{border-color:var(--f-blue);background:linear-gradient(90deg,rgba(0,84,236,.05),rgba(0,84,236,0))}
+.callout.info b{color:var(--f-blue-dark)}
+
+/* ---------------- Passo a passo numerado ---------------- */
+.flow{counter-reset:step}
+.step{position:relative;padding:14px 0 14px 52px;border-bottom:1px solid var(--border)}
+.step:last-child{border-bottom:none}
+.step::before{
+  counter-increment:step;content:counter(step);
+  position:absolute;left:0;top:13px;width:32px;height:32px;border-radius:50%;
+  background:var(--grad-brand);color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Roboto Slab',serif;font-weight:700;font-size:14px;
+}
+.step b{font-weight:500}
+.step .sub{color:var(--muted);font-size:14px}
+
+footer{border-top:1px solid var(--border);padding:24px 32px;color:var(--muted);font-size:13px;text-align:center}
+
+@media(max-width:720px){
+  .wrap{padding:20px}
+  .topbar{padding:14px 18px}
+  .sidebar{display:none}
+  th,td{padding:10px 9px;font-size:13.5px}
+}
+@media print{
+  body{background:#fff}
+  .card,.kpi{box-shadow:none;break-inside:avoid}
+  .sec{break-inside:avoid}
+}
