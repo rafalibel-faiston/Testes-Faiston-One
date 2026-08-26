@@ -39,6 +39,20 @@ PRIORIDADE_ORDEM = {"Alta": 0, "Média": 1, "Media": 1, "Baixa": 2}
 PRIORIDADE_BADGE = {"Alta": "b-alert", "Média": "b-warn", "Media": "b-warn", "Baixa": "b-neutral"}
 STATUS_BADGE = {"Reprovado": "b-alert", "Bloqueado": "b-warn", "Não testado": "b-neutral"}
 
+# Cores da barra de status. Verde/vermelho/roxo passam no separador de daltonismo
+# (o magenta da marca ficava perto demais do vermelho pra distinguir); os dois
+# últimos são neutros de propósito — "sem resultado ainda" não é uma cor de dado.
+# Cada faixa vem com rótulo e contagem na legenda, nunca só a cor.
+STATUS_ORDEM = ["Aprovado", "Reprovado", "Bloqueado", "N/A", "Não testado"]
+STATUS_COR = {
+    "Aprovado": "#04795c",
+    "Reprovado": "#c02234",
+    "Bloqueado": "#960a9c",
+    "N/A": "#9aa2b8",
+    "Não testado": "#d5dae9",
+}
+STATUS_COR_TEXTO = {"N/A": "#ffffff", "Não testado": "#3f4661"}
+
 BRT = timezone(timedelta(hours=-3))
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 
@@ -83,6 +97,116 @@ def ordena_prioridade(itens: list, chave="prioridade") -> list:
 
 
 # --------------------------------------------------------------------------- seções
+
+
+def anel(pct: float, legenda: str, detalhe: str) -> str:
+    """Medidor de um número só: o quanto do plano de testes já foi executado.
+    O valor vai escrito no centro — o anel dá a leitura de relance, o número dá a
+    precisão."""
+    raio, traco = 52, 12
+    volta = 2 * 3.141592653589793 * raio
+    preenchido = volta * max(0.0, min(pct, 100.0)) / 100
+    return f"""
+      <div class="anel">
+        <svg viewBox="0 0 140 140" role="img" aria-label="{e(legenda)}: {pct:.0f}%">
+          <circle cx="70" cy="70" r="{raio}" fill="none" stroke="var(--border)" stroke-width="{traco}"/>
+          <circle cx="70" cy="70" r="{raio}" fill="none" stroke="url(#g-anel)" stroke-width="{traco}"
+                  stroke-linecap="round" stroke-dasharray="{preenchido:.2f} {volta:.2f}"
+                  transform="rotate(-90 70 70)"/>
+          <defs><linearGradient id="g-anel" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#2226c0"/><stop offset="52%" stop-color="#960a9c"/>
+            <stop offset="100%" stop-color="#fd11a4"/></linearGradient></defs>
+          <text x="70" y="70" class="anel-n">{pct:.0f}<tspan class="anel-pc">%</tspan></text>
+        </svg>
+        <div class="anel-legenda">{e(legenda)}</div>
+        <div class="anel-detalhe">{e(detalhe)}</div>
+      </div>"""
+
+
+def barra_status(counts: dict, total: int) -> str:
+    """Uma barra só com a distribuição dos casos por status — a foto da semana
+    inteira antes de entrar em qualquer detalhe."""
+    if not total:
+        return ""
+    faixas, legenda = "", ""
+    for status in STATUS_ORDEM:
+        n = counts.get(status, 0)
+        if not n:
+            continue
+        pct = n / total * 100
+        cor = STATUS_COR[status]
+        texto = STATUS_COR_TEXTO.get(status, "#ffffff")
+        rotulo = f'<span style="color:{texto}">{n}</span>' if pct >= 6 else ""
+        faixas += (f'<div class="faixa" style="flex:{n};background:{cor}" '
+                   f'title="{e(status)}: {n} ({pct:.0f}%)">{rotulo}</div>')
+        legenda += (f'<span class="leg"><i style="background:{cor}"></i>'
+                    f'{e(status)} <b>{n}</b> <span class="muted">({pct:.0f}%)</span></span>')
+    return f'<div class="barra">{faixas}</div><div class="legenda">{legenda}</div>'
+
+
+def barra_mini(feito: int, total: int, cor: str = "var(--f-blue)") -> str:
+    """Régua de progresso curta — usada dentro dos cards de situação."""
+    pct = (feito / total * 100) if total else 0
+    return (f'<div class="mini"><div class="mini-fill" style="width:{pct:.1f}%;background:{cor}"></div></div>')
+
+
+def barra_linha(n: int, maximo: int, cor: str = "var(--f-blue)") -> str:
+    """Barra proporcional dentro de uma linha de tabela — dá a comparação entre
+    estágios de relance, que a coluna de número sozinha não dá."""
+    pct = (n / maximo * 100) if maximo else 0
+    return (f'<div class="linha-barra"><div class="linha-fill" style="width:{max(pct, 3):.1f}%;'
+            f'background:{cor}"></div></div>')
+
+
+def barras_por_area(ajustes: list) -> str:
+    """Onde os ajustes se concentram. Bug e melhoria empilhados na mesma barra:
+    uma área com cinco melhorias é um assunto diferente de uma com cinco bugs.
+
+    Com poucos itens por área a barra não diz nada que a contagem já não diga —
+    aí vira uma linha de chips, que ocupa menos espaço e lê igual."""
+    areas: dict = {}
+    for a in ajustes:
+        area = (a.get("area") or "Sem área").strip() or "Sem área"
+        slot = areas.setdefault(area, {"Bug": 0, "Melhoria": 0})
+        slot["Bug" if a.get("tipo") == "Bug" else "Melhoria"] += 1
+    if len(areas) < 2:
+        return ""
+    ordenadas = sorted(areas.items(), key=lambda kv: -(kv[1]["Bug"] + kv[1]["Melhoria"]))
+    maximo = max(v["Bug"] + v["Melhoria"] for v in areas.values())
+
+    if maximo < 3:
+        chips = " ".join(
+            f'<span class="pill">{e(area)} · <b>{v["Bug"] + v["Melhoria"]}</b>'
+            + (f' <span style="color:#c02234">({v["Bug"]} bug)</span>' if v["Bug"] else "")
+            + "</span>"
+            for area, v in ordenadas
+        )
+        return f'<div class="card" style="margin-bottom:16px"><div class="label-sec">Por área do módulo</div>{chips}</div>'
+
+    linhas = ""
+    for area, v in ordenadas:
+        total = v["Bug"] + v["Melhoria"]
+        partes = ""
+        for tipo, cor in (("Bug", "#c02234"), ("Melhoria", "#0054ec")):
+            if v[tipo]:
+                partes += (f'<div class="faixa" style="flex:{v[tipo]};background:{cor}" '
+                           f'title="{e(area)} — {tipo}: {v[tipo]}"></div>')
+        linhas += f"""
+        <div class="area-linha">
+          <div class="area-nome">{e(area)}</div>
+          <div class="area-track"><div class="area-barra" style="width:{total / maximo * 100:.1f}%">{partes}</div></div>
+          <div class="area-n">{total}</div>
+        </div>"""
+    return f"""
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-head"><h3>Onde os ajustes se concentram</h3>
+          <span class="sub">por área do módulo</span></div>
+        {linhas}
+        <div class="legenda" style="margin-top:12px">
+          <span class="leg"><i style="background:#c02234"></i>Bug</span>
+          <span class="leg"><i style="background:#0054ec"></i>Melhoria</span>
+        </div>
+      </div>"""
 
 
 def sec(numero: str, titulo: str, sub: str, corpo: str, anchor: str) -> str:
@@ -206,8 +330,9 @@ def secao_situacoes(situacoes: list) -> str:
         blocos += f"""
         <div class="card hover">
           <div class="card-head"><h3>{e(s.get("code"))} · {e(s.get("titulo"))}</h3>
-            <span class="spacer">{badge(f"{ok}/{total} ok", "b-alert" if problemas else "b-neutral")}</span></div>
-          <p class="muted" style="font-size:13.5px;margin-bottom:12px">{e(s.get("descricao"))}</p>
+            <span class="spacer">{badge(f"{ok}/{total} estágios ok", "b-alert" if problemas else "b-neutral")}</span></div>
+          {barra_mini(ok, total, "#c02234" if problemas else "var(--f-blue)")}
+          <p class="muted" style="font-size:13.5px;margin:12px 0">{e(s.get("descricao"))}</p>
           <div class="label" style="font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:4px">{e(rotulo)}</div>
           <ul class="list">{linhas}</ul>{rodape}
         </div>"""
@@ -251,6 +376,7 @@ def secao_ajustes(ajustes: list) -> str:
           </div>"""
         blocos += f"""
         <div class="callout" style="margin-bottom:14px"><b>Leva {e(versao)}</b> — {len(itens)} ajuste(s) em aberto, sendo {bugs} bug(s).</div>
+        {barras_por_area(itens)}
         <div class="grid g2" style="align-items:start;margin-bottom:26px">{cards}</div>"""
     return blocos
 
@@ -263,6 +389,7 @@ def secao_nao_executados(casos: list) -> str:
     for c in pendentes:
         chave = (c.get("estagio_num") if c.get("estagio_num") is not None else 99, c.get("estagio") or "—")
         por_estagio.setdefault(chave, []).append(c)
+    maximo = max(len(i) for i in por_estagio.values())
     linhas = ""
     for (_num, estagio), itens in sorted(por_estagio.items()):
         frentes = {}
@@ -273,13 +400,15 @@ def secao_nao_executados(casos: list) -> str:
         linhas += f"""
         <tr>
           <td><b>{e(estagio)}</b><br><span style="font-size:12px">{codigos}</span></td>
-          <td style="width:34%">{chips}</td>
-          <td style="width:8%;text-align:right"><b style="font-size:18px">{len(itens)}</b></td>
+          <td style="width:26%">{chips}</td>
+          <td style="width:22%">{barra_linha(len(itens), maximo)}</td>
+          <td style="width:7%;text-align:right"><b style="font-size:18px">{len(itens)}</b></td>
         </tr>"""
     return f"""
       <div class="card" style="padding:0;overflow:hidden">
         <table>
-          <thead><tr><th>Estágio · casos</th><th>Frente</th><th style="text-align:right">Qtde</th></tr></thead>
+          <thead><tr><th>Estágio · casos</th><th>Frente</th><th>Volume</th>
+            <th style="text-align:right">Qtde</th></tr></thead>
           <tbody>{linhas}</tbody>
         </table>
       </div>"""
@@ -335,7 +464,6 @@ def montar_html(dados: dict, fonte: str) -> str:
             "b-warn" if ajustes_abertos else "b-ok"),
         kpi("Testes por executar", len(casos_pendentes), "○",
             f"{len(casos)} no total", "b-neutral"),
-        kpi("Execução", f"{pct:.0f}%", "▲", f"{aprovados} aprovados", "b-ok"),
     ])
 
     nav = "".join(
@@ -374,9 +502,51 @@ def montar_html(dados: dict, fonte: str) -> str:
 .navbar .tabs{{flex-wrap:wrap}}
 .navbar a.tab{{text-decoration:none}}
 .navbar a.tab:hover{{background:var(--surface-2);color:var(--text)}}
+/* o link do menu precisa parar abaixo da topbar + menu, não atrás deles */
+.sec{{scroll-margin-top:158px}}
 .hero{{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);
   padding:26px 28px;box-shadow:var(--shadow-sm);margin-bottom:24px}}
 .hero h2{{margin-bottom:6px}}
+.hero-grid{{display:grid;grid-template-columns:180px 1fr;gap:28px;align-items:center}}
+
+/* anel de execução */
+.anel{{text-align:center}}
+.anel svg{{width:150px;height:150px;display:block;margin:0 auto}}
+.anel-n{{font-family:'Roboto Slab',serif;font-size:34px;font-weight:700;fill:var(--text);
+  text-anchor:middle;dominant-baseline:central}}
+.anel-pc{{font-size:18px;fill:var(--muted)}}
+.anel-legenda{{font-size:11.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);
+  font-weight:500;margin-top:6px}}
+.anel-detalhe{{font-size:13px;color:var(--text-2)}}
+
+/* barra de status empilhada — 2px de respiro entre as faixas */
+.barra{{display:flex;gap:2px;height:34px;border-radius:var(--r-sm);overflow:hidden}}
+.barra .faixa{{display:flex;align-items:center;justify-content:center;min-width:3px;
+  font-size:12.5px;font-weight:600}}
+.barra .faixa:first-child{{border-radius:6px 0 0 6px}}
+.barra .faixa:last-child{{border-radius:0 6px 6px 0}}
+.legenda{{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:12px;font-size:13px;color:var(--text-2)}}
+.legenda .leg{{display:inline-flex;align-items:center;gap:7px}}
+.legenda .leg i{{width:10px;height:10px;border-radius:3px;display:inline-block}}
+.legenda .leg b{{color:var(--text);font-weight:600}}
+
+/* réguas de progresso */
+.mini{{height:6px;background:var(--surface-2);border-radius:999px;overflow:hidden}}
+.mini-fill{{height:100%;border-radius:999px}}
+.linha-barra{{height:10px;background:var(--surface-2);border-radius:999px;overflow:hidden}}
+.linha-fill{{height:100%;border-radius:999px}}
+
+/* ajustes por área */
+.area-linha{{display:flex;align-items:center;gap:12px;margin-bottom:9px}}
+.area-nome{{width:120px;flex-shrink:0;font-size:13.5px;color:var(--text-2);text-align:right}}
+.area-track{{flex:1;min-width:0}}
+.area-barra{{display:flex;gap:2px;height:14px;border-radius:5px;overflow:hidden;min-width:8px}}
+.area-barra .faixa{{min-width:4px}}
+.area-n{{width:24px;text-align:right;font-size:13.5px;font-weight:600;color:var(--text)}}
+.label-sec{{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);
+  font-weight:500;margin-bottom:10px}}
+
+@media(max-width:720px){{.hero-grid{{grid-template-columns:1fr}}.area-nome{{width:80px}}}}
 @media print{{.navbar{{display:none}}.topbar{{position:static}}}}
 </style>
 </head>
@@ -384,7 +554,7 @@ def montar_html(dados: dict, fonte: str) -> str:
 <header class="topbar">
   {logo}
   <div class="titles">
-    <h1>Pauta da reunião semanal — time de dev</h1>
+    <h1>Pauta da reunião semanal</h1>
     <div class="sub">Console de Teste · tudo que ainda não está aprovado</div>
   </div>
   <div class="spacer"></div>
@@ -395,9 +565,16 @@ def montar_html(dados: dict, fonte: str) -> str:
   <div class="accent"></div>
 
   <div class="hero">
-    <h2>O que precisa de decisão nesta reunião</h2>
-    <p class="lead">{len(pontos_abertos)} ponto(s) em aberto · {len(casos_problema)} teste(s) reprovado(s) ou bloqueado(s) ·
-      {len(ajustes_abertos)} ajuste(s) da Gestão de Ativos pendente(s) · {len(casos_pendentes)} teste(s) na fila de execução.</p>
+    <div class="hero-grid">
+      {anel(pct, "executado", f"{len(casos) - len(casos_pendentes)} de {len(casos)} casos")}
+      <div>
+        <h2>O que precisa de decisão nesta reunião</h2>
+        <p class="lead" style="margin-bottom:18px">{len(pontos_abertos)} ponto(s) em aberto ·
+          {len(casos_problema)} teste(s) reprovado(s) ou bloqueado(s) ·
+          {len(ajustes_abertos)} ajuste(s) da Gestão de Ativos pendente(s).</p>
+        {barra_status(summary.get("counts") or {{}}, len(casos))}
+      </div>
+    </div>
   </div>
 
   <div class="grid g4" style="margin-bottom:8px">{kpis}</div>
