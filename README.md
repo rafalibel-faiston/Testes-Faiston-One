@@ -211,8 +211,11 @@ anexar imagem.
 ## Gestão de Ativos — ajustes (v2 e as próximas)
 
 O módulo **Gestão de Ativos** do Faiston One já está no ar; a aba *Gestão de
-Ativos* aqui no console (visível só pro perfil Faiston) é o backlog dos ajustes
-pedidos em cima dele. Cada ajuste é um item no formato que o time já usa:
+Ativos* aqui no console é o backlog dos ajustes pedidos em cima dele. A aba
+aparece pros dois perfis: a Faiston levanta os ajustes, a LP é quem desenvolve
+— sem ver a lista, a LP dependia de alguém repassar item por item. (Agenda e
+Todo continuam só da Faiston: são planejamento interno do time.) Cada ajuste é
+um item no formato que o time já usa:
 
 - **como está hoje** (`atual`) × **como deve ser** (`esperado`);
 - classificado como **Bug** (está quebrado) ou **Melhoria** (funciona, mas

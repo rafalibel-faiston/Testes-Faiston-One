@@ -2897,16 +2897,19 @@
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !activityModal.hidden) closeActivityModal(); });
 
   // ---------------- módulos (Dispatcher / Gestão de Ativos / Agenda / Todo) ----------------
-  // Ativos, Agenda e Todo só existem pro perfil Faiston — a LP só acompanha o
-  // Dispatcher (fluxos e resultados dos testes).
+  // Gestão de Ativos é compartilhada: a Faiston levanta os ajustes, a LP é quem
+  // desenvolve — sem ver a lista, a LP dependia de alguém repassar cada item.
+  // Agenda e Todo continuam só da Faiston: são o planejamento interno do time,
+  // não têm nada que a LP precise acompanhar.
   let currentModule = "dispatcher";
+
+  const MODULOS_FAISTON = ["agenda", "todo"];
 
   function applyModuleVisibility() {
     const isFaiston = PERFIL === "Faiston";
-    $("#module-tab-ativos").hidden = !isFaiston;
     $("#module-tab-agenda").hidden = !isFaiston;
     $("#module-tab-todo").hidden = !isFaiston;
-    if (!isFaiston && currentModule !== "dispatcher") switchModule("dispatcher");
+    if (!isFaiston && MODULOS_FAISTON.includes(currentModule)) switchModule("dispatcher");
   }
 
   function switchModule(mod) {
