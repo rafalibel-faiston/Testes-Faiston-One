@@ -409,7 +409,6 @@ def montar_html(dados: dict, fonte: str) -> str:
     fluxos = sorted({f for f in ({c.get("fluxo") for c in casos}
                                  | {s.get("fluxo") for s in situacoes}) if f})
     multi_fluxo = len(fluxos) > 1
-    escopo = "todos os fluxos" if multi_fluxo else (f"Fluxo {fluxos[0]}" if fluxos else "sem fluxo")
     reprovados = [c for c in casos if c.get("status") in STATUS_PROBLEMA] + [
         x for sit in situacoes for x in (sit.get("estagios") or [])
         if x.get("status") in STATUS_PROBLEMA
@@ -511,10 +510,6 @@ def montar_html(dados: dict, fonte: str) -> str:
 <body>
 <header class="topbar">
   {logo}
-  <div class="titles">
-    <h1>Pauta da reunião semanal</h1>
-    <div class="sub">Console de Teste · {e(escopo)} · tudo que ainda não está aprovado</div>
-  </div>
   <div class="spacer"></div>
   <span class="badge b-warn">{total_pauta} itens em pauta</span>
 </header>
