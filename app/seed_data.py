@@ -398,6 +398,14 @@ def migrate_schema(engine):
                 stmts.append(f"ALTER TABLE {tabela} ADD COLUMN editado_em "
                              + ("TIMESTAMP WITH TIME ZONE" if pg else "TIMESTAMP"))
 
+    # cor da observação (verde/vermelho) — nas observações e nas versões da
+    # trilha; NULL nas antigas, que continuam sendo observações sem marcação
+    for tabela in ("observations", "situacao_observations",
+                   "observation_revisions", "situacao_observation_revisions"):
+        if tabela in existing_tables:
+            if "cor" not in {c["name"] for c in insp.get_columns(tabela)}:
+                stmts.append(f"ALTER TABLE {tabela} ADD COLUMN cor VARCHAR")
+
     if "agenda_eventos" in existing_tables:
         ag_cols = {c["name"] for c in insp.get_columns("agenda_eventos")}
         if "tipo" not in ag_cols:

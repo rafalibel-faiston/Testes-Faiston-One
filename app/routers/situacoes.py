@@ -7,7 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from .. import models, schemas
-from ..activity import log as log_activity, snippet
+from ..activity import log as log_activity, snippet, normaliza_cor
 from ..database import get_db
 from .cases import VALID_STATUSES, MAX_UPLOAD_BYTES, ALLOWED_CONTENT_TYPES
 
@@ -204,7 +204,8 @@ def add_estagio_observation(code: str, estagio_id: int, payload: schemas.SitObse
     texto = (payload.texto or "").strip()
     if not texto:
         raise HTTPException(status_code=400, detail="Observação vazia.")
-    db.add(models.SituacaoObservation(estagio_id=est.id, autor=payload.autor, texto=texto))
+    db.add(models.SituacaoObservation(estagio_id=est.id, autor=payload.autor, texto=texto,
+                                      cor=normaliza_cor(payload.cor)))
     log_activity(db, sit.fluxo, "obs", f'Observação em {code} · {est.nome}: "{snippet(texto)}"',
                  autor=payload.autor, case_code=code)
     db.commit()
@@ -224,17 +225,27 @@ def update_estagio_observation(observation_id: int, payload: schemas.SitObservat
     sit = db.query(models.Situacao).filter(models.Situacao.id == est.situacao_id).first() if est else None
     if not sit:
         raise HTTPException(status_code=404, detail="Situação não encontrada")
-    if texto == obs.texto:
+    # cor ausente no payload = não mexe na cor atual (só o texto está sendo salvo)
+    cor = normaliza_cor(payload.cor) if payload.cor is not None else obs.cor
+    if texto == obs.texto and cor == obs.cor:
         return _get_situacao_or_404(db, sit.code)
-    db.add(models.SituacaoObservationRevision(
-        observation_id=obs.id, texto=obs.texto, autor=obs.autor, editado_por=payload.autor,
-    ))
-    obs.texto = texto
-    obs.editado_por = payload.autor
-    obs.editado_em = func.now()
-    log_activity(db, sit.fluxo, "obs",
-                 f'Observação atualizada em {sit.code} · {est.nome}: "{snippet(texto)}"',
-                 autor=payload.autor, case_code=sit.code)
+    if texto != obs.texto:
+        db.add(models.SituacaoObservationRevision(
+            observation_id=obs.id, texto=obs.texto, cor=obs.cor,
+            autor=obs.autor, editado_por=payload.autor,
+        ))
+        obs.texto = texto
+        obs.editado_por = payload.autor
+        obs.editado_em = func.now()
+        log_activity(db, sit.fluxo, "obs",
+                     f'Observação atualizada em {sit.code} · {est.nome}: "{snippet(texto)}"',
+                     autor=payload.autor, case_code=sit.code)
+    elif cor != obs.cor:
+        marca = cor or "sem cor"
+        log_activity(db, sit.fluxo, "obs",
+                     f'Observação de {sit.code} · {est.nome} marcada como {marca}: "{snippet(texto)}"',
+                     autor=payload.autor, case_code=sit.code)
+    obs.cor = cor
     db.commit()
     return _get_situacao_or_404(db, sit.code)
 

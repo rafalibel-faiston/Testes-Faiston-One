@@ -108,6 +108,10 @@ class SituacaoObservation(Base):
     estagio_id = Column(Integer, ForeignKey("situacao_estagios.id", ondelete="CASCADE"), nullable=False)
     autor = Column(String, nullable=True)
     texto = Column(Text, nullable=False)
+    # marcação de cor da observação: "verde" (deu certo, resolvido) ou "vermelho"
+    # (problema, pendência). None é a observação normal, sem cor — o padrão de
+    # quem só quer anotar algo.
+    cor = Column(String, nullable=True)
     # quem atualizou o texto pela última vez e quando — o texto original (e cada
     # versão intermediária) fica guardado em `revisions`, nada se perde na edição.
     editado_por = Column(String, nullable=True)
@@ -131,6 +135,7 @@ class SituacaoObservationRevision(Base):
         Integer, ForeignKey("situacao_observations.id", ondelete="CASCADE"), nullable=False
     )
     texto = Column(Text, nullable=False)
+    cor = Column(String, nullable=True)
     autor = Column(String, nullable=True)
     editado_por = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -348,6 +353,10 @@ class Observation(Base):
     test_case_id = Column(Integer, ForeignKey("test_cases.id", ondelete="CASCADE"), nullable=False)
     autor = Column(String, nullable=True)
     texto = Column(Text, nullable=False)
+    # marcação de cor da observação: "verde" (deu certo, resolvido) ou "vermelho"
+    # (problema, pendência). None é a observação normal, sem cor — o padrão de
+    # quem só quer anotar algo.
+    cor = Column(String, nullable=True)
     # a observação pode ser atualizada quando o ponto evolui (foi ajustado, mudou
     # de entendimento, ganhou detalhe). `texto` é sempre a versão vigente; quem
     # atualizou e quando ficam aqui, e o que estava escrito antes vira uma linha
@@ -373,6 +382,7 @@ class ObservationRevision(Base):
     id = Column(Integer, primary_key=True)
     observation_id = Column(Integer, ForeignKey("observations.id", ondelete="CASCADE"), nullable=False)
     texto = Column(Text, nullable=False)        # o texto que estava valendo antes da edição
+    cor = Column(String, nullable=True)         # a cor que essa versão tinha
     autor = Column(String, nullable=True)       # quem tinha escrito essa versão
     editado_por = Column(String, nullable=True) # quem a substituiu
     created_at = Column(DateTime(timezone=True), server_default=func.now())

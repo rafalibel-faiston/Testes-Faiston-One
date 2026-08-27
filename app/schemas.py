@@ -20,6 +20,7 @@ class ObservationRevisionOut(BaseModel):
 
     id: int
     texto: str
+    cor: Optional[str] = None
     autor: Optional[str] = None
     editado_por: Optional[str] = None
     created_at: Optional[datetime] = None
@@ -31,6 +32,7 @@ class ObservationOut(BaseModel):
     id: int
     autor: Optional[str] = None
     texto: str
+    cor: Optional[str] = None   # "verde", "vermelho" ou None (sem marcação)
     editado_por: Optional[str] = None
     editado_em: Optional[datetime] = None
     created_at: Optional[datetime] = None
@@ -40,6 +42,8 @@ class ObservationOut(BaseModel):
 class ObservationCreate(BaseModel):
     texto: str
     autor: Optional[str] = None
+    # "verde" (deu certo) ou "vermelho" (problema). Vazio/ausente = sem cor.
+    cor: Optional[str] = None
 
 
 class ObservationUpdate(BaseModel):
@@ -47,6 +51,8 @@ class ObservationUpdate(BaseModel):
     uma linha da trilha (`revisions`)."""
     texto: str
     autor: Optional[str] = None
+    # cor ausente (None) = não mexe na cor atual; mande "neutro" para tirá-la.
+    cor: Optional[str] = None
 
 
 class TestCaseOut(BaseModel):
@@ -127,6 +133,7 @@ class SitObservationRevisionOut(BaseModel):
 
     id: int
     texto: str
+    cor: Optional[str] = None
     autor: Optional[str] = None
     editado_por: Optional[str] = None
     created_at: Optional[datetime] = None
@@ -138,6 +145,7 @@ class SitObservationOut(BaseModel):
     id: int
     autor: Optional[str] = None
     texto: str
+    cor: Optional[str] = None   # "verde", "vermelho" ou None (sem marcação)
     editado_por: Optional[str] = None
     editado_em: Optional[datetime] = None
     created_at: Optional[datetime] = None
@@ -147,11 +155,14 @@ class SitObservationOut(BaseModel):
 class SitObservationCreate(BaseModel):
     texto: str
     autor: Optional[str] = None
+    cor: Optional[str] = None
 
 
 class SitObservationUpdate(BaseModel):
     texto: str
     autor: Optional[str] = None
+    # cor ausente (None) = não mexe na cor atual; mande "neutro" para tirá-la.
+    cor: Optional[str] = None
 
 
 class SituacaoEstagioOut(BaseModel):

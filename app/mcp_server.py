@@ -27,8 +27,10 @@ from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
+from fastapi import HTTPException
+
 from . import models
-from .activity import log as log_activity, snippet
+from .activity import log as log_activity, snippet, normaliza_cor
 from .database import SessionLocal
 
 VALID_STATUSES = {"Não testado", "Aprovado", "Reprovado", "Bloqueado", "N/A"}
@@ -196,6 +198,8 @@ def _case_to_dict(case: models.TestCase) -> dict:
                 "id": o.id,
                 "autor": o.autor,
                 "texto": o.texto,
+                # marcação de cor: "verde", "vermelho" ou None (sem cor)
+                "cor": o.cor,
                 "data": o.created_at.isoformat() if o.created_at else None,
                 "atualizada_por": o.editado_por,
                 "atualizada_em": o.editado_em.isoformat() if o.editado_em else None,
@@ -203,6 +207,7 @@ def _case_to_dict(case: models.TestCase) -> dict:
                 "versoes_anteriores": [
                     {
                         "texto": r.texto,
+                        "cor": r.cor,
                         "autor": r.autor,
                         "substituida_por": r.editado_por,
                         "data": r.created_at.isoformat() if r.created_at else None,
@@ -295,11 +300,21 @@ def atualizar_status_caso(code: str, status: str, testado_por: Optional[str] = N
 
 
 @mcp.tool()
-def adicionar_observacao(code: str, texto: str, autor: Optional[str] = None) -> dict:
-    """Adiciona uma observação ao histórico de um caso de teste (não apaga as anteriores)."""
+def adicionar_observacao(
+    code: str, texto: str, autor: Optional[str] = None, cor: Optional[str] = None
+) -> dict:
+    """Adiciona uma observação ao histórico de um caso de teste (não apaga as anteriores).
+
+    `cor` marca a observação na tela: "verde" (deu certo, resolvido) ou
+    "vermelho" (problema, pendência). Sem cor é a observação normal.
+    """
     texto = (texto or "").strip()
     if not texto:
         return {"erro": "Observação vazia."}
+    try:
+        cor = normaliza_cor(cor)
+    except HTTPException as err:
+        return {"erro": err.detail}
     db = SessionLocal()
     try:
         case = (
@@ -309,7 +324,7 @@ def adicionar_observacao(code: str, texto: str, autor: Optional[str] = None) -> 
         )
         if not case:
             return {"erro": f"Caso {code} não encontrado"}
-        db.add(models.Observation(test_case_id=case.id, autor=autor, texto=texto))
+        db.add(models.Observation(test_case_id=case.id, autor=autor, texto=texto, cor=cor))
         log_activity(
             db, case.fluxo, "obs", f'Observação em {case.code}: "{snippet(texto)}"',
             autor=autor, case_code=case.code,
@@ -322,16 +337,24 @@ def adicionar_observacao(code: str, texto: str, autor: Optional[str] = None) -> 
 
 
 @mcp.tool()
-def atualizar_observacao(observacao_id: int, texto: str, autor: Optional[str] = None) -> dict:
+def atualizar_observacao(
+    observacao_id: int, texto: str, autor: Optional[str] = None, cor: Optional[str] = None
+) -> dict:
     """Atualiza o texto de uma observação já existente de um caso de teste.
 
     O texto anterior não é perdido: vira uma versão na trilha da observação
     (`versoes_anteriores`), então dá pra acompanhar como o ponto evoluiu.
     O `observacao_id` vem do campo `id` das observações em listar_casos/ver_caso.
+    `cor` ("verde"/"vermelho"/"neutro") muda a marcação; omitida, a cor atual fica
+    como está.
     """
     texto = (texto or "").strip()
     if not texto:
         return {"erro": "Observação vazia."}
+    try:
+        cor_pedida = normaliza_cor(cor) if cor is not None else None
+    except HTTPException as err:
+        return {"erro": err.detail}
     db = SessionLocal()
     try:
         obs = db.query(models.Observation).filter(models.Observation.id == observacao_id).first()
@@ -340,9 +363,17 @@ def atualizar_observacao(observacao_id: int, texto: str, autor: Optional[str] = 
         case = db.query(models.TestCase).filter(models.TestCase.id == obs.test_case_id).first()
         if not case:
             return {"erro": "Caso da observação não encontrado"}
-        if texto != obs.texto:
+        # cor omitida = mantém a que já está lá; os dois "mudou" são calculados
+        # antes de mexer no objeto, senão a comparação vira sempre falsa depois.
+        cor_nova = cor_pedida if cor is not None else obs.cor
+        mudou_texto = texto != obs.texto
+        mudou_cor = cor_nova != obs.cor
+        if not mudou_texto and not mudou_cor:
+            return _case_to_dict(case)
+        if mudou_texto:
             db.add(models.ObservationRevision(
-                observation_id=obs.id, texto=obs.texto, autor=obs.autor, editado_por=autor,
+                observation_id=obs.id, texto=obs.texto, cor=obs.cor,
+                autor=obs.autor, editado_por=autor,
             ))
             obs.texto = texto
             obs.editado_por = autor
@@ -352,8 +383,15 @@ def atualizar_observacao(observacao_id: int, texto: str, autor: Optional[str] = 
                 f'Observação atualizada em {case.code}: "{snippet(texto)}"',
                 autor=autor, case_code=case.code,
             )
-            db.commit()
-            db.refresh(case)
+        else:
+            log_activity(
+                db, case.fluxo, "obs",
+                f'Observação de {case.code} marcada como {cor_nova or "sem cor"}: "{snippet(texto)}"',
+                autor=autor, case_code=case.code,
+            )
+        obs.cor = cor_nova
+        db.commit()
+        db.refresh(case)
         return _case_to_dict(case)
     finally:
         db.close()

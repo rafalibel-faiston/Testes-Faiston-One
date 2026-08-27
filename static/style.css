@@ -413,6 +413,41 @@ main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
 .obs-add-btn:hover { transform:translateY(-1px); box-shadow:0 6px 16px -6px rgba(0,84,236,.5); }
 .obs-add-btn:disabled { opacity:.6; cursor:default; transform:none; }
 
+/* cor da observação — verde (deu certo) e vermelho (problema). Marcação opcional:
+   sem cor a observação continua exatamente como sempre foi. A cor pinta a borda,
+   o fundo e o texto pra dar pra bater o olho na lista e ver o que está resolvido. */
+.obs-item.obs-cor-verde {
+  background:var(--ok-bg); border-color:var(--ok-ln);
+  border-left:3px solid var(--ok); padding-left:10px;
+}
+.obs-item.obs-cor-verde .obs-text { color:#0a6b4a; }
+.obs-item.obs-cor-vermelho {
+  background:var(--bad-bg); border-color:var(--bad-ln);
+  border-left:3px solid var(--bad); padding-left:10px;
+}
+.obs-item.obs-cor-vermelho .obs-text { color:#a8102f; }
+.obs-trail-item.obs-cor-verde { border-left-color:var(--ok); }
+.obs-trail-item.obs-cor-vermelho { border-left-color:var(--bad); }
+
+/* seletor de cor: pílulas com o pontinho da cor — uma na caixa de adicionar,
+   outra dentro da edição de cada observação (dá pra repintar depois) */
+.obs-cores { display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
+.obs-cor-btn {
+  display:inline-flex; align-items:center; gap:5px;
+  border:1px solid var(--line-2); background:var(--surface); color:var(--text-3);
+  border-radius:999px; padding:3px 10px; font-size:10.5px; font-family:'Roboto',sans-serif;
+  cursor:pointer; transition:color .15s var(--ease), border-color .15s var(--ease), background .15s var(--ease);
+}
+.obs-cor-btn::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--na); }
+.obs-cor-btn.cor-verde::before { background:var(--ok); }
+.obs-cor-btn.cor-vermelho::before { background:var(--bad); }
+.obs-cor-btn:hover { color:var(--text-2); border-color:var(--text-3); }
+.obs-cor-btn.cor-neutro.active { background:var(--surface-3); color:var(--text); border-color:var(--line-2); }
+.obs-cor-btn.cor-verde.active { background:var(--ok); border-color:var(--ok); color:#fff; }
+.obs-cor-btn.cor-vermelho.active { background:var(--bad); border-color:var(--bad); color:#fff; }
+.obs-cor-btn.active::before { background:#fff; }
+.obs-cor-btn.cor-neutro.active::before { background:var(--na); }
+
 /* ---------- registro de execução (chamado testado) ---------- */
 .reg-row { display:flex; gap:12px; flex-wrap:wrap; }
 .reg-field { display:flex; flex-direction:column; gap:4px; flex:1; min-width:150px; }

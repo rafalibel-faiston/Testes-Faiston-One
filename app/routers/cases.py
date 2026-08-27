@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.sql import func
 
 from .. import models, schemas
-from ..activity import log as log_activity, snippet
+from ..activity import log as log_activity, snippet, normaliza_cor
 from ..database import get_db
 
 router = APIRouter(tags=["cases"])
@@ -164,7 +164,8 @@ def add_observation(code: str, payload: schemas.ObservationCreate, db: Session =
     texto = (payload.texto or "").strip()
     if not texto:
         raise HTTPException(status_code=400, detail="Observação vazia.")
-    db.add(models.Observation(test_case_id=case.id, autor=payload.autor, texto=texto))
+    db.add(models.Observation(test_case_id=case.id, autor=payload.autor, texto=texto,
+                              cor=normaliza_cor(payload.cor)))
     log_activity(db, case.fluxo, "obs", f'Observação em {case.code}: "{snippet(texto)}"',
                  autor=payload.autor, case_code=case.code)
     db.commit()
@@ -185,16 +186,28 @@ def update_observation(observation_id: int, payload: schemas.ObservationUpdate, 
     case = db.query(models.TestCase).filter(models.TestCase.id == obs.test_case_id).first()
     if not case:
         raise HTTPException(status_code=404, detail="Caso da observação não encontrado")
-    if texto == obs.texto:
+    # cor ausente no payload = não mexe na cor atual (só o texto está sendo salvo)
+    cor = normaliza_cor(payload.cor) if payload.cor is not None else obs.cor
+    if texto == obs.texto and cor == obs.cor:
         return _get_case_or_404(db, case.code)
-    db.add(models.ObservationRevision(
-        observation_id=obs.id, texto=obs.texto, autor=obs.autor, editado_por=payload.autor,
-    ))
-    obs.texto = texto
-    obs.editado_por = payload.autor
-    obs.editado_em = func.now()
-    log_activity(db, case.fluxo, "obs", f'Observação atualizada em {case.code}: "{snippet(texto)}"',
-                 autor=payload.autor, case_code=case.code)
+    if texto != obs.texto:
+        # só a troca de texto vira versão na trilha: repintar a observação não
+        # muda o que ela diz, então não precisa guardar uma cópia igual.
+        db.add(models.ObservationRevision(
+            observation_id=obs.id, texto=obs.texto, cor=obs.cor,
+            autor=obs.autor, editado_por=payload.autor,
+        ))
+        obs.texto = texto
+        obs.editado_por = payload.autor
+        obs.editado_em = func.now()
+        log_activity(db, case.fluxo, "obs", f'Observação atualizada em {case.code}: "{snippet(texto)}"',
+                     autor=payload.autor, case_code=case.code)
+    elif cor != obs.cor:
+        marca = cor or "sem cor"
+        log_activity(db, case.fluxo, "obs",
+                     f'Observação de {case.code} marcada como {marca}: "{snippet(texto)}"',
+                     autor=payload.autor, case_code=case.code)
+    obs.cor = cor
     db.commit()
     return _get_case_or_404(db, case.code)
 

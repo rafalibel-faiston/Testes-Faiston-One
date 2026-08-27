@@ -105,10 +105,13 @@ def todas_obs(item: dict) -> list:
         assinatura = " · ".join(filter(None, [
             e(o.get("autor")), data_br(o.get("created_at")), atualizada,
         ]))
-        linhas.append((nl2br(o.get("texto")), assinatura))
+        # a cor com que a observação foi marcada na tela (verde/vermelho) vem
+        # junto: na reunião ela já diz de cara o que ficou resolvido e o que não.
+        cor = o.get("cor") if o.get("cor") in ("verde", "vermelho") else ""
+        linhas.append((nl2br(o.get("texto")), assinatura, cor))
     solta = (item.get("observacao") or "").strip()
     if not linhas and solta:
-        linhas.append((nl2br(solta), ""))
+        linhas.append((nl2br(solta), "", ""))
     return linhas
 
 
@@ -281,9 +284,10 @@ def secao_reprovados(casos: list, situacoes: list, multi_fluxo: bool = False) ->
             corpo += f'<div><b>Problema:</b> {nl2br(i["problema"])}</div>'
         if i["obs"]:
             anotacoes = ""
-            for texto, assinatura in i["obs"]:
+            for texto, assinatura, cor in i["obs"]:
                 credito = f'<span class="item-meta"> \u2014 {assinatura}</span>' if assinatura else ""
-                anotacoes += f"<li>{texto}{credito}</li>"
+                classe = f' class="obs-{cor}"' if cor else ""
+                anotacoes += f"<li{classe}>{texto}{credito}</li>"
             corpo += ('<div class="label-sec" style="margin:12px 0 4px">O que foi anotado</div>'
                       f'<ul class="anotacoes">{anotacoes}</ul>')
         rodape = " · ".join(filter(None, [
@@ -610,6 +614,11 @@ def montar_html(dados: dict, fonte: str, editavel: bool = False) -> str:
 .anotacoes li{{position:relative;padding:5px 0 5px 16px;font-size:14px}}
 .anotacoes li::before{{content:"";position:absolute;left:0;top:13px;width:5px;height:5px;
   border-radius:50%;background:var(--f-magenta)}}
+/* observação marcada em verde/vermelho na tela mantém a cor aqui */
+.anotacoes li.obs-verde{{color:#04795c}}
+.anotacoes li.obs-verde::before{{background:#04795c}}
+.anotacoes li.obs-vermelho{{color:#c02234}}
+.anotacoes li.obs-vermelho::before{{background:#c02234}}
 
 /* retorno do time — o que responderam e pra quando prometeram */
 .retorno{{margin-top:12px;padding:12px 14px;border-radius:var(--r-sm);

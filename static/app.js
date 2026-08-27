@@ -141,6 +141,44 @@
     </div>`;
   }
 
+  // Cores que uma observação pode ter. Sem cor é o padrão (observação comum);
+  // verde e vermelho são a leitura rápida de quem passa o olho: deu certo /
+  // tem problema.
+  const CORES_OBS = [
+    { val: "", rotulo: "Sem cor", titulo: "Observação normal, sem marcação" },
+    { val: "verde", rotulo: "Verde", titulo: "Deu certo / resolvido" },
+    { val: "vermelho", rotulo: "Vermelho", titulo: "Problema / pendência" },
+  ];
+
+  const corClasse = (cor) => (cor === "verde" || cor === "vermelho" ? ` obs-cor-${cor}` : "");
+
+  // Os três botõezinhos de cor. `atual` é a cor já escolhida (vazio = sem cor);
+  // `extra` distingue o seletor da caixa de adicionar do que fica em cada
+  // observação já salva (os dois vivem dentro da mesma .obs-row).
+  function corPickerHtml(atual, extra = "") {
+    const cor = atual || "";
+    return `<div class="obs-cores ${extra}" data-cor="${esc(cor)}" role="group" aria-label="Cor da observação">
+      ${CORES_OBS.map((c) => `<button type="button" class="obs-cor-btn cor-${c.val || "neutro"}${c.val === cor ? " active" : ""}"
+        data-cor="${c.val}" title="${c.titulo}" aria-pressed="${c.val === cor}">${c.rotulo}</button>`).join("")}
+    </div>`;
+  }
+
+  // Liga um seletor de cor e devolve como ler/escrever a cor escolhida.
+  function wireCorPicker(box) {
+    const pintar = (cor) => {
+      box.dataset.cor = cor;
+      $$(".obs-cor-btn", box).forEach((b) => {
+        const ativo = b.dataset.cor === cor;
+        b.classList.toggle("active", ativo);
+        b.setAttribute("aria-pressed", ativo);
+      });
+    };
+    $$(".obs-cor-btn", box).forEach((b) => {
+      b.addEventListener("click", (ev) => { ev.stopPropagation(); pintar(b.dataset.cor); });
+    });
+    return { get: () => box.dataset.cor || "", set: pintar };
+  }
+
   // Uma observação com a trilha das atualizações: o texto vigente em cima e, se
   // ela já foi atualizada, o que dizia antes guardado atrás do botão "trilha".
   // Mesmo HTML pro caso de teste e pro estágio de situação — só muda o endpoint
@@ -154,12 +192,12 @@
       ? `<button type="button" class="obs-trail-btn" data-obs-trail>trilha (${revs.length})</button>`
       : "";
     const trail = revs.length
-      ? `<ol class="obs-trail" hidden>${revs.map((r, i) => `<li class="obs-trail-item">
+      ? `<ol class="obs-trail" hidden>${revs.map((r, i) => `<li class="obs-trail-item${corClasse(r.cor)}">
             <div class="obs-trail-head">versão ${i + 1}${r.autor ? " · " + esc(r.autor) : ""}<span class="obs-trail-when">substituída ${fmtWhen(r.created_at)}${r.editado_por ? " por " + esc(r.editado_por) : ""}</span></div>
             <div class="obs-trail-text">${esc(r.texto)}</div>
           </li>`).join("")}</ol>`
       : "";
-    return `<div class="obs-item" data-obs="${o.id}">
+    return `<div class="obs-item${corClasse(o.cor)}" data-obs="${o.id}" data-cor="${esc(o.cor || "")}">
         <div class="obs-item-head">
           <span class="obs-author">${esc(o.autor || "Anônimo")}</span>
           <span class="obs-when">${fmtWhen(o.created_at)}</span>
@@ -172,6 +210,7 @@
         <div class="obs-text">${esc(o.texto)}</div>
         <div class="obs-edit" hidden>
           <textarea class="obs-edit-input" rows="3">${esc(o.texto)}</textarea>
+          ${corPickerHtml(o.cor)}
           <div class="obs-edit-actions">
             <button type="button" class="obs-save-btn">Salvar atualização</button>
             <button type="button" class="obs-cancel-btn">Cancelar</button>
@@ -200,11 +239,14 @@
       const saveBtn = $(".obs-save-btn", item);
       const cancelBtn = $(".obs-cancel-btn", item);
       if (!editBtn || !box) return;
+      const corAtual = () => item.dataset.cor || "";
+      const picker = wireCorPicker($(".obs-cores", box));
 
       const fecharEdicao = () => {
         box.hidden = true;
         textEl.hidden = false;
         input.value = textEl.textContent;
+        picker.set(corAtual());
       };
       editBtn.addEventListener("click", () => {
         const abrindo = box.hidden;
@@ -216,17 +258,22 @@
 
       const salvar = async () => {
         const texto = input.value.trim();
+        const cor = picker.get();
         if (!texto) { toast("Observação vazia.", true); return; }
-        if (texto === textEl.textContent) { fecharEdicao(); return; }
+        if (texto === textEl.textContent && cor === corAtual()) { fecharEdicao(); return; }
+        const soCor = texto === textEl.textContent;
         saveBtn.disabled = true;
         try {
           const resp = await api(url(obsId), {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ texto, autor: testerName() || undefined }),
+            // cor vai sempre: "" limpa a marcação, "verde"/"vermelho" pintam
+            body: JSON.stringify({ texto, cor, autor: testerName() || undefined }),
           });
           await onSaved(resp);
-          toast("Observação atualizada — a versão anterior ficou na trilha");
+          toast(soCor
+            ? (cor ? `Observação marcada como ${cor}` : "Marcação de cor removida")
+            : "Observação atualizada — a versão anterior ficou na trilha");
         } catch (e) {
           toast("Erro ao atualizar observação: " + e.message, true);
           saveBtn.disabled = false;
@@ -298,6 +345,7 @@
             <textarea class="obs-input" rows="1" placeholder="Adicionar observação..."></textarea>
             <button type="button" class="obs-add-btn">Adicionar</button>
           </div>
+          ${corPickerHtml("", "obs-cores-add")}
         </div>
         <div class="shots-row">
           <div class="shots-grid">${shots}</div>
@@ -410,6 +458,7 @@
 
     const obsInput = $(".obs-input", card);
     const obsBtn = $(".obs-add-btn", card);
+    const obsCor = wireCorPicker($(".obs-cores-add", card));
     const submitObs = async () => {
       const texto = obsInput.value.trim();
       if (!texto) return;
@@ -418,7 +467,7 @@
         const updated = await api(`/api/cases/${encodeURIComponent(code)}/observacoes`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ texto, autor: testerName() || undefined }),
+          body: JSON.stringify({ texto, cor: obsCor.get(), autor: testerName() || undefined }),
         });
         patchCaseLocal(code, updated);
         rerenderCard(code);
@@ -2235,6 +2284,7 @@
             <textarea class="obs-input" rows="1" placeholder="Adicionar observação..."></textarea>
             <button type="button" class="obs-add-btn">Adicionar</button>
           </div>
+          ${corPickerHtml("", "obs-cores-add")}
         </div>
         <div class="shots-row">
           <div class="shots-grid">${shots}</div>
@@ -2503,6 +2553,7 @@
 
     const obsInput = $(".obs-input", row);
     const obsBtn = $(".obs-add-btn", row);
+    const obsCor = wireCorPicker($(".obs-cores-add", row));
     const submitObs = async () => {
       const texto = obsInput.value.trim();
       if (!texto) return;
@@ -2511,7 +2562,7 @@
         await api(`/api/situacoes/${encodeURIComponent(sitCode)}/estagios/${estagioId}/observacoes`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ texto, autor: testerName() || undefined }),
+          body: JSON.stringify({ texto, cor: obsCor.get(), autor: testerName() || undefined }),
         });
         await refreshSituacao(sitCode);
         toast("Observação adicionada");
