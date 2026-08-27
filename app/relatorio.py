@@ -99,7 +99,12 @@ def todas_obs(item: dict) -> list:
     última perdia o resto da conversa."""
     linhas = []
     for o in (item.get("observations") or []):
-        assinatura = " · ".join(filter(None, [e(o.get("autor")), data_br(o.get("created_at"))]))
+        # observação atualizada mostra a data da atualização junto: na reunião o
+        # que importa é quando o ponto mudou de figura, não quando nasceu.
+        atualizada = f"atualizada {data_br(o.get('editado_em'))}" if o.get("editado_em") else ""
+        assinatura = " · ".join(filter(None, [
+            e(o.get("autor")), data_br(o.get("created_at")), atualizada,
+        ]))
         linhas.append((nl2br(o.get("texto")), assinatura))
     solta = (item.get("observacao") or "").strip()
     if not linhas and solta:

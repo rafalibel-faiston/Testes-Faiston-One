@@ -14,16 +14,37 @@ class ScreenshotOut(BaseModel):
     created_at: Optional[datetime] = None
 
 
+class ObservationRevisionOut(BaseModel):
+    """Uma versão anterior do texto — a trilha das atualizações da observação."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    texto: str
+    autor: Optional[str] = None
+    editado_por: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
 class ObservationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     autor: Optional[str] = None
     texto: str
+    editado_por: Optional[str] = None
+    editado_em: Optional[datetime] = None
     created_at: Optional[datetime] = None
+    revisions: List[ObservationRevisionOut] = []
 
 
 class ObservationCreate(BaseModel):
+    texto: str
+    autor: Optional[str] = None
+
+
+class ObservationUpdate(BaseModel):
+    """Atualiza o texto de uma observação. O texto anterior não some: vira mais
+    uma linha da trilha (`revisions`)."""
     texto: str
     autor: Optional[str] = None
 
@@ -101,16 +122,34 @@ class SitScreenshotOut(BaseModel):
     created_at: Optional[datetime] = None
 
 
+class SitObservationRevisionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    texto: str
+    autor: Optional[str] = None
+    editado_por: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
 class SitObservationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     autor: Optional[str] = None
     texto: str
+    editado_por: Optional[str] = None
+    editado_em: Optional[datetime] = None
     created_at: Optional[datetime] = None
+    revisions: List[SitObservationRevisionOut] = []
 
 
 class SitObservationCreate(BaseModel):
+    texto: str
+    autor: Optional[str] = None
+
+
+class SitObservationUpdate(BaseModel):
     texto: str
     autor: Optional[str] = None
 

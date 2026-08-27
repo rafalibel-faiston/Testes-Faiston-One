@@ -5,6 +5,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.sql import func
 
 from .. import models, schemas
 from ..activity import log as log_activity, snippet
@@ -40,7 +41,10 @@ def _next_manual_code(db: Session) -> str:
 def _get_case_or_404(db: Session, code: str) -> models.TestCase:
     case = (
         db.query(models.TestCase)
-        .options(joinedload(models.TestCase.screenshots), joinedload(models.TestCase.observations))
+        .options(
+            joinedload(models.TestCase.screenshots),
+            joinedload(models.TestCase.observations).joinedload(models.Observation.revisions),
+        )
         .filter(models.TestCase.code == code, models.TestCase.active.is_(True))
         .first()
     )
@@ -53,7 +57,10 @@ def _get_case_or_404(db: Session, code: str) -> models.TestCase:
 def list_cases(db: Session = Depends(get_db)):
     cases = (
         db.query(models.TestCase)
-        .options(joinedload(models.TestCase.screenshots), joinedload(models.TestCase.observations))
+        .options(
+            joinedload(models.TestCase.screenshots),
+            joinedload(models.TestCase.observations).joinedload(models.Observation.revisions),
+        )
         .filter(models.TestCase.active.is_(True))
         .order_by(models.TestCase.grupo, models.TestCase.estagio_num.nulls_last(), models.TestCase.code)
         .all()
@@ -163,6 +170,33 @@ def add_observation(code: str, payload: schemas.ObservationCreate, db: Session =
     db.commit()
     db.refresh(case)
     return case
+
+
+@router.patch("/observacoes/{observation_id}", response_model=schemas.TestCaseOut)
+def update_observation(observation_id: int, payload: schemas.ObservationUpdate, db: Session = Depends(get_db)):
+    """Atualiza o texto de uma observação guardando a versão anterior na trilha —
+    o ponto evolui (foi ajustado, ganhou detalhe) sem apagar o que já foi dito."""
+    obs = db.query(models.Observation).filter(models.Observation.id == observation_id).first()
+    if not obs:
+        raise HTTPException(status_code=404, detail="Observação não encontrada")
+    texto = (payload.texto or "").strip()
+    if not texto:
+        raise HTTPException(status_code=400, detail="Observação vazia.")
+    case = db.query(models.TestCase).filter(models.TestCase.id == obs.test_case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Caso da observação não encontrado")
+    if texto == obs.texto:
+        return _get_case_or_404(db, case.code)
+    db.add(models.ObservationRevision(
+        observation_id=obs.id, texto=obs.texto, autor=obs.autor, editado_por=payload.autor,
+    ))
+    obs.texto = texto
+    obs.editado_por = payload.autor
+    obs.editado_em = func.now()
+    log_activity(db, case.fluxo, "obs", f'Observação atualizada em {case.code}: "{snippet(texto)}"',
+                 autor=payload.autor, case_code=case.code)
+    db.commit()
+    return _get_case_or_404(db, case.code)
 
 
 @router.delete("/observacoes/{observation_id}", response_model=schemas.TestCaseOut)

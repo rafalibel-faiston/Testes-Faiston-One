@@ -25,7 +25,9 @@ def _next_situacao_code(db: Session) -> str:
 def _situacao_query(db: Session):
     return db.query(models.Situacao).options(
         joinedload(models.Situacao.estagios).joinedload(models.SituacaoEstagio.screenshots),
-        joinedload(models.Situacao.estagios).joinedload(models.SituacaoEstagio.observations),
+        joinedload(models.Situacao.estagios)
+        .joinedload(models.SituacaoEstagio.observations)
+        .joinedload(models.SituacaoObservation.revisions),
     )
 
 
@@ -207,6 +209,34 @@ def add_estagio_observation(code: str, estagio_id: int, payload: schemas.SitObse
                  autor=payload.autor, case_code=code)
     db.commit()
     return _get_situacao_or_404(db, code)
+
+
+@router.patch("/situacao-observacoes/{observation_id}", response_model=schemas.SituacaoOut)
+def update_estagio_observation(observation_id: int, payload: schemas.SitObservationUpdate, db: Session = Depends(get_db)):
+    """Atualiza o texto da observação do estágio guardando a versão anterior na trilha."""
+    obs = db.query(models.SituacaoObservation).filter(models.SituacaoObservation.id == observation_id).first()
+    if not obs:
+        raise HTTPException(status_code=404, detail="Observação não encontrada")
+    texto = (payload.texto or "").strip()
+    if not texto:
+        raise HTTPException(status_code=400, detail="Observação vazia.")
+    est = db.query(models.SituacaoEstagio).filter(models.SituacaoEstagio.id == obs.estagio_id).first()
+    sit = db.query(models.Situacao).filter(models.Situacao.id == est.situacao_id).first() if est else None
+    if not sit:
+        raise HTTPException(status_code=404, detail="Situação não encontrada")
+    if texto == obs.texto:
+        return _get_situacao_or_404(db, sit.code)
+    db.add(models.SituacaoObservationRevision(
+        observation_id=obs.id, texto=obs.texto, autor=obs.autor, editado_por=payload.autor,
+    ))
+    obs.texto = texto
+    obs.editado_por = payload.autor
+    obs.editado_em = func.now()
+    log_activity(db, sit.fluxo, "obs",
+                 f'Observação atualizada em {sit.code} · {est.nome}: "{snippet(texto)}"',
+                 autor=payload.autor, case_code=sit.code)
+    db.commit()
+    return _get_situacao_or_404(db, sit.code)
 
 
 @router.delete("/situacao-observacoes/{observation_id}", response_model=schemas.SituacaoOut)

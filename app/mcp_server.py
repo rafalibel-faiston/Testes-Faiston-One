@@ -193,9 +193,22 @@ def _case_to_dict(case: models.TestCase) -> dict:
         "resultado_esperado": case.resultado_esperado,
         "observacoes": [
             {
+                "id": o.id,
                 "autor": o.autor,
                 "texto": o.texto,
                 "data": o.created_at.isoformat() if o.created_at else None,
+                "atualizada_por": o.editado_por,
+                "atualizada_em": o.editado_em.isoformat() if o.editado_em else None,
+                # trilha: o que a observação dizia antes de cada atualização
+                "versoes_anteriores": [
+                    {
+                        "texto": r.texto,
+                        "autor": r.autor,
+                        "substituida_por": r.editado_por,
+                        "data": r.created_at.isoformat() if r.created_at else None,
+                    }
+                    for r in o.revisions
+                ],
             }
             for o in case.observations
         ],
@@ -303,6 +316,44 @@ def adicionar_observacao(code: str, texto: str, autor: Optional[str] = None) -> 
         )
         db.commit()
         db.refresh(case)
+        return _case_to_dict(case)
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def atualizar_observacao(observacao_id: int, texto: str, autor: Optional[str] = None) -> dict:
+    """Atualiza o texto de uma observação já existente de um caso de teste.
+
+    O texto anterior não é perdido: vira uma versão na trilha da observação
+    (`versoes_anteriores`), então dá pra acompanhar como o ponto evoluiu.
+    O `observacao_id` vem do campo `id` das observações em listar_casos/ver_caso.
+    """
+    texto = (texto or "").strip()
+    if not texto:
+        return {"erro": "Observação vazia."}
+    db = SessionLocal()
+    try:
+        obs = db.query(models.Observation).filter(models.Observation.id == observacao_id).first()
+        if not obs:
+            return {"erro": f"Observação {observacao_id} não encontrada"}
+        case = db.query(models.TestCase).filter(models.TestCase.id == obs.test_case_id).first()
+        if not case:
+            return {"erro": "Caso da observação não encontrado"}
+        if texto != obs.texto:
+            db.add(models.ObservationRevision(
+                observation_id=obs.id, texto=obs.texto, autor=obs.autor, editado_por=autor,
+            ))
+            obs.texto = texto
+            obs.editado_por = autor
+            obs.editado_em = func.now()
+            log_activity(
+                db, case.fluxo, "obs",
+                f'Observação atualizada em {case.code}: "{snippet(texto)}"',
+                autor=autor, case_code=case.code,
+            )
+            db.commit()
+            db.refresh(case)
         return _case_to_dict(case)
     finally:
         db.close()

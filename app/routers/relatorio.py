@@ -34,7 +34,10 @@ def _coletar(db: Session, fluxo: Optional[str]) -> dict:
     """
     casos_q = (
         db.query(models.TestCase)
-        .options(joinedload(models.TestCase.screenshots), joinedload(models.TestCase.observations))
+        .options(
+            joinedload(models.TestCase.screenshots),
+            joinedload(models.TestCase.observations).joinedload(models.Observation.revisions),
+        )
         .filter(models.TestCase.active.is_(True))
     )
     notas_q = db.query(models.MeetingNote)
@@ -42,7 +45,9 @@ def _coletar(db: Session, fluxo: Optional[str]) -> dict:
         db.query(models.Situacao)
         .options(
             joinedload(models.Situacao.estagios).joinedload(models.SituacaoEstagio.screenshots),
-            joinedload(models.Situacao.estagios).joinedload(models.SituacaoEstagio.observations),
+            joinedload(models.Situacao.estagios)
+            .joinedload(models.SituacaoEstagio.observations)
+            .joinedload(models.SituacaoObservation.revisions),
         )
         .filter(models.Situacao.active.is_(True))
     )

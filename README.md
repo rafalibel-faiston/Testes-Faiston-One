@@ -55,7 +55,7 @@ Abre em `http://localhost:8000`. Sem configurar nada, usa um arquivo `fluxoc.db`
 app/
   main.py            # app FastAPI, monta static/, cria tabelas, semeia dados
   database.py         # engine/session — lê DATABASE_URL (Postgres) ou usa SQLite local
-  models.py            # TestCase, Observation, Screenshot
+  models.py            # TestCase, Observation (+ ObservationRevision, a trilha), Screenshot
   schemas.py            # Pydantic
   seed_data.py           # os 51 casos de teste (fonte: dashboard LP 02/07) + migração de observações antigas
   routers/cases.py        # API: listar/atualizar casos, observações, upload/download/remover print, resumo
@@ -114,7 +114,7 @@ Com o app rodando (local ou no domínio do Railway), a URL do servidor MCP é
   ```
 
 Depois disso as ferramentas (`listar_casos`, `obter_caso`,
-`atualizar_status_caso`, `adicionar_observacao`, `resumo_execucao`,
+`atualizar_status_caso`, `adicionar_observacao`, `atualizar_observacao`, `resumo_execucao`,
 `listar_tarefas`, `criar_tarefa`, `listar_ajustes_ativos`, `criar_ajuste_ativos`)
 ficam disponíveis pra pedir direto na
 conversa, tipo "marca o FC-12 como aprovado" ou "lista os casos reprovados do
@@ -261,7 +261,11 @@ próprio banco e somem junto se o ajuste for excluído.
 - `POST /api/cases/{code}/observacoes` — adiciona uma nova observação ao histórico do caso
   (body: `{"texto": "...", "autor": "..."}`). Cada nota guarda seu próprio autor — se outra
   pessoa comentar depois, o nome dela aparece só naquela nota, sem apagar as anteriores.
-- `DELETE /api/observacoes/{id}` — remove uma observação específica
+- `PATCH /api/observacoes/{id}` — atualiza o texto de uma observação
+  (body: `{"texto": "...", "autor": "..."}`). O texto anterior não some: vira uma versão
+  na trilha da observação — ver abaixo.
+- `DELETE /api/observacoes/{id}` — remove uma observação específica (leva a trilha junto)
+- `PATCH /api/situacao-observacoes/{id}` — mesma coisa pra observação de estágio de situação
 - `POST /api/cases/{code}/screenshots` — upload de print (multipart, campo `file`)
 - `GET  /api/screenshots/{id}` — baixa/exibe o print
 - `DELETE /api/screenshots/{id}` — remove um print
@@ -276,6 +280,24 @@ histórico completo aparece no card, com o nome de quem escreveu cada uma. Na pr
 subida depois desse deploy, o app migra automaticamente qualquer observação antiga
 (campo único) pro novo formato, atribuindo o autor a quem estava marcado em "testado
 por" — migração idempotente, não duplica em reinicializações seguintes.
+
+### Trilha de atualizações da observação
+
+Uma observação raramente nasce pronta: o ponto é levantado, a LP ajusta, o time
+reteste e o que estava escrito deixa de valer. Em vez de apagar e reescrever (ou
+empilhar dez notas soltas repetindo o mesmo assunto), dá pra **atualizar a própria
+observação**: o texto novo passa a valer e o anterior vira uma versão guardada na
+trilha, com quem escreveu e quem substituiu.
+
+Na tela, cada observação tem um lápis (atualizar) e, quando já foi atualizada, um
+botão `trilha (N)` que abre as versões anteriores em ordem — a leitura completa de
+como o ponto evoluiu. O cabeçalho mostra `atualizada dd/mm hh:mm por Fulano`, e a
+pauta da reunião (`/relatorio`) traz a data da atualização junto da observação.
+
+Vale pros dois lugares em que a observação existe: caso de teste (`Observation` →
+`ObservationRevision`) e estágio de situação (`SituacaoObservation` →
+`SituacaoObservationRevision`). Cada atualização também entra nas Novidades
+(trilha de atividades). Apagar a observação apaga a trilha dela junto.
 
 ## Ticket filho — pendente
 

@@ -141,14 +141,110 @@
     </div>`;
   }
 
+  // Uma observação com a trilha das atualizações: o texto vigente em cima e, se
+  // ela já foi atualizada, o que dizia antes guardado atrás do botão "trilha".
+  // Mesmo HTML pro caso de teste e pro estágio de situação — só muda o endpoint
+  // que o wireObsItems() usa pra salvar.
+  function obsItemHtml(o) {
+    const revs = o.revisions || [];
+    const editada = o.editado_em
+      ? `<span class="obs-edited">atualizada ${fmtWhen(o.editado_em)}${o.editado_por ? " por " + esc(o.editado_por) : ""}</span>`
+      : "";
+    const trailBtn = revs.length
+      ? `<button type="button" class="obs-trail-btn" data-obs-trail>trilha (${revs.length})</button>`
+      : "";
+    const trail = revs.length
+      ? `<ol class="obs-trail" hidden>${revs.map((r, i) => `<li class="obs-trail-item">
+            <div class="obs-trail-head">versão ${i + 1}${r.autor ? " · " + esc(r.autor) : ""}<span class="obs-trail-when">substituída ${fmtWhen(r.created_at)}${r.editado_por ? " por " + esc(r.editado_por) : ""}</span></div>
+            <div class="obs-trail-text">${esc(r.texto)}</div>
+          </li>`).join("")}</ol>`
+      : "";
+    return `<div class="obs-item" data-obs="${o.id}">
+        <div class="obs-item-head">
+          <span class="obs-author">${esc(o.autor || "Anônimo")}</span>
+          <span class="obs-when">${fmtWhen(o.created_at)}</span>
+          ${editada}
+          ${trailBtn}
+          <button type="button" class="obs-edit-btn" data-obs-edit title="Atualizar observação (guarda a versão anterior)" aria-label="Atualizar observação">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
+        </div>
+        <div class="obs-text">${esc(o.texto)}</div>
+        <div class="obs-edit" hidden>
+          <textarea class="obs-edit-input" rows="3">${esc(o.texto)}</textarea>
+          <div class="obs-edit-actions">
+            <button type="button" class="obs-save-btn">Salvar atualização</button>
+            <button type="button" class="obs-cancel-btn">Cancelar</button>
+          </div>
+        </div>
+        ${trail}
+      </div>`;
+  }
+
+  // Liga os botões de cada observação dentro de `root`. `url(id)` diz onde
+  // salvar (caso de teste ou estágio) e `onSaved(resposta)` redesenha a tela.
+  function wireObsItems(root, url, onSaved) {
+    $$(".obs-item", root).forEach((item) => {
+      const obsId = item.dataset.obs;
+      const trailBtn = $("[data-obs-trail]", item);
+      const trail = $(".obs-trail", item);
+      if (trailBtn && trail) trailBtn.addEventListener("click", () => {
+        trail.hidden = !trail.hidden;
+        trailBtn.classList.toggle("open", !trail.hidden);
+      });
+
+      const editBtn = $("[data-obs-edit]", item);
+      const box = $(".obs-edit", item);
+      const textEl = $(".obs-text", item);
+      const input = $(".obs-edit-input", item);
+      const saveBtn = $(".obs-save-btn", item);
+      const cancelBtn = $(".obs-cancel-btn", item);
+      if (!editBtn || !box) return;
+
+      const fecharEdicao = () => {
+        box.hidden = true;
+        textEl.hidden = false;
+        input.value = textEl.textContent;
+      };
+      editBtn.addEventListener("click", () => {
+        const abrindo = box.hidden;
+        box.hidden = !abrindo;
+        textEl.hidden = abrindo;
+        if (abrindo) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+      });
+      cancelBtn.addEventListener("click", fecharEdicao);
+
+      const salvar = async () => {
+        const texto = input.value.trim();
+        if (!texto) { toast("Observação vazia.", true); return; }
+        if (texto === textEl.textContent) { fecharEdicao(); return; }
+        saveBtn.disabled = true;
+        try {
+          const resp = await api(url(obsId), {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ texto, autor: testerName() || undefined }),
+          });
+          await onSaved(resp);
+          toast("Observação atualizada — a versão anterior ficou na trilha");
+        } catch (e) {
+          toast("Erro ao atualizar observação: " + e.message, true);
+          saveBtn.disabled = false;
+        }
+      };
+      saveBtn.addEventListener("click", salvar);
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); salvar(); }
+        if (e.key === "Escape") { e.preventDefault(); fecharEdicao(); }
+      });
+    });
+  }
+
   function obsList(observations) {
     if (!observations || !observations.length) {
       return `<div class="obs-empty">Nenhuma observação ainda.</div>`;
     }
-    return observations.map((o) => `<div class="obs-item">
-        <div class="obs-item-head"><span class="obs-author">${esc(o.autor || "Anônimo")}</span><span class="obs-when">${fmtWhen(o.created_at)}</span></div>
-        <div class="obs-text">${esc(o.texto)}</div>
-      </div>`).join("");
+    return observations.map(obsItemHtml).join("");
   }
 
   function caseCard(c) {
@@ -336,6 +432,11 @@
     obsBtn.addEventListener("click", submitObs);
     obsInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitObs(); }
+    });
+
+    wireObsItems(card, (id) => `/api/observacoes/${id}`, (updated) => {
+      patchCaseLocal(code, updated);
+      rerenderCard(code);
     });
 
     card.addEventListener("click", () => marcarAlvoPrint("caso", code));
@@ -2088,10 +2189,7 @@
     if (!observations || !observations.length) {
       return `<div class="obs-empty">Nenhuma observação ainda.</div>`;
     }
-    return observations.map((o) => `<div class="obs-item">
-        <div class="obs-item-head"><span class="obs-author">${esc(o.autor || "Anônimo")}</span><span class="obs-when">${fmtWhen(o.created_at)}</span></div>
-        <div class="obs-text">${esc(o.texto)}</div>
-      </div>`).join("");
+    return observations.map(obsItemHtml).join("");
   }
 
   function estagioCard(sit, e, idx) {
@@ -2427,6 +2525,8 @@
     obsInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitObs(); }
     });
+
+    wireObsItems(row, (id) => `/api/situacao-observacoes/${id}`, () => refreshSituacao(sitCode));
 
     row.addEventListener("click", () => marcarAlvoPrint("estagio", estagioId));
 

@@ -108,9 +108,34 @@ class SituacaoObservation(Base):
     estagio_id = Column(Integer, ForeignKey("situacao_estagios.id", ondelete="CASCADE"), nullable=False)
     autor = Column(String, nullable=True)
     texto = Column(Text, nullable=False)
+    # quem atualizou o texto pela última vez e quando — o texto original (e cada
+    # versão intermediária) fica guardado em `revisions`, nada se perde na edição.
+    editado_por = Column(String, nullable=True)
+    editado_em = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     estagio = relationship("SituacaoEstagio", back_populates="observations")
+    revisions = relationship(
+        "SituacaoObservationRevision", back_populates="observation",
+        cascade="all, delete-orphan", order_by="SituacaoObservationRevision.id",
+    )
+
+
+class SituacaoObservationRevision(Base):
+    """Versão anterior do texto de uma observação de estágio — mesma ideia da
+    trilha do caso de teste (ver ObservationRevision)."""
+    __tablename__ = "situacao_observation_revisions"
+
+    id = Column(Integer, primary_key=True)
+    observation_id = Column(
+        Integer, ForeignKey("situacao_observations.id", ondelete="CASCADE"), nullable=False
+    )
+    texto = Column(Text, nullable=False)
+    autor = Column(String, nullable=True)
+    editado_por = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    observation = relationship("SituacaoObservation", back_populates="revisions")
 
 
 class SituacaoScreenshot(Base):
@@ -323,9 +348,36 @@ class Observation(Base):
     test_case_id = Column(Integer, ForeignKey("test_cases.id", ondelete="CASCADE"), nullable=False)
     autor = Column(String, nullable=True)
     texto = Column(Text, nullable=False)
+    # a observação pode ser atualizada quando o ponto evolui (foi ajustado, mudou
+    # de entendimento, ganhou detalhe). `texto` é sempre a versão vigente; quem
+    # atualizou e quando ficam aqui, e o que estava escrito antes vira uma linha
+    # da trilha em `revisions` — editar nunca apaga o que já foi dito.
+    editado_por = Column(String, nullable=True)
+    editado_em = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     test_case = relationship("TestCase", back_populates="observations")
+    revisions = relationship(
+        "ObservationRevision", back_populates="observation",
+        cascade="all, delete-orphan", order_by="ObservationRevision.id",
+    )
+
+
+class ObservationRevision(Base):
+    """Uma versão anterior do texto de uma observação — a trilha das atualizações.
+    Cada edição empurra o texto que estava valendo pra cá, com o autor original da
+    versão e quem a substituiu, então dá pra ler a observação do começo ao fim:
+    o que foi escrito primeiro, o que virou depois e por quem."""
+    __tablename__ = "observation_revisions"
+
+    id = Column(Integer, primary_key=True)
+    observation_id = Column(Integer, ForeignKey("observations.id", ondelete="CASCADE"), nullable=False)
+    texto = Column(Text, nullable=False)        # o texto que estava valendo antes da edição
+    autor = Column(String, nullable=True)       # quem tinha escrito essa versão
+    editado_por = Column(String, nullable=True) # quem a substituiu
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    observation = relationship("Observation", back_populates="revisions")
 
 
 class Screenshot(Base):

@@ -363,6 +363,42 @@ main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
 .obs-author { font-size:11.5px; font-weight:700; color:var(--f-blue); }
 .obs-when { font-size:10.5px; color:var(--text-3); }
 .obs-text { font-size:12.5px; color:var(--text); line-height:1.5; white-space:pre-wrap; }
+.obs-item-head .obs-edit-btn { margin-left:auto; }
+.obs-edited { font-size:10.5px; color:var(--f-blue); font-weight:600; }
+/* botões da trilha: discretos até o mouse chegar perto — a observação continua
+   sendo o que se lê, editar/ver histórico é ação secundária */
+.obs-trail-btn, .obs-edit-btn {
+  border:1px solid var(--line-2); background:var(--surface); color:var(--text-3);
+  border-radius:6px; font-family:'Roboto',sans-serif; cursor:pointer; padding:2px 7px;
+  font-size:10.5px; line-height:1.4; transition:color .15s var(--ease), border-color .15s var(--ease);
+}
+.obs-edit-btn { display:inline-flex; align-items:center; padding:3px 6px; }
+.obs-trail-btn:hover, .obs-edit-btn:hover, .obs-trail-btn.open { color:var(--f-blue); border-color:var(--f-blue); }
+.obs-edit { display:flex; flex-direction:column; gap:6px; margin-top:6px; }
+.obs-edit[hidden] { display:none; }
+.obs-edit-input {
+  background:var(--surface); border:1px solid var(--line-2); color:var(--text);
+  border-radius:8px; padding:8px 11px; font-size:12.5px; font-family:'Roboto',sans-serif; resize:vertical;
+}
+.obs-edit-input:focus { outline:none; border-color:var(--f-blue); box-shadow:0 0 0 3px rgba(0,84,236,.10); }
+.obs-edit-actions { display:flex; gap:6px; }
+.obs-save-btn {
+  border:none; color:#fff; background:var(--grad-primary); border-radius:7px; padding:6px 13px;
+  font-size:11.5px; font-weight:600; font-family:'Roboto',sans-serif; cursor:pointer;
+}
+.obs-save-btn:disabled { opacity:.6; cursor:default; }
+.obs-cancel-btn {
+  border:1px solid var(--line-2); background:var(--surface); color:var(--text-2); border-radius:7px;
+  padding:6px 13px; font-size:11.5px; font-family:'Roboto',sans-serif; cursor:pointer;
+}
+/* trilha: as versões anteriores do texto, da mais antiga pra mais nova */
+.obs-trail { list-style:none; margin:8px 0 0; padding:8px 0 0 10px; border-top:1px dashed var(--line-2); display:flex; flex-direction:column; gap:8px; }
+.obs-trail[hidden] { display:none; }
+.obs-trail-item { border-left:2px solid var(--line-2); padding-left:10px; }
+.obs-trail-head { font-size:10.5px; color:var(--text-3); font-weight:700; display:flex; flex-wrap:wrap; gap:6px; margin-bottom:2px; }
+.obs-trail-when { font-weight:400; }
+.obs-trail-text { font-size:12px; color:var(--text-2); line-height:1.5; white-space:pre-wrap; }
+
 .obs-add { display:flex; gap:8px; align-items:flex-end; }
 .obs-input {
   flex:1; background:var(--surface-2); border:1px solid var(--line-2); color:var(--text);

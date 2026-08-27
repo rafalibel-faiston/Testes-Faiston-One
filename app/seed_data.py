@@ -387,6 +387,17 @@ def migrate_schema(engine):
         if "chamado" not in sit_cols:
             stmts.append("ALTER TABLE situacoes ADD COLUMN chamado VARCHAR")
 
+    # trilha das observações: quem atualizou o texto e quando (o texto anterior
+    # vai pras tabelas *_observation_revisions, criadas pelo create_all)
+    for tabela in ("observations", "situacao_observations"):
+        if tabela in existing_tables:
+            obs_cols = {c["name"] for c in insp.get_columns(tabela)}
+            if "editado_por" not in obs_cols:
+                stmts.append(f"ALTER TABLE {tabela} ADD COLUMN editado_por VARCHAR")
+            if "editado_em" not in obs_cols:
+                stmts.append(f"ALTER TABLE {tabela} ADD COLUMN editado_em "
+                             + ("TIMESTAMP WITH TIME ZONE" if pg else "TIMESTAMP"))
+
     if "agenda_eventos" in existing_tables:
         ag_cols = {c["name"] for c in insp.get_columns("agenda_eventos")}
         if "tipo" not in ag_cols:
