@@ -8,11 +8,16 @@ melhorar, o que deu problema). Este módulo também monta a mensagem de convite
 pronta pra abrir no WhatsApp — o texto muda conforme o papel (técnico direto
 ou líder avisando a equipe), com o nome já substituído.
 """
+import io
+import unicodedata
 from datetime import datetime, timezone
 from typing import List, Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
+from openpyxl import Workbook, load_workbook
+from openpyxl.utils import get_column_letter
 from sqlalchemy.orm import Session, joinedload
 
 from .. import models, schemas
@@ -55,6 +60,15 @@ O que ele faz:
 * O técnico confirma o recebimento do equipamento direto por lá
 
 Tem manual de uso, vou passar junto na instalação com cada um. Pode avisar o pessoal que eu vou chamar eles nos próximos dias pra instalar e usar no próximo atendimento?"""
+
+
+def _norm_txt(valor) -> str:
+    """Normaliza texto de célula de planilha pra comparar sem acento/maiúscula:
+    "Líder" e "lider" caem no mesmo lugar, célula vazia (None) vira string vazia."""
+    if valor is None:
+        return ""
+    texto = str(valor).strip().lower()
+    return "".join(c for c in unicodedata.normalize("NFKD", texto) if not unicodedata.combining(c))
 
 
 def _norm_telefone(valor: str) -> str:
@@ -224,3 +238,119 @@ def delete_observacao(observacao_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(tecnico)
     return tecnico
+
+
+# colunas aceitas na planilha de importação — cada chave aceita algumas variações
+# de nome (sem acento/maiúscula, já que _norm_txt normaliza os dois lados)
+COLUNAS_IMPORTACAO = {
+    "nome": {"nome", "tecnico", "nome do tecnico", "nome completo"},
+    "telefone": {"telefone", "whatsapp", "celular", "fone", "numero"},
+    "papel": {"papel", "funcao", "função", "cargo", "tipo"},
+    "regional": {"regional", "cidade", "regiao", "praca"},
+    "lider_nome": {"lider", "lider_nome", "lider direto", "responde a", "supervisor"},
+}
+
+
+@router.get("/tecnicos/modelo")
+def baixar_modelo_importacao():
+    """Planilha modelo pra importar a base de técnicos de uma vez em /tecnicos/importar."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Técnicos"
+    ws.append(["nome", "telefone", "papel", "regional", "lider"])
+    ws.append(["João Silva", "(11) 99999-8888", "tecnico", "SP capital", "Carlos Souza"])
+    ws.append(["Marcos Souza", "(11) 98888-7777", "lider", "Interior SP", ""])
+    ws.column_dimensions[get_column_letter(1)].width = 26
+    ws.column_dimensions[get_column_letter(2)].width = 20
+    ws.column_dimensions[get_column_letter(3)].width = 12
+    ws.column_dimensions[get_column_letter(4)].width = 20
+    ws.column_dimensions[get_column_letter(5)].width = 20
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="modelo_tecnicos.xlsx"'},
+    )
+
+
+@router.post("/tecnicos/importar")
+async def importar_tecnicos(
+    file: UploadFile = File(...), autor: Optional[str] = Form(default=None), db: Session = Depends(get_db)
+):
+    """Sobe a base de técnicos de uma vez a partir de uma planilha .xlsx (colunas:
+    nome, telefone e, opcionais, papel/regional/lider — ver /tecnicos/modelo).
+    Linha sem nome ou telefone, ou com telefone já cadastrado, vira erro reportado
+    (não trava a importação das demais)."""
+    if not (file.filename or "").lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=400, detail="Envie um arquivo .xlsx.")
+    data = await file.read()
+    try:
+        wb = load_workbook(io.BytesIO(data), data_only=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Não consegui abrir a planilha — confira o formato.")
+    linhas = list(wb.active.iter_rows(values_only=True))
+    if not linhas:
+        raise HTTPException(status_code=400, detail="Planilha vazia.")
+
+    cabecalho = [_norm_txt(c) for c in linhas[0]]
+    idx = {}
+    usadas = set()
+    for campo, aliases in COLUNAS_IMPORTACAO.items():
+        # 1ª passada: coluna com o nome exato (ex.: "Nome", "Telefone"). 2ª passada
+        # (fallback): a base pode vir de outro sistema com coluna composta — ex.
+        # "Endereço - Cidade" cai em "regional" por conter "cidade".
+        achou = None
+        for i, h in enumerate(cabecalho):
+            if i not in usadas and h in aliases:
+                achou = i
+                break
+        if achou is None:
+            for i, h in enumerate(cabecalho):
+                if i not in usadas and any(a in h for a in aliases):
+                    achou = i
+                    break
+        if achou is not None:
+            idx[campo] = achou
+            usadas.add(achou)
+    if "nome" not in idx or "telefone" not in idx:
+        raise HTTPException(status_code=400, detail="A planilha precisa ter as colunas 'nome' e 'telefone'.")
+
+    def valor(row, campo):
+        i = idx.get(campo)
+        if i is None or i >= len(row) or row[i] is None:
+            return ""
+        return str(row[i]).strip()
+
+    telefones_existentes = {t for (t,) in db.query(models.Tecnico.telefone).all()}
+    criados = []
+    erros = []
+    for linha_num, row in enumerate(linhas[1:], start=2):
+        nome = valor(row, "nome")
+        telefone_bruto = valor(row, "telefone")
+        if not nome and not telefone_bruto:
+            continue  # linha em branco — ignora sem contar como erro
+        if not nome or not telefone_bruto:
+            erros.append({"linha": linha_num, "motivo": "nome ou telefone vazio"})
+            continue
+        try:
+            telefone = _norm_telefone(telefone_bruto)
+        except HTTPException as err:
+            erros.append({"linha": linha_num, "motivo": err.detail})
+            continue
+        if telefone in telefones_existentes:
+            erros.append({"linha": linha_num, "motivo": f"telefone {telefone} já cadastrado"})
+            continue
+        papel = "lider" if _norm_txt(valor(row, "papel")) in ("lider", "lider de equipe", "supervisor") else "tecnico"
+        db.add(models.Tecnico(
+            nome=nome, telefone=telefone, papel=papel,
+            regional=valor(row, "regional") or None,
+            lider_nome=valor(row, "lider_nome") or None,
+            autor=(autor or "").strip() or None,
+            status="a_contatar",
+        ))
+        telefones_existentes.add(telefone)
+        criados.append(nome)
+    db.commit()
+    return {"criados": len(criados), "nomes": criados, "erros": erros}

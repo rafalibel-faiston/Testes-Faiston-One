@@ -4125,6 +4125,25 @@ Tem manual de uso, vou passar junto na instalação com cada um. Pode avisar o p
   }
   function closeTecnicoModal() { tecnicoModal.hidden = true; editingTecnicoId = null; }
 
+  $("#tecnico-import-input").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+      if (testerName()) fd.append("autor", testerName());
+      const res = await api("/api/tecnicos/importar", { method: "POST", body: fd });
+      await loadTecnicos();
+      if (res.erros && res.erros.length) {
+        const detalhe = res.erros.slice(0, 3).map((er) => `linha ${er.linha}: ${er.motivo}`).join(" · ");
+        toast(`${res.criados} técnico(s) importado(s), ${res.erros.length} com erro (${detalhe}${res.erros.length > 3 ? "…" : ""})`, true);
+      } else {
+        toast(`${res.criados} técnico(s) importado(s).`);
+      }
+    } catch (err) { toast("Erro ao importar planilha: " + err.message, true); }
+  });
+
   $("#btn-add-tecnico").addEventListener("click", () => openTecnicoModal(null));
   $("#btn-add-tecnico-vazio").addEventListener("click", () => openTecnicoModal(null));
   $("#tecnico-cancel").addEventListener("click", closeTecnicoModal);

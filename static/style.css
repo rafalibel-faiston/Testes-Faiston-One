@@ -1763,6 +1763,9 @@ body.inline-connecting * { cursor:crosshair !important; }
 }
 
 /* ---------- Técnicos — QA do Track One ---------- */
+.tecnicos-head-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; flex-shrink:0; }
+.tecnicos-head-actions .btn-ghost { display:inline-flex; align-items:center; text-decoration:none; }
+.tecnico-import-btn { cursor:pointer; }
 .tecnicos-busca {
   height:36px; padding:0 12px; border-radius:var(--radius-sm); border:1px solid var(--line-2);
   background:var(--surface-2); color:var(--text); font-family:'Roboto',sans-serif; font-size:13px;
