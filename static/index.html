@@ -416,6 +416,7 @@
           Importar planilha
           <input type="file" id="tecnico-import-input" accept=".xlsx,.xlsm" hidden>
         </label>
+        <button type="button" class="btn-ghost tecnico-limpar-btn" id="btn-limpar-base">Limpar base</button>
         <button type="button" class="add-btn" id="btn-add-tecnico">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Novo técnico
@@ -940,6 +941,27 @@
         <button type="submit" class="btn-primary" id="tecnico-save">Salvar técnico</button>
       </div>
     </form>
+  </div>
+</div>
+
+<div class="modal" id="tecnico-limpar-modal" hidden aria-modal="true" role="dialog">
+  <div class="modal-card ajuste-card limpar-card">
+    <div class="modal-head">
+      <h3>Zerar a base de técnicos</h3>
+      <button type="button" class="modal-close" id="limpar-close" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="limpar-aviso" id="limpar-aviso"></div>
+      <p class="notes-hint">Isso apaga <b>todos os técnicos e todo o feedback registrado</b>, deixando a
+      base vazia pra você importar a planilha de novo. <b>Não tem como desfazer.</b></p>
+      <label class="fld fld-wide">Para confirmar, digite <b>APAGAR</b>
+        <input id="limpar-input" placeholder="APAGAR" autocomplete="off" spellcheck="false">
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="limpar-cancel">Cancelar</button>
+        <button type="button" class="btn-perigo" id="limpar-confirmar" disabled>Apagar tudo</button>
+      </div>
+    </div>
   </div>
 </div>
 

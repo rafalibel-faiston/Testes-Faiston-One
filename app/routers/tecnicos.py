@@ -150,6 +150,30 @@ def resumo_tecnicos(db: Session = Depends(get_db)):
     return {"total": len(tecnicos), "counts": counts, "feedback": feedback}
 
 
+@router.post("/tecnicos/limpar")
+def limpar_base(payload: schemas.LimparBaseTecnicos, db: Session = Depends(get_db)):
+    """Zera a base de técnicos — apaga todos os cadastros e o feedback junto.
+
+    Serve pra recomeçar a importação do zero quando a planilha de origem estava
+    errada. Não tem volta, então exige a palavra APAGAR: um DELETE disparado sem
+    querer (ou um clique errado na tela) não passa daqui.
+    """
+    if (payload.confirmar or "").strip().upper() != "APAGAR":
+        raise HTTPException(
+            status_code=400,
+            detail='Confirmação inválida — para zerar a base, mande {"confirmar": "APAGAR"}.',
+        )
+    tecnicos = db.query(models.Tecnico).count()
+    observacoes = db.query(models.TecnicoObservacao).count()
+    # as observações são apagadas explicitamente: no delete em massa quem cuidaria
+    # disso seria o ON DELETE CASCADE do banco, e o SQLite local não o aplica por
+    # padrão — sem isso, o histórico ficaria órfão em vez de sumir junto
+    db.query(models.TecnicoObservacao).delete(synchronize_session=False)
+    db.query(models.Tecnico).delete(synchronize_session=False)
+    db.commit()
+    return {"tecnicos_apagados": tecnicos, "observacoes_apagadas": observacoes}
+
+
 @router.post("/tecnicos", response_model=schemas.TecnicoOut, status_code=201)
 def create_tecnico(payload: schemas.TecnicoCreate, db: Session = Depends(get_db)):
     nome = (payload.nome or "").strip()

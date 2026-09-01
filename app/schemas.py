@@ -461,6 +461,12 @@ class TecnicoMensagemOut(BaseModel):
     wa_link: str
 
 
+class LimparBaseTecnicos(BaseModel):
+    """Apagar a base inteira não pode acontecer por um clique errado nem por uma
+    chamada solta na API: exige a palavra APAGAR escrita à mão."""
+    confirmar: str
+
+
 class FormularioResposta(BaseModel):
     """O que o técnico mandou pelo formulário público (/formulario/{token}).
     Todos os campos são opcionais — ele responde o que quiser, desde que

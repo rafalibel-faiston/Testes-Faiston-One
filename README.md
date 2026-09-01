@@ -373,6 +373,13 @@ própria planilha** (duas linhas com o mesmo número — nesse caso a primeira e
 e a segunda é reportada). Numa base grande isso pesa: numa planilha de 6.000
 linhas com cadastros repetidos e sem celular, ~1.800 podem ficar de fora.
 
+Quando a planilha de origem estava errada e o melhor é recomeçar, **Limpar base**
+zera tudo: apaga os técnicos e o feedback junto, deixando a aba vazia pra importar
+de novo. É irreversível, então o modal mostra antes o que vai embora (quantos
+técnicos, quantas anotações e quantos já responderam o formulário) e só libera o
+botão depois de digitar **APAGAR** — a API também recusa a chamada sem essa
+palavra, pra um clique errado ou um `curl` solto não zerarem a base.
+
 Por isso a importação termina num **resumo** — quantas linhas a planilha tinha,
 quantas foram cadastradas, quantas atualizadas e quantas ficaram de fora, com a
 contagem por motivo — e num **relatório em CSV** com linha, nome, telefone e
@@ -409,6 +416,8 @@ app já usa entre a lista de status do Python e a do JS).
 - `GET  /formulario/{token}` — a página que o técnico abre no celular (sem `/api`)
 - `POST /api/formulario/{token}` — recebe as respostas dele
 - `GET  /api/tecnicos/modelo` — planilha modelo da importação
+- `POST /api/tecnicos/limpar` — zera a base (body `{"confirmar": "APAGAR"}`; sem
+  a palavra exata devolve 400 e não apaga nada)
 - `POST /api/tecnicos/importar` — sobe a base (multipart, campo `file`); devolve
   `criados`, `atualizados`, `rejeitados`, o `resumo` por motivo e a lista `erros`
   com linha/nome/telefone/motivo de cada rejeitada

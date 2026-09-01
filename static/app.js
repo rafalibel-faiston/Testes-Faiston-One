@@ -4310,6 +4310,61 @@ Pode ser sincero, é justamente pra ajustar o que estiver ruim antes de liberar 
     URL.revokeObjectURL(url);
   }
 
+  // ---- zerar a base (pra reimportar do zero quando a planilha estava errada) ----
+  const limparModal = $("#tecnico-limpar-modal");
+  const limparInput = $("#limpar-input");
+  const limparBtn = $("#limpar-confirmar");
+
+  function abrirLimparModal() {
+    const total = TECNICOS.length;
+    const anotacoes = TECNICOS.reduce((n, t) => n + (t.observacoes || []).length, 0);
+    const responderam = TECNICOS.filter((t) => t.respondido_em).length;
+    if (!total) { toast("A base já está vazia."); return; }
+    // o alerta muda de tom quando há feedback de verdade em jogo: apagar cadastro
+    // recém-importado é diferente de apagar o retorno que técnico já mandou
+    $("#limpar-aviso").innerHTML = `
+      <div class="limpar-numeros">
+        <span><b>${total}</b> técnico(s)</span>
+        <span><b>${anotacoes}</b> anotaç(ões)</span>
+        <span><b>${responderam}</b> que já respondeu(ram) o formulário</span>
+      </div>
+      ${responderam ? `<p class="limpar-alerta">Atenção: ${responderam} técnico(s) já mandaram feedback pelo formulário. Esse retorno some junto.</p>` : ""}`;
+    limparInput.value = "";
+    limparBtn.disabled = true;
+    limparModal.hidden = false;
+    limparInput.focus();
+  }
+
+  function fecharLimparModal() { limparModal.hidden = true; }
+
+  limparInput.addEventListener("input", () => {
+    limparBtn.disabled = limparInput.value.trim().toUpperCase() !== "APAGAR";
+  });
+  limparInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !limparBtn.disabled) limparBtn.click();
+  });
+
+  limparBtn.addEventListener("click", async () => {
+    limparBtn.disabled = true;
+    try {
+      const res = await api("/api/tecnicos/limpar", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmar: limparInput.value.trim().toUpperCase() }),
+      });
+      fecharLimparModal();
+      await loadTecnicos();
+      toast(`Base zerada — ${res.tecnicos_apagados} técnico(s) apagado(s).`);
+    } catch (e) {
+      toast("Erro ao limpar: " + e.message, true);
+      limparBtn.disabled = false;
+    }
+  });
+
+  $("#btn-limpar-base").addEventListener("click", abrirLimparModal);
+  $("#limpar-cancel").addEventListener("click", fecharLimparModal);
+  $("#limpar-close").addEventListener("click", fecharLimparModal);
+  limparModal.addEventListener("click", (e) => { if (e.target.id === "tecnico-limpar-modal") fecharLimparModal(); });
+
   $("#import-baixar").addEventListener("click", baixarRelatorioImportacao);
   $("#import-ok").addEventListener("click", () => { $("#tecnico-import-modal").hidden = true; });
   $("#tecnico-import-close").addEventListener("click", () => { $("#tecnico-import-modal").hidden = true; });

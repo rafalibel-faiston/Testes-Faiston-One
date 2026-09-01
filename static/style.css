@@ -1762,6 +1762,27 @@ body.inline-connecting * { cursor:crosshair !important; }
   border-style:solid; border-color:var(--f-blue); color:var(--f-blue); background:rgba(0,84,236,.06);
 }
 
+/* ---------- zerar a base ---------- */
+/* botão discreto de propósito: fica ao lado dos outros sem convidar o clique,
+   e só ganha cara de perigo quando a pessoa passa o mouse */
+.tecnico-limpar-btn { color:var(--text-3); }
+.tecnico-limpar-btn:hover { color:var(--bad); border-color:var(--bad-ln); background:var(--bad-bg); }
+.limpar-card { max-width:520px; }
+.limpar-aviso {
+  padding:14px 16px; border-radius:var(--radius-sm); margin-bottom:14px;
+  background:var(--bad-bg); border:1px solid var(--bad-ln);
+}
+.limpar-numeros { display:flex; gap:16px; flex-wrap:wrap; font-size:13px; color:var(--text-2); }
+.limpar-numeros b { font-size:17px; color:var(--bad); font-family:'Roboto Slab',serif; }
+.limpar-alerta { margin-top:10px; font-size:12.5px; font-weight:600; color:var(--bad); }
+.btn-perigo {
+  border:none; color:#fff; background:var(--bad);
+  border-radius:9px; padding:10px 20px; font-size:13px; font-weight:600;
+  font-family:'Roboto',sans-serif; cursor:pointer; transition:all .15s var(--ease);
+}
+.btn-perigo:hover:not(:disabled) { background:#be123c; transform:translateY(-1px); }
+.btn-perigo:disabled { opacity:.45; cursor:not-allowed; }
+
 /* ---------- resultado da importação da base ---------- */
 .import-stats { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
 .import-stats .stat { cursor:default; flex:1; min-width:110px; }
