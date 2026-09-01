@@ -54,6 +54,7 @@ try:
     seed_data.seed_agenda_operacao_logistica(_db)
     seed_data.seed_todo_desmame_planilha(_db)
     seed_data.seed_ativos_ajustes(_db)
+    seed_data.backfill_tecnico_tokens(_db)
 finally:
     _db.close()
 
@@ -68,7 +69,9 @@ app.include_router(agenda_router.router, prefix="/api")
 app.include_router(todo_router.router, prefix="/api")
 app.include_router(ativos_router.router, prefix="/api")
 app.include_router(tecnicos_router.router, prefix="/api")
-# página pronta da pauta da reunião — sem prefixo /api, é pra abrir no navegador
+# páginas pra abrir no navegador (sem prefixo /api): a pauta da reunião e o
+# formulário de feedback que o técnico recebe por WhatsApp
+app.include_router(tecnicos_router.pagina_router)
 app.include_router(relatorio_router.router)
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

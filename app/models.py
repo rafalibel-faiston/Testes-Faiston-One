@@ -344,6 +344,16 @@ AJUSTE_PRIORIDADE_ORDEM = case(
 )
 
 
+def novo_token_tecnico() -> str:
+    """Chave do link do formulário de feedback. Curta o bastante pra caber numa
+    mensagem de WhatsApp e aleatória o bastante pra ninguém cair no formulário
+    de outro técnico por tentativa — o app é aberto por design, o token só
+    identifica quem está respondendo."""
+    import secrets
+
+    return secrets.token_urlsafe(8)
+
+
 class Tecnico(Base):
     """Um técnico (ou líder de equipe) convidado a testar o Track One — o app
     novo que acompanha o atendimento do chamado até o fechamento da RAT.
@@ -365,6 +375,14 @@ class Tecnico(Base):
     lider_nome = Column(String, nullable=True)    # a quem o técnico responde (quando papel=tecnico)
     status = Column(String, nullable=False, default="a_contatar", server_default="a_contatar")
     autor = Column(String, nullable=True)         # quem cadastrou/está conduzindo o teste
+    # chave do link do formulário de feedback (/formulario/{token}) que o técnico
+    # abre no celular depois do atendimento — é o que dispensa entrevistar um a um
+    token = Column(String, unique=True, index=True, nullable=True)
+    nota = Column(Integer, nullable=True)          # nota geral do app no teste (1 a 5)
+    # etapas do fluxo que ele conseguiu exercitar no atendimento real, separadas
+    # por "|" — é o que diz se o teste cobriu o fluxo inteiro ou só um pedaço
+    etapas_testadas = Column(Text, nullable=True)
+    respondido_em = Column(DateTime(timezone=True), nullable=True)
     convidado_em = Column(DateTime(timezone=True), nullable=True)
     instalado_em = Column(DateTime(timezone=True), nullable=True)
     concluido_em = Column(DateTime(timezone=True), nullable=True)

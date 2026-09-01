@@ -406,6 +406,19 @@ def migrate_schema(engine):
             if "cor" not in {c["name"] for c in insp.get_columns(tabela)}:
                 stmts.append(f"ALTER TABLE {tabela} ADD COLUMN cor VARCHAR")
 
+    # formulário de feedback do técnico (link por token) + o que ele respondeu
+    if "tecnicos" in existing_tables:
+        tec_cols = {c["name"] for c in insp.get_columns("tecnicos")}
+        if "token" not in tec_cols:
+            stmts.append("ALTER TABLE tecnicos ADD COLUMN token VARCHAR")
+        if "nota" not in tec_cols:
+            stmts.append("ALTER TABLE tecnicos ADD COLUMN nota INTEGER")
+        if "etapas_testadas" not in tec_cols:
+            stmts.append("ALTER TABLE tecnicos ADD COLUMN etapas_testadas TEXT")
+        if "respondido_em" not in tec_cols:
+            stmts.append("ALTER TABLE tecnicos ADD COLUMN respondido_em "
+                         + ("TIMESTAMP WITH TIME ZONE" if pg else "TIMESTAMP"))
+
     if "agenda_eventos" in existing_tables:
         ag_cols = {c["name"] for c in insp.get_columns("agenda_eventos")}
         if "tipo" not in ag_cols:
@@ -533,6 +546,19 @@ def seed_diagrams(db):
     if added:
         db.commit()
     return added
+
+
+def backfill_tecnico_tokens(db):
+    """Dá um token de formulário aos técnicos cadastrados antes de o formulário
+    existir. Idempotente: só preenche quem está sem token."""
+    from .models import Tecnico, novo_token_tecnico
+
+    sem_token = db.query(Tecnico).filter(Tecnico.token.is_(None)).all()
+    for tecnico in sem_token:
+        tecnico.token = novo_token_tecnico()
+    if sem_token:
+        db.commit()
+    return len(sem_token)
 
 
 def migrate_observations(db):

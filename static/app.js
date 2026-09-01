@@ -3902,14 +3902,30 @@ O que ele faz:
 
 Tem manual de uso, vou passar junto na instalação com cada um. Pode avisar o pessoal que eu vou chamar eles nos próximos dias pra instalar e usar no próximo atendimento?`;
 
-  function mensagemTecnico(t) {
-    const template = t.papel === "lider" ? TECNICO_TEMPLATE_LIDER : TECNICO_TEMPLATE_TECNICO;
+  // mandada DEPOIS do atendimento, com o link do formulário (espelha TEMPLATE_FEEDBACK)
+  const TECNICO_TEMPLATE_FEEDBACK = `Fala, {nome}! Tudo certo?
+Vi que você usou o Track One no atendimento — me conta rapidinho como foi?
+São 2 minutinhos, direto no link:
+
+{link}
+
+Pode ser sincero, é justamente pra ajustar o que estiver ruim antes de liberar pra todo mundo. Valeu demais!`;
+
+  function linkFormulario(t) {
+    return `${window.location.origin}/formulario/${t.token || ""}`;
+  }
+
+  function mensagemTecnico(t, tipo) {
     const primeiroNome = (t.nome || "").trim().split(" ")[0] || t.nome;
+    if (tipo === "feedback") {
+      return TECNICO_TEMPLATE_FEEDBACK.replace("{nome}", primeiroNome).replace("{link}", linkFormulario(t));
+    }
+    const template = t.papel === "lider" ? TECNICO_TEMPLATE_LIDER : TECNICO_TEMPLATE_TECNICO;
     return template.replace("{nome}", primeiroNome);
   }
 
-  function waLink(t) {
-    return `https://wa.me/${t.telefone}?text=${encodeURIComponent(mensagemTecnico(t))}`;
+  function waLink(t, tipo) {
+    return `https://wa.me/${t.telefone}?text=${encodeURIComponent(mensagemTecnico(t, tipo))}`;
   }
 
   function formatTelefone(digits) {
@@ -3949,12 +3965,15 @@ Tem manual de uso, vou passar junto na instalação com cada um. Pode avisar o p
   function renderTecnicoStats() {
     const total = TECNICOS.length;
     const emTeste = TECNICOS.filter((t) => t.status === "em_teste").length;
-    const concluidos = TECNICOS.filter((t) => t.status === "concluido").length;
+    const responderam = TECNICOS.filter((t) => t.respondido_em).length;
     const problemas = TECNICOS.reduce((n, t) => n + t.observacoes.filter((o) => o.tipo === "problema").length, 0);
+    const notas = TECNICOS.map((t) => t.nota).filter(Boolean);
+    const media = notas.length ? (notas.reduce((a, b) => a + b, 0) / notas.length).toFixed(1) : "—";
     $("#tecnicos-stats").innerHTML = `
       <div class="stat"><span class="stat-n">${total}</span><span class="stat-l">Técnicos</span></div>
       <div class="stat warn"><span class="stat-n">${emTeste}</span><span class="stat-l">Em teste</span></div>
-      <div class="stat ok"><span class="stat-n">${concluidos}</span><span class="stat-l">Concluídos</span></div>
+      <div class="stat ok"><span class="stat-n">${responderam}</span><span class="stat-l">Responderam</span></div>
+      <div class="stat"><span class="stat-n">${media}</span><span class="stat-l">Nota média</span></div>
       <div class="stat bad"><span class="stat-n">${problemas}</span><span class="stat-l">Problemas relatados</span></div>`;
   }
 
@@ -3973,22 +3992,80 @@ Tem manual de uso, vou passar junto na instalação com cada um. Pode avisar o p
     }));
   }
 
+  // tipo do feedback: rótulo curto + classe da etiqueta. Vira chip no card (em vez
+  // da lista suspensa que era) e etiqueta na observação já registrada.
+  const TECNICO_OBS_TIPOS = [
+    { key: "",          label: "Nota geral", cls: "o-nota" },
+    { key: "positivo",  label: "Achou bom",  cls: "o-pos" },
+    { key: "melhoria",  label: "Melhoria",   cls: "o-melhoria" },
+    { key: "problema",  label: "Problema",   cls: "o-problema" },
+  ];
+  const TECNICO_OBS_META = Object.fromEntries(TECNICO_OBS_TIPOS.map((t) => [t.key, t]));
+
+  // cards com o bloco de anotação aberto e com a lista de feedback expandida —
+  // guardado fora do HTML pra sobreviver ao re-render depois de cada ação
+  const tecnicoAnotando = new Map();   // id -> tipo escolhido no chip
+  const tecnicoExpandido = new Set();
+
   function tecnicoObsBadge(o) {
-    const meta = { positivo: ["Achou bom", "t-melhoria"], melhoria: ["Melhoria", "t-area"], problema: ["Problema", "t-bug"] }[o.tipo] || ["Nota", "t-resp"];
-    return `<span class="ajuste-tag ${meta[1]}">${meta[0]}</span>`;
+    const meta = TECNICO_OBS_META[o.tipo || ""] || TECNICO_OBS_META[""];
+    return `<span class="tecnico-obs-tag ${meta.cls}">${esc(meta.label)}</span>`;
+  }
+
+  function tecnicoEstrelas(nota) {
+    if (!nota) return "";
+    const cheias = "★".repeat(nota) + "☆".repeat(5 - nota);
+    return `<span class="tecnico-nota" title="Nota que ele deu no app">${cheias} <b>${nota}/5</b></span>`;
+  }
+
+  function tecnicoStepper(t) {
+    // o funil vira uma trilha clicável: o que já passou fica marcado, o atual
+    // destacado e o resto apagado — um clique move, sem abrir lista nenhuma
+    const atual = TECNICO_STATUS_ORDEM.indexOf(t.status);
+    const passos = TECNICO_STATUS_ORDEM.filter((k) => k !== "sem_retorno").map((k, i) => {
+      const estado = i < atual ? " feito" : (k === t.status ? " atual" : "");
+      return `<button type="button" class="tecnico-passo${estado}" data-status="${k}"
+        title="Marcar como ${esc(TECNICO_STATUS_META[k].label)}">${esc(TECNICO_STATUS_META[k].label)}</button>`;
+    }).join("");
+    const semRetorno = t.status === "sem_retorno";
+    return `<div class="tecnico-stepper">
+      ${passos}
+      <button type="button" class="tecnico-passo perdido${semRetorno ? " atual" : ""}" data-status="sem_retorno"
+        title="Não respondeu / desistiu">Sem retorno</button>
+    </div>`;
+  }
+
+  function tecnicoEtapas(t) {
+    const etapas = (t.etapas_testadas || "").split("|").filter(Boolean);
+    if (!etapas.length) return "";
+    return `<div class="tecnico-etapas">
+      <span class="tecnico-etapas-label">Testou no atendimento</span>
+      ${etapas.map((e) => `<span class="tecnico-etapa-ok">✓ ${esc(e)}</span>`).join("")}
+    </div>`;
   }
 
   function tecnicoCard(t) {
     const st = TECNICO_STATUS_META[t.status] || TECNICO_STATUS_META.a_contatar;
-    const opts = TECNICO_STATUS_ORDEM.map((k) =>
-      `<option value="${k}"${k === t.status ? " selected" : ""}>${esc(TECNICO_STATUS_META[k].label)}</option>`).join("");
-    const obsHtml = (t.observacoes || []).slice().reverse().map((o) => `
+    const todas = (t.observacoes || []).slice().reverse();
+    const expandido = tecnicoExpandido.has(t.id);
+    const visiveis = expandido ? todas : todas.slice(0, 3);
+    const obsHtml = visiveis.map((o) => `
       <div class="tecnico-obs-item">
         ${tecnicoObsBadge(o)}
         <p>${esc(o.texto)}</p>
         <span class="tecnico-obs-meta">${esc(o.autor || "—")} · ${fmtWhen(o.created_at)}</span>
         <button type="button" class="del" data-del-obs="${o.id}" title="Remover">✕</button>
       </div>`).join("");
+    const verMais = todas.length > 3
+      ? `<button type="button" class="tecnico-ver-mais">${expandido ? "ver menos" : `ver todas (${todas.length})`}</button>`
+      : "";
+
+    const anotando = tecnicoAnotando.has(t.id);
+    const tipoEscolhido = tecnicoAnotando.get(t.id) || "";
+    const chips = TECNICO_OBS_TIPOS.map((tp) =>
+      `<button type="button" class="tecnico-obs-chip ${tp.cls}${tp.key === tipoEscolhido ? " on" : ""}"
+        data-tipo="${tp.key}">${esc(tp.label)}</button>`).join("");
+
     return `<article class="ajuste-item tecnico-item ${st.cls}" data-id="${t.id}">
       <header class="ajuste-item-head">
         <div class="ajuste-item-copy">
@@ -3997,26 +4074,36 @@ Tem manual de uso, vou passar junto na instalação com cada um. Pode avisar o p
             <span class="ajuste-tag ${t.papel === "lider" ? "t-lider" : "t-tecnico"}">${t.papel === "lider" ? "Líder de equipe" : "Técnico"}</span>
             ${t.regional ? `<span class="ajuste-tag t-area">${esc(t.regional)}</span>` : ""}
             ${t.lider_nome ? `<span class="ajuste-tag t-resp">responde a ${esc(t.lider_nome)}</span>` : ""}
+            ${t.respondido_em ? `<span class="ajuste-tag t-respondeu">respondeu ${fmtWhen(t.respondido_em)}</span>` : ""}
           </div>
         </div>
-        <select class="ajuste-status tecnico-status" title="Situação do QA">${opts}</select>
+        ${tecnicoEstrelas(t.nota)}
         <button type="button" class="ajuste-edit" aria-label="Editar técnico" title="Editar">✎</button>
       </header>
+
+      ${tecnicoStepper(t)}
+      ${tecnicoEtapas(t)}
+
       <div class="tecnico-actions">
-        <button type="button" class="btn-ghost tecnico-wa-btn">Enviar convite pelo WhatsApp</button>
+        <button type="button" class="btn-ghost tecnico-msg-btn" data-tipo="convite">Convite</button>
+        <button type="button" class="btn-ghost tecnico-msg-btn" data-tipo="feedback">Pedir feedback</button>
+        <button type="button" class="btn-ghost tecnico-link-btn">Copiar link do formulário</button>
         <span class="tecnico-tel">${esc(formatTelefone(t.telefone))}</span>
       </div>
-      <div class="tecnico-obs-add">
-        <select class="tecnico-obs-tipo">
-          <option value="">Nota geral</option>
-          <option value="positivo">Achou bom</option>
-          <option value="melhoria">Melhoria</option>
-          <option value="problema">Problema</option>
-        </select>
-        <textarea class="tecnico-obs-texto" rows="2" placeholder="o que ele relatou no atendimento…"></textarea>
-        <button type="button" class="btn-primary tecnico-obs-add-btn">Registrar</button>
+
+      <div class="tecnico-obs-bloco">
+        <div class="tecnico-obs-head">
+          <span class="tecnico-obs-contagem">${todas.length ? `${todas.length} anotaç${todas.length === 1 ? "ão" : "ões"}` : "Sem feedback ainda"}</span>
+          <button type="button" class="tecnico-anotar-btn">${anotando ? "Cancelar" : "+ Anotar"}</button>
+        </div>
+        <div class="tecnico-obs-add"${anotando ? "" : " hidden"}>
+          <div class="tecnico-obs-chips">${chips}</div>
+          <textarea class="tecnico-obs-texto" rows="2" placeholder="o que ele relatou no atendimento…"></textarea>
+          <button type="button" class="btn-primary tecnico-obs-add-btn">Registrar</button>
+        </div>
+        ${obsHtml ? `<div class="tecnico-obs-list">${obsHtml}</div>` : ""}
+        ${verMais}
       </div>
-      ${obsHtml ? `<div class="tecnico-obs-list">${obsHtml}</div>` : ""}
     </article>`;
   }
 
@@ -4034,9 +4121,34 @@ Tem manual de uso, vou passar junto na instalação com cada um. Pode avisar o p
       const id = Number(card.dataset.id);
       $(".ajuste-edit", card).addEventListener("click", () => openTecnicoModal(id));
       $(".ajuste-item-copy h3", card).addEventListener("click", () => openTecnicoModal(id));
-      $(".tecnico-status", card).addEventListener("change", (e) => setTecnicoStatus(id, e.target.value));
-      $(".tecnico-wa-btn", card).addEventListener("click", () => abrirConviteTecnico(id));
+      $$(".tecnico-passo", card).forEach((p) => p.addEventListener("click", () => {
+        const t = TECNICOS.find((x) => x.id === id);
+        if (t && t.status === p.dataset.status) return;   // clicar no atual não faz nada
+        setTecnicoStatus(id, p.dataset.status);
+      }));
+      $$(".tecnico-msg-btn", card).forEach((b) => b.addEventListener("click", () => abrirMensagemTecnico(id, b.dataset.tipo)));
+      $(".tecnico-link-btn", card).addEventListener("click", () => copiarLinkFormulario(id));
+      $(".tecnico-anotar-btn", card).addEventListener("click", () => {
+        if (tecnicoAnotando.has(id)) tecnicoAnotando.delete(id);
+        else tecnicoAnotando.set(id, "");
+        renderTecnicoList();
+        const aberto = $(`.tecnico-item[data-id="${id}"] .tecnico-obs-texto`, lista);
+        if (aberto) aberto.focus();
+      });
+      $$(".tecnico-obs-chip", card).forEach((chip) => chip.addEventListener("click", () => {
+        const texto = $(".tecnico-obs-texto", card).value;
+        tecnicoAnotando.set(id, chip.dataset.tipo);
+        renderTecnicoList();
+        const campo = $(`.tecnico-item[data-id="${id}"] .tecnico-obs-texto`, lista);
+        if (campo) { campo.value = texto; campo.focus(); }
+      }));
       $(".tecnico-obs-add-btn", card).addEventListener("click", () => addTecnicoObs(id, card));
+      const verMais = $(".tecnico-ver-mais", card);
+      if (verMais) verMais.addEventListener("click", () => {
+        if (tecnicoExpandido.has(id)) tecnicoExpandido.delete(id);
+        else tecnicoExpandido.add(id);
+        renderTecnicoList();
+      });
       $$("[data-del-obs]", card).forEach((btn) => btn.addEventListener("click", () => delTecnicoObs(Number(btn.dataset.delObs))));
     });
   }
@@ -4064,14 +4176,31 @@ Tem manual de uso, vou passar junto na instalação com cada um. Pode avisar o p
     } catch (e) { toast("Erro ao atualizar: " + e.message, true); }
   }
 
-  function abrirConviteTecnico(id) {
+  function abrirMensagemTecnico(id, tipo) {
     const t = TECNICOS.find((x) => x.id === id);
     if (!t) return;
-    $("#tecnico-msg-texto").value = mensagemTecnico(t);
-    $("#tecnico-msg-abrir").href = waLink(t);
+    if (tipo === "feedback" && !t.token) {
+      toast("Esse técnico ainda não tem link de formulário — recarregue a página.", true);
+      return;
+    }
+    $("#tecnico-msg-titulo").textContent = tipo === "feedback" ? "Pedir feedback" : "Convite pronto";
+    $("#tecnico-msg-dica").innerHTML = tipo === "feedback"
+      ? "O link abre o formulário no celular dele. O que ele responder cai direto aqui no card — nota, o que achou bom, o que precisa melhorar e os problemas."
+      : "O link abre o WhatsApp já com o texto preenchido. Ele só leva o texto — envie o <b>APK</b> e o <b>manual</b> como anexo direto na conversa.";
+    $("#tecnico-msg-texto").value = mensagemTecnico(t, tipo);
+    $("#tecnico-msg-abrir").href = waLink(t, tipo);
     $("#tecnico-msg-modal").hidden = false;
     // primeira vez que o convite é gerado, já sai de "a contatar"
-    if (t.status === "a_contatar") setTecnicoStatus(id, "convidado");
+    if (tipo !== "feedback" && t.status === "a_contatar") setTecnicoStatus(id, "convidado");
+  }
+
+  async function copiarLinkFormulario(id) {
+    const t = TECNICOS.find((x) => x.id === id);
+    if (!t || !t.token) { toast("Esse técnico ainda não tem link de formulário.", true); return; }
+    try {
+      await navigator.clipboard.writeText(linkFormulario(t));
+      toast("Link do formulário copiado.");
+    } catch (e) { toast("Não deu pra copiar: " + linkFormulario(t), true); }
   }
 
   $("#tecnico-msg-close").addEventListener("click", () => { $("#tecnico-msg-modal").hidden = true; });
@@ -4082,7 +4211,7 @@ Tem manual de uso, vou passar junto na instalação com cada um. Pode avisar o p
   });
 
   async function addTecnicoObs(id, card) {
-    const tipo = $(".tecnico-obs-tipo", card).value;
+    const tipo = tecnicoAnotando.get(id) || "";
     const texto = $(".tecnico-obs-texto", card).value.trim();
     if (!texto) { toast("Escreva a observação antes de registrar.", true); return; }
     try {
@@ -4090,6 +4219,7 @@ Tem manual de uso, vou passar junto na instalação com cada um. Pode avisar o p
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ texto, tipo: tipo || null, autor: testerName() || null }),
       }));
+      tecnicoAnotando.delete(id);   // registrou, fecha o bloco de anotação
       renderTecnicos();
       toast("Observação registrada.");
     } catch (e) { toast("Erro ao registrar: " + e.message, true); }

@@ -584,6 +584,9 @@ def _tecnico_to_dict(tecnico: models.Tecnico) -> dict:
         "lider_nome": tecnico.lider_nome,
         "status": tecnico.status,
         "autor": tecnico.autor,
+        "nota": tecnico.nota,
+        "etapas_testadas": (tecnico.etapas_testadas or "").split("|") if tecnico.etapas_testadas else [],
+        "respondido_em": tecnico.respondido_em.isoformat() if tecnico.respondido_em else None,
         "convidado_em": tecnico.convidado_em.isoformat() if tecnico.convidado_em else None,
         "instalado_em": tecnico.instalado_em.isoformat() if tecnico.instalado_em else None,
         "concluido_em": tecnico.concluido_em.isoformat() if tecnico.concluido_em else None,
@@ -658,10 +661,12 @@ def criar_tecnico(
 
 
 @mcp.tool()
-def gerar_mensagem_tecnico(tecnico_id: int) -> dict:
-    """Monta o convite do Track One pronto pra esse técnico: o texto (conforme
-    o papel dele) e o link do WhatsApp já com a mensagem pré-preenchida. O
-    link só leva o texto — o APK e o manual são enviados à parte na conversa."""
+def gerar_mensagem_tecnico(tecnico_id: int, tipo: str = "convite") -> dict:
+    """Monta a mensagem do Track One pronta pra esse técnico, com o link do
+    WhatsApp já preenchido. tipo="convite" (padrão) chama pra instalação
+    conforme o papel dele; tipo="feedback" pede o retorno depois do atendimento
+    e leva o link do formulário. O link do WhatsApp só leva o texto — o APK e o
+    manual são enviados à parte na conversa."""
     from urllib.parse import quote
 
     db = SessionLocal()
@@ -669,12 +674,13 @@ def gerar_mensagem_tecnico(tecnico_id: int) -> dict:
         tecnico = db.query(models.Tecnico).filter(models.Tecnico.id == tecnico_id).first()
         if not tecnico:
             return {"erro": f"Técnico {tecnico_id} não encontrado"}
-        mensagem = mensagem_para_tecnico(tecnico)
+        mensagem = mensagem_para_tecnico(tecnico, tipo=tipo, base_url=PUBLIC_BASE_URL)
         return {
             "tecnico_id": tecnico.id,
             "telefone": tecnico.telefone,
             "mensagem": mensagem,
             "wa_link": f"https://wa.me/{tecnico.telefone}?text={quote(mensagem)}",
+            "link_formulario": f"{PUBLIC_BASE_URL}/formulario/{tecnico.token}" if tecnico.token else None,
         }
     finally:
         db.close()

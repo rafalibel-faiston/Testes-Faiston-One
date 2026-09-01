@@ -1781,47 +1781,113 @@ body.inline-connecting * { cursor:crosshair !important; }
 .tecnico-item.st-em-teste::before { background:var(--grad-warm); }
 .tecnico-item.st-concluido::before { background:linear-gradient(180deg,#0d9d6c,#34d399); }
 .tecnico-item.st-sem-retorno::before { background:var(--bad); }
-.tecnico-item.st-concluido { background:linear-gradient(180deg, var(--ok-bg), var(--surface) 60%); }
+/* o verde do concluído é só um aceno no topo do card — em card alto, o
+   gradiente inteiro deixava o bloco pesado e o texto menos legível */
+.tecnico-item.st-concluido { background:linear-gradient(180deg, var(--ok-bg), var(--surface) 90px); }
 .tecnico-item.st-sem-retorno { opacity:.65; }
 
 .ajuste-tag.t-tecnico { background:rgba(0,84,236,.08); border-color:rgba(0,84,236,.28); color:var(--f-blue); }
 .ajuste-tag.t-lider { background:rgba(150,10,156,.08); border-color:rgba(150,10,156,.26); color:var(--f-purple); }
 
-.tecnico-status.st-a-contatar { background:var(--na-bg); border-color:var(--na-ln); color:var(--na); }
-.tecnico-status.st-convidado { background:var(--warn-bg); border-color:var(--warn-ln); color:var(--warn); }
-.tecnico-status.st-instalado { background:rgba(0,84,236,.08); border-color:rgba(0,84,236,.28); color:var(--f-blue); }
-.tecnico-status.st-em-teste { background:rgba(253,17,164,.08); border-color:rgba(253,17,164,.26); color:var(--f-magenta); }
-.tecnico-status.st-concluido { background:var(--ok-bg); border-color:var(--ok-ln); color:var(--ok); }
-.tecnico-status.st-sem-retorno { background:var(--bad-bg); border-color:var(--bad-ln); color:var(--bad); }
+.ajuste-tag.t-respondeu { background:var(--ok-bg); border-color:var(--ok-ln); color:var(--ok); }
+
+.tecnico-nota {
+  flex-shrink:0; font-size:13px; letter-spacing:1px; color:var(--warn); white-space:nowrap;
+}
+.tecnico-nota b { font-family:'Roboto',sans-serif; font-size:11.5px; letter-spacing:0; color:var(--text-2); }
+
+/* funil como trilha clicável — substitui a lista suspensa de status: o passo
+   atual fica aceso, os anteriores marcados como vencidos, o resto apagado */
+.tecnico-stepper { display:flex; gap:5px; flex-wrap:wrap; margin-top:13px; }
+.tecnico-passo {
+  flex:1; min-width:86px; padding:7px 8px; border-radius:9px; cursor:pointer;
+  border:1px solid var(--line); background:var(--surface-2); color:var(--text-3);
+  font-family:'Roboto',sans-serif; font-size:11.5px; font-weight:600; text-align:center;
+  transition:all .15s var(--ease);
+}
+.tecnico-passo:hover { border-color:var(--f-blue); color:var(--f-blue); background:rgba(0,84,236,.05); }
+.tecnico-passo.feito {
+  background:rgba(0,84,236,.06); border-color:rgba(0,84,236,.2); color:var(--f-blue);
+}
+.tecnico-passo.atual {
+  background:var(--grad-primary); border-color:transparent; color:#fff;
+  box-shadow:0 6px 16px -8px rgba(0,84,236,.6);
+}
+.tecnico-passo.perdido { flex:0 0 auto; min-width:0; padding:7px 12px; }
+.tecnico-passo.perdido:hover { border-color:var(--bad); color:var(--bad); background:var(--bad-bg); }
+.tecnico-passo.perdido.atual {
+  background:var(--bad); border-color:var(--bad); color:#fff; box-shadow:none;
+}
+
+.tecnico-etapas { display:flex; align-items:center; gap:7px; flex-wrap:wrap; margin-top:11px; }
+.tecnico-etapas-label {
+  font-size:9.5px; text-transform:uppercase; letter-spacing:1px; font-weight:700; color:var(--text-3);
+}
+.tecnico-etapa-ok {
+  font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px;
+  background:var(--ok-bg); border:1px solid var(--ok-ln); color:var(--ok);
+}
 
 .tecnico-actions {
-  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
   margin-top:13px; padding-top:11px; border-top:1px dashed var(--line-2);
 }
-.tecnico-wa-btn {
-  height:32px; padding:0 14px; font-size:12.5px; font-weight:700; color:#0d9d6c;
-  border-color:var(--ok-ln); background:var(--ok-bg);
-}
-.tecnico-wa-btn:hover { background:rgba(13,157,108,.16); }
-.tecnico-tel { font-family:'Roboto Mono',monospace; font-size:12px; color:var(--text-3); }
+.tecnico-actions .btn-ghost { height:32px; padding:0 13px; font-size:12.5px; }
+.tecnico-msg-btn[data-tipo="convite"] { color:var(--f-blue); border-color:rgba(0,84,236,.28); background:rgba(0,84,236,.06); }
+.tecnico-msg-btn[data-tipo="convite"]:hover { background:rgba(0,84,236,.12); }
+.tecnico-msg-btn[data-tipo="feedback"] { color:#0d9d6c; border-color:var(--ok-ln); background:var(--ok-bg); }
+.tecnico-msg-btn[data-tipo="feedback"]:hover { background:rgba(13,157,108,.16); }
+.tecnico-tel { font-family:'Roboto Mono',monospace; font-size:12px; color:var(--text-3); margin-left:auto; }
 
-.tecnico-obs-add {
-  display:flex; gap:8px; align-items:flex-start; margin-top:12px; flex-wrap:wrap;
+.tecnico-obs-bloco { margin-top:13px; padding-top:11px; border-top:1px dashed var(--line-2); }
+.tecnico-obs-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.tecnico-obs-contagem {
+  font-size:9.5px; text-transform:uppercase; letter-spacing:1px; font-weight:700; color:var(--text-3);
 }
-.tecnico-obs-add select {
-  height:34px; padding:0 8px; border-radius:var(--radius-sm); border:1px solid var(--line-2);
-  background:var(--surface-2); color:var(--text-2); font-size:12.5px; flex-shrink:0;
+.tecnico-anotar-btn {
+  border:1px solid var(--line-2); background:var(--surface-2); color:var(--text-2);
+  border-radius:8px; padding:5px 12px; font-family:'Roboto',sans-serif; font-size:12px;
+  font-weight:600; cursor:pointer; transition:all .15s var(--ease);
 }
+.tecnico-anotar-btn:hover { color:var(--f-blue); border-color:var(--f-blue); background:rgba(0,84,236,.06); }
+
+/* o tipo do feedback virou chip: os quatro à vista, um clique escolhe */
+.tecnico-obs-add { margin-top:10px; }
+.tecnico-obs-add[hidden] { display:none; }
+.tecnico-obs-chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+.tecnico-obs-chip {
+  padding:5px 12px; border-radius:999px; cursor:pointer; font-family:'Roboto',sans-serif;
+  font-size:11.5px; font-weight:600; border:1px solid var(--line-2);
+  background:var(--surface-2); color:var(--text-3); transition:all .15s var(--ease);
+}
+.tecnico-obs-chip:hover { border-color:var(--text-3); color:var(--text-2); }
+.tecnico-obs-chip.on.o-nota { background:var(--na-bg); border-color:var(--na-ln); color:var(--na); }
+.tecnico-obs-chip.on.o-pos { background:var(--ok-bg); border-color:var(--ok-ln); color:var(--ok); }
+.tecnico-obs-chip.on.o-melhoria { background:rgba(0,84,236,.08); border-color:rgba(0,84,236,.28); color:var(--f-blue); }
+.tecnico-obs-chip.on.o-problema { background:var(--bad-bg); border-color:var(--bad-ln); color:var(--bad); }
 .tecnico-obs-add textarea {
-  flex:1; min-width:160px; padding:7px 10px; border-radius:var(--radius-sm); border:1px solid var(--line-2);
-  background:var(--surface-2); color:var(--text); font-family:'Roboto',sans-serif; font-size:12.5px; resize:vertical;
+  width:100%; padding:9px 11px; border-radius:var(--radius-sm); border:1px solid var(--line-2);
+  background:var(--surface-2); color:var(--text); font-family:'Roboto',sans-serif; font-size:13px; resize:vertical;
 }
 .tecnico-obs-add textarea:focus { outline:none; border-color:var(--f-blue); background:var(--surface); }
-.tecnico-obs-add .btn-primary { height:34px; padding:0 14px; font-size:12.5px; flex-shrink:0; }
+.tecnico-obs-add .btn-primary { margin-top:8px; height:34px; padding:0 16px; font-size:12.5px; }
+
+.tecnico-obs-tag {
+  font-size:10px; font-weight:700; letter-spacing:.3px; padding:3px 9px; border-radius:999px;
+  border:1px solid var(--line-2); background:var(--surface); color:var(--text-3); flex-shrink:0;
+}
+.tecnico-obs-tag.o-pos { background:var(--ok-bg); border-color:var(--ok-ln); color:var(--ok); }
+.tecnico-obs-tag.o-melhoria { background:rgba(0,84,236,.08); border-color:rgba(0,84,236,.28); color:var(--f-blue); }
+.tecnico-obs-tag.o-problema { background:var(--bad-bg); border-color:var(--bad-ln); color:var(--bad); }
+
+.tecnico-ver-mais {
+  margin-top:9px; border:none; background:none; cursor:pointer; padding:2px 0;
+  font-family:'Roboto',sans-serif; font-size:12px; font-weight:600; color:var(--f-blue);
+}
+.tecnico-ver-mais:hover { text-decoration:underline; }
 
 .tecnico-obs-list {
-  display:flex; flex-direction:column; gap:8px; margin-top:12px; padding-top:11px;
-  border-top:1px dashed var(--line-2);
+  display:flex; flex-direction:column; gap:8px; margin-top:11px;
 }
 .tecnico-obs-item {
   position:relative; display:flex; flex-wrap:wrap; align-items:center; gap:8px;
@@ -1838,6 +1904,8 @@ body.inline-connecting * { cursor:crosshair !important; }
 .tecnico-obs-item .del:hover { background:var(--bad-bg); color:var(--bad); }
 
 @media (max-width: 760px) {
-  .tecnico-obs-add { flex-direction:column; }
-  .tecnico-obs-add textarea, .tecnico-obs-add select, .tecnico-obs-add .btn-primary { width:100%; }
+  .tecnico-passo { flex:1 1 calc(50% - 5px); }
+  .tecnico-actions .btn-ghost { flex:1 1 auto; }
+  .tecnico-tel { margin-left:0; width:100%; }
+  .tecnico-obs-add .btn-primary { width:100%; }
 }

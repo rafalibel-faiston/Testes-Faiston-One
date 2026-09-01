@@ -10,20 +10,25 @@ ou líder avisando a equipe), com o nome já substituído.
 """
 import io
 import unicodedata
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, StreamingResponse
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
 from sqlalchemy.orm import Session, joinedload
 
-from .. import models, schemas
+from .. import formulario, models, schemas
 from ..database import get_db
 
 router = APIRouter(tags=["tecnicos"])
+# páginas abertas no navegador (sem o prefixo /api) — o formulário que o técnico
+# recebe por WhatsApp e abre no celular
+pagina_router = APIRouter(tags=["tecnicos"])
+
+BRT = timezone(timedelta(hours=-3))
 
 PAPEIS = {"tecnico", "lider"}
 # funil de QA: do convite até o teste no atendimento real virar feedback registrado
@@ -61,6 +66,16 @@ O que ele faz:
 
 Tem manual de uso, vou passar junto na instalação com cada um. Pode avisar o pessoal que eu vou chamar eles nos próximos dias pra instalar e usar no próximo atendimento?"""
 
+# mandada DEPOIS do atendimento, com o link do formulário — é o que fecha o ciclo
+# do teste sem precisar entrevistar cada técnico por mensagem
+TEMPLATE_FEEDBACK = """Fala, {nome}! Tudo certo?
+Vi que você usou o Track One no atendimento — me conta rapidinho como foi?
+São 2 minutinhos, direto no link:
+
+{link}
+
+Pode ser sincero, é justamente pra ajustar o que estiver ruim antes de liberar pra todo mundo. Valeu demais!"""
+
 
 def _norm_txt(valor) -> str:
     """Normaliza texto de célula de planilha pra comparar sem acento/maiúscula:
@@ -83,9 +98,14 @@ def _norm_telefone(valor: str) -> str:
     return digitos
 
 
-def _mensagem_para(tecnico: models.Tecnico) -> str:
-    template = TEMPLATE_LIDER if tecnico.papel == "lider" else TEMPLATE_TECNICO
+def _mensagem_para(tecnico: models.Tecnico, tipo: str = "convite", base_url: str = "") -> str:
+    """Monta o texto pronto pra mandar: o convite (antes do teste, conforme o
+    papel) ou o pedido de feedback com o link do formulário (depois dele)."""
     primeiro_nome = (tecnico.nome or "").strip().split(" ")[0] or tecnico.nome
+    if tipo == "feedback":
+        link = f"{(base_url or '').rstrip('/')}/formulario/{tecnico.token or ''}"
+        return TEMPLATE_FEEDBACK.format(nome=primeiro_nome, link=link)
+    template = TEMPLATE_LIDER if tecnico.papel == "lider" else TEMPLATE_TECNICO
     return template.format(nome=primeiro_nome)
 
 
@@ -145,6 +165,7 @@ def create_tecnico(payload: schemas.TecnicoCreate, db: Session = Depends(get_db)
         regional=(payload.regional or "").strip() or None,
         lider_nome=(payload.lider_nome or "").strip() or None,
         autor=(payload.autor or "").strip() or None,
+        token=models.novo_token_tecnico(),
         status="a_contatar",
     )
     db.add(tecnico)
@@ -196,12 +217,14 @@ def delete_tecnico(tecnico_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/tecnicos/{tecnico_id}/mensagem", response_model=schemas.TecnicoMensagemOut)
-def mensagem_tecnico(tecnico_id: int, db: Session = Depends(get_db)):
-    """Monta o convite pronto (texto + link do WhatsApp) pra esse técnico —
-    o link do WhatsApp só pré-preenche texto; o APK/manual vai por fora, na
-    própria conversa, já que o wa.me não anexa arquivo."""
+def mensagem_tecnico(tecnico_id: int, request: Request, tipo: str = "convite", db: Session = Depends(get_db)):
+    """Monta a mensagem pronta (texto + link do WhatsApp) pra esse técnico:
+    `tipo=convite` (padrão) chama pra instalação, `tipo=feedback` pede o retorno
+    depois do atendimento e leva o link do formulário. O link do WhatsApp só
+    pré-preenche texto; o APK/manual vai por fora, na própria conversa, já que o
+    wa.me não anexa arquivo."""
     tecnico = _get_tecnico_or_404(db, tecnico_id)
-    mensagem = _mensagem_para(tecnico)
+    mensagem = _mensagem_para(tecnico, tipo=tipo, base_url=str(request.base_url))
     wa_link = f"https://wa.me/{tecnico.telefone}?text={quote(mensagem)}"
     return schemas.TecnicoMensagemOut(
         tecnico_id=tecnico.id, telefone=tecnico.telefone, mensagem=mensagem, wa_link=wa_link,
@@ -235,6 +258,75 @@ def delete_observacao(observacao_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Observação não encontrada")
     tecnico = _get_tecnico_or_404(db, obs.tecnico_id)
     db.delete(obs)
+    db.commit()
+    db.refresh(tecnico)
+    return tecnico
+
+
+@pagina_router.get("/formulario/{token}", response_class=HTMLResponse)
+def pagina_formulario(token: str, db: Session = Depends(get_db)):
+    """A página que o técnico abre no celular. Link errado devolve uma página
+    explicando, não um JSON de erro — quem abre isso não é desenvolvedor."""
+    tecnico = _tecnico_por_token(db, token)
+    if not tecnico:
+        return HTMLResponse(formulario.pagina_invalida(), status_code=404)
+    ja_respondeu = ""
+    if tecnico.respondido_em:
+        quando = tecnico.respondido_em
+        if quando.tzinfo is None:
+            quando = quando.replace(tzinfo=timezone.utc)
+        ja_respondeu = quando.astimezone(BRT).strftime("%d/%m")
+    return HTMLResponse(
+        formulario.montar_html(tecnico.nome, tecnico.token, ja_respondeu),
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
+
+
+def _tecnico_por_token(db: Session, token: str) -> Optional[models.Tecnico]:
+    token = (token or "").strip()
+    if not token:
+        return None
+    return db.query(models.Tecnico).filter(models.Tecnico.token == token).first()
+
+
+@router.post("/formulario/{token}", response_model=schemas.TecnicoOut)
+def responder_formulario(token: str, payload: schemas.FormularioResposta, db: Session = Depends(get_db)):
+    """Recebe o formulário que o técnico preencheu no celular.
+
+    Cada campo preenchido vira uma observação no card dele com o tipo certo, a
+    nota e as etapas ficam no próprio técnico e o status vai pra "concluído" —
+    é o retorno chegando na base sem ninguém digitar nada.
+    """
+    tecnico = _tecnico_por_token(db, token)
+    if not tecnico:
+        raise HTTPException(status_code=404, detail="Formulário não encontrado.")
+
+    respostas = [
+        ("positivo", (payload.positivo or "").strip()),
+        ("melhoria", (payload.melhoria or "").strip()),
+        ("problema", (payload.problema or "").strip()),
+        (None, (payload.comentario or "").strip()),
+    ]
+    etapas = [e.strip() for e in (payload.etapas or []) if e and e.strip()]
+    nota = payload.nota if payload.nota in (1, 2, 3, 4, 5) else None
+    if not nota and not etapas and not any(texto for _, texto in respostas):
+        raise HTTPException(status_code=400, detail="Responda pelo menos um campo.")
+
+    for tipo, texto in respostas:
+        if texto:
+            db.add(models.TecnicoObservacao(
+                tecnico_id=tecnico.id, autor=tecnico.nome, texto=texto, tipo=tipo,
+            ))
+    if nota:
+        tecnico.nota = nota
+    if etapas:
+        tecnico.etapas_testadas = "|".join(etapas)
+    tecnico.respondido_em = datetime.now(timezone.utc)
+    # respondeu = testou; só não rebaixa quem já tinha sido marcado como concluído
+    if tecnico.status != "concluido":
+        tecnico.status = "concluido"
+        if tecnico.concluido_em is None:
+            tecnico.concluido_em = tecnico.respondido_em
     db.commit()
     db.refresh(tecnico)
     return tecnico
@@ -348,6 +440,7 @@ async def importar_tecnicos(
             regional=valor(row, "regional") or None,
             lider_nome=valor(row, "lider_nome") or None,
             autor=(autor or "").strip() or None,
+            token=models.novo_token_tecnico(),
             status="a_contatar",
         ))
         telefones_existentes.add(telefone)

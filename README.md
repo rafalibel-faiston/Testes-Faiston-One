@@ -314,12 +314,44 @@ Cada técnico tem:
   regional e, quando é técnico, o nome do líder direto — pra cruzar rápido quem
   responde a quem.
 - **Funil de QA**: `a_contatar` → `convidado` → `instalado` → `em_teste` →
-  `concluido` (ou `sem_retorno`, quando ele não respondeu). A data de quando entrou
-  em cada estágio-chave (convidado/instalado/concluído) fica registrada.
+  `concluido` (ou `sem_retorno`, quando ele não respondeu). Na tela o funil é uma
+  **trilha clicável**, não uma lista suspensa: o passo atual fica aceso, os
+  anteriores marcados, e um clique move o técnico de etapa. A data de quando ele
+  entrou em cada estágio-chave (convidado/instalado/concluído) fica registrada.
 - **Feedback do teste**: histórico de observações, cada uma marcada como
   **Achou bom**, **Melhoria** ou **Problema** (ou nota geral, sem marcação) — é o
   "o que ele achou bom / o que precisa melhorar / o que deu problema" pedido pra
-  acompanhar o piloto.
+  acompanhar o piloto. O tipo é escolhido em chips e o campo de anotar fica
+  fechado até clicar em **+ Anotar**, pra lista de 20 técnicos não virar uma
+  parede de formulários abertos.
+- **Nota e etapas testadas**: quando ele responde o formulário (abaixo), o card
+  mostra a nota de 1 a 5 e quais etapas do fluxo ele conseguiu exercitar — é o que
+  diz se o teste cobriu o atendimento inteiro ou só um pedaço dele.
+
+### Formulário de feedback (o técnico responde, cai direto aqui)
+
+Cada técnico tem um link próprio — `/formulario/{token}` — que ele abre no celular
+depois de usar o app num atendimento real. A página é feita pra celular, com a
+marca da Faiston, e pergunta: **nota de 1 a 5**, **quais etapas conseguiu fazer
+pelo app** (recebeu o chamado, acompanhou o rastreio, confirmou o recebimento,
+fechou a RAT), **o que funcionou bem**, **o que precisa melhorar**, **se deu algum
+erro** e um campo livre.
+
+Ao enviar, cada campo preenchido vira uma observação já classificada no card dele,
+a nota e as etapas ficam no técnico, o status vai pra **Teste concluído** e a data
+da resposta é registrada — ninguém precisa entrevistar técnico por técnico no
+WhatsApp e digitar o retorno na mão.
+
+Quem já respondeu pode responder de novo depois de outro atendimento (a página
+avisa a data do retorno anterior); as respostas novas entram junto das antigas,
+sem apagar nada.
+
+No card, três botões cobrem a conversa inteira do piloto:
+
+- **Convite** — a mensagem de chamada pra instalação (muda conforme o papel).
+- **Pedir feedback** — a mensagem que vai depois do atendimento, já com o link do
+  formulário dentro.
+- **Copiar link do formulário** — só o link, pra colar onde quiser.
 
 ### Convite pronto (WhatsApp)
 
@@ -344,9 +376,12 @@ app já usa entre a lista de status do Python e a do JS).
 - `POST /api/tecnicos` — cadastra (telefone sem DDI de 10/11 dígitos ganha o 55 na frente sozinho)
 - `PATCH /api/tecnicos/{id}` — edita dados ou muda o status (grava a data automaticamente)
 - `DELETE /api/tecnicos/{id}` — remove
-- `GET  /api/tecnicos/{id}/mensagem` — devolve o texto do convite pronto + o link do WhatsApp
+- `GET  /api/tecnicos/{id}/mensagem` — texto pronto + link do WhatsApp
+  (`?tipo=convite`, padrão, ou `?tipo=feedback`, que leva o link do formulário)
 - `POST /api/tecnicos/{id}/observacoes` — registra uma nota (`texto`, `autor`, `tipo` opcional: positivo/melhoria/problema)
 - `DELETE /api/tecnicos/observacoes/{id}` — remove uma nota
+- `GET  /formulario/{token}` — a página que o técnico abre no celular (sem `/api`)
+- `POST /api/formulario/{token}` — recebe as respostas dele
 
 Também dá pra pedir isso direto no Claude via MCP: `listar_tecnicos`, `criar_tecnico`,
 `gerar_mensagem_tecnico`, `atualizar_status_tecnico`, `adicionar_observacao_tecnico`

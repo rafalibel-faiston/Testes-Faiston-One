@@ -424,6 +424,10 @@ class TecnicoOut(BaseModel):
     lider_nome: Optional[str] = None
     status: str = "a_contatar"
     autor: Optional[str] = None
+    token: Optional[str] = None            # chave do link /formulario/{token}
+    nota: Optional[int] = None             # nota geral que ele deu no app (1 a 5)
+    etapas_testadas: Optional[str] = None  # etapas exercitadas, separadas por "|"
+    respondido_em: Optional[datetime] = None
     convidado_em: Optional[datetime] = None
     instalado_em: Optional[datetime] = None
     concluido_em: Optional[datetime] = None
@@ -455,6 +459,18 @@ class TecnicoMensagemOut(BaseModel):
     telefone: str
     mensagem: str
     wa_link: str
+
+
+class FormularioResposta(BaseModel):
+    """O que o técnico mandou pelo formulário público (/formulario/{token}).
+    Todos os campos são opcionais — ele responde o que quiser, desde que
+    responda alguma coisa."""
+    nota: Optional[int] = None            # 1 a 5
+    etapas: List[str] = []                # etapas do fluxo que conseguiu usar
+    positivo: Optional[str] = ""          # o que funcionou bem
+    melhoria: Optional[str] = ""          # o que precisa melhorar
+    problema: Optional[str] = ""          # erro/travamento encontrado
+    comentario: Optional[str] = ""        # campo livre — vira nota geral
 
 
 class AtivoAjustePrintOut(BaseModel):
