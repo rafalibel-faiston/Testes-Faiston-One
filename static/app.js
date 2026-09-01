@@ -4263,15 +4263,58 @@ Pode ser sincero, é justamente pra ajustar o que estiver ruim antes de liberar 
       const fd = new FormData();
       fd.append("file", file, file.name);
       if (testerName()) fd.append("autor", testerName());
+      toast("Importando planilha…");
       const res = await api("/api/tecnicos/importar", { method: "POST", body: fd });
       await loadTecnicos();
-      if (res.erros && res.erros.length) {
-        const detalhe = res.erros.slice(0, 3).map((er) => `linha ${er.linha}: ${er.motivo}`).join(" · ");
-        toast(`${res.criados} técnico(s) importado(s), ${res.erros.length} com erro (${detalhe}${res.erros.length > 3 ? "…" : ""})`, true);
-      } else {
-        toast(`${res.criados} técnico(s) importado(s).`);
-      }
+      mostrarResultadoImportacao(res, file.name);
     } catch (err) { toast("Erro ao importar planilha: " + err.message, true); }
+  });
+
+  // Numa base de milhares, "importou 4 mil de 6 mil" só ajuda se disser QUAIS
+  // ficaram de fora e por quê — daí o resumo por motivo e o relatório baixável,
+  // em vez do toast com três linhas que cabia antes.
+  let ultimaImportacao = null;
+
+  function mostrarResultadoImportacao(res, nomeArquivo) {
+    ultimaImportacao = { res, arquivo: nomeArquivo };
+    const entraram = (res.criados || 0) + (res.atualizados || 0);
+    $("#import-stats").innerHTML = `
+      <div class="stat"><span class="stat-n">${res.linhas_planilha || 0}</span><span class="stat-l">Linhas na planilha</span></div>
+      <div class="stat ok"><span class="stat-n">${res.criados || 0}</span><span class="stat-l">Cadastrados</span></div>
+      <div class="stat"><span class="stat-n">${res.atualizados || 0}</span><span class="stat-l">Atualizados</span></div>
+      <div class="stat ${res.rejeitados ? "bad" : ""}"><span class="stat-n">${res.rejeitados || 0}</span><span class="stat-l">Ficaram de fora</span></div>`;
+
+    const motivos = Object.entries(res.resumo || {}).sort((a, b) => b[1] - a[1]);
+    $("#import-rejeitados-box").hidden = !motivos.length;
+    $("#import-baixar").hidden = !motivos.length;
+    $("#import-motivos").innerHTML = motivos.map(([motivo, n]) =>
+      `<div class="import-motivo"><span class="import-motivo-n">${n}</span><span>${esc(motivo)}</span></div>`).join("");
+
+    $("#tecnico-import-modal").hidden = false;
+    toast(entraram
+      ? `${entraram} técnico(s) na base (${res.criados || 0} novo(s), ${res.atualizados || 0} atualizado(s)).`
+      : "Nenhum técnico entrou — veja o motivo no resultado.", !entraram);
+  }
+
+  function baixarRelatorioImportacao() {
+    if (!ultimaImportacao) return;
+    const linhas = [["linha", "nome", "telefone", "motivo"]].concat(
+      (ultimaImportacao.res.erros || []).map((e) => [e.linha, e.nome || "", e.telefone || "", e.motivo]));
+    // ; como separador e BOM: é assim que o Excel em pt-BR abre o CSV já em colunas
+    const csv = "﻿" + linhas.map((l) => l.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "tecnicos-nao-importados.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  $("#import-baixar").addEventListener("click", baixarRelatorioImportacao);
+  $("#import-ok").addEventListener("click", () => { $("#tecnico-import-modal").hidden = true; });
+  $("#tecnico-import-close").addEventListener("click", () => { $("#tecnico-import-modal").hidden = true; });
+  $("#tecnico-import-modal").addEventListener("click", (e) => {
+    if (e.target.id === "tecnico-import-modal") $("#tecnico-import-modal").hidden = true;
   });
 
   $("#btn-add-tecnico").addEventListener("click", () => openTecnicoModal(null));

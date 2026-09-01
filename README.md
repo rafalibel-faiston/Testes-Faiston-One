@@ -353,6 +353,32 @@ No card, três botões cobrem a conversa inteira do piloto:
   formulário dentro.
 - **Copiar link do formulário** — só o link, pra colar onde quiser.
 
+### Subir a base de uma vez (.xlsx)
+
+**Importar planilha** sobe a base inteira de técnicos de uma vez; **Baixar modelo
+(.xlsx)** dá a planilha de exemplo. Só `nome` e `telefone` são obrigatórios — as
+outras colunas da planilha (RG, CPF, e-mail, endereço…) são ignoradas, então a
+exportação do sistema de cadastro entra sem precisar ser reformatada. O
+importador reconhece variações de nome de coluna, inclusive compostas: `Endereço
+- Cidade` vira a regional do técnico. Telefone brasileiro sem DDI ganha o `55`
+sozinho.
+
+**Reimportar é sincronizar, não duplicar.** Quem já está na base (mesmo telefone)
+tem nome, papel, regional e líder atualizados; status, nota, etapas e feedback —
+que são progresso de QA, não cadastro — nunca são tocados.
+
+Uma linha só fica de fora por três motivos: **sem telefone**, **telefone
+inválido** (menos de 10 dígitos, tipo fixo truncado) ou **telefone repetido na
+própria planilha** (duas linhas com o mesmo número — nesse caso a primeira entra
+e a segunda é reportada). Numa base grande isso pesa: numa planilha de 6.000
+linhas com cadastros repetidos e sem celular, ~1.800 podem ficar de fora.
+
+Por isso a importação termina num **resumo** — quantas linhas a planilha tinha,
+quantas foram cadastradas, quantas atualizadas e quantas ficaram de fora, com a
+contagem por motivo — e num **relatório em CSV** com linha, nome, telefone e
+motivo de cada rejeitada. Corrigir na planilha e importar de novo é seguro: quem
+já entrou é atualizado, não duplicado.
+
 ### Convite pronto (WhatsApp)
 
 O botão **Enviar convite pelo WhatsApp** no card do técnico monta a mensagem certa
@@ -382,6 +408,10 @@ app já usa entre a lista de status do Python e a do JS).
 - `DELETE /api/tecnicos/observacoes/{id}` — remove uma nota
 - `GET  /formulario/{token}` — a página que o técnico abre no celular (sem `/api`)
 - `POST /api/formulario/{token}` — recebe as respostas dele
+- `GET  /api/tecnicos/modelo` — planilha modelo da importação
+- `POST /api/tecnicos/importar` — sobe a base (multipart, campo `file`); devolve
+  `criados`, `atualizados`, `rejeitados`, o `resumo` por motivo e a lista `erros`
+  com linha/nome/telefone/motivo de cada rejeitada
 
 Também dá pra pedir isso direto no Claude via MCP: `listar_tecnicos`, `criar_tecnico`,
 `gerar_mensagem_tecnico`, `atualizar_status_tecnico`, `adicionar_observacao_tecnico`

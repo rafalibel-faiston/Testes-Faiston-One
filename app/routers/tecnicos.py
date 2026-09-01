@@ -373,8 +373,12 @@ async def importar_tecnicos(
 ):
     """Sobe a base de técnicos de uma vez a partir de uma planilha .xlsx (colunas:
     nome, telefone e, opcionais, papel/regional/lider — ver /tecnicos/modelo).
-    Linha sem nome ou telefone, ou com telefone já cadastrado, vira erro reportado
-    (não trava a importação das demais)."""
+
+    Quem já está na base (mesmo telefone) tem o cadastro atualizado em vez de ser
+    rejeitado — reimportar a planilha nova é sincronizar, não duplicar; o que é
+    progresso de QA (status, nota, etapas, feedback) nunca é tocado. Linha sem
+    nome/telefone, telefone inválido ou telefone repetido dentro da própria
+    planilha entra no relatório de rejeitados, sem travar as demais."""
     if not (file.filename or "").lower().endswith((".xlsx", ".xlsm")):
         raise HTTPException(status_code=400, detail="Envie um arquivo .xlsx.")
     data = await file.read()
@@ -415,35 +419,86 @@ async def importar_tecnicos(
             return ""
         return str(row[i]).strip()
 
-    telefones_existentes = {t for (t,) in db.query(models.Tecnico.telefone).all()}
-    criados = []
-    erros = []
+    # quem já está na base, pelo telefone — reimportar a planilha atualizada não
+    # rejeita esse pessoal, atualiza o cadastro deles (ver abaixo)
+    ja_na_base = {t.telefone: t for t in db.query(models.Tecnico).all()}
+    vistos_no_arquivo = {}   # telefone -> linha em que apareceu primeiro
+
+    criados = 0
+    atualizados = 0
+    em_branco = 0
+    rejeitados = []
     for linha_num, row in enumerate(linhas[1:], start=2):
         nome = valor(row, "nome")
         telefone_bruto = valor(row, "telefone")
         if not nome and not telefone_bruto:
-            continue  # linha em branco — ignora sem contar como erro
-        if not nome or not telefone_bruto:
-            erros.append({"linha": linha_num, "motivo": "nome ou telefone vazio"})
+            em_branco += 1
+            continue  # linha em branco — não é erro, só não tem nada nela
+
+        def rejeita(motivo):
+            rejeitados.append({
+                "linha": linha_num, "nome": nome, "telefone": telefone_bruto, "motivo": motivo,
+            })
+
+        if not telefone_bruto:
+            rejeita("sem telefone")
+            continue
+        if not nome:
+            rejeita("sem nome")
             continue
         try:
             telefone = _norm_telefone(telefone_bruto)
-        except HTTPException as err:
-            erros.append({"linha": linha_num, "motivo": err.detail})
+        except HTTPException:
+            rejeita("telefone inválido")
             continue
-        if telefone in telefones_existentes:
-            erros.append({"linha": linha_num, "motivo": f"telefone {telefone} já cadastrado"})
+        if telefone in vistos_no_arquivo:
+            rejeita(f"telefone repetido na planilha (já veio na linha {vistos_no_arquivo[telefone]})")
             continue
+        vistos_no_arquivo[telefone] = linha_num
+
         papel = "lider" if _norm_txt(valor(row, "papel")) in ("lider", "lider de equipe", "supervisor") else "tecnico"
-        db.add(models.Tecnico(
+        regional = valor(row, "regional") or None
+        lider_nome = valor(row, "lider_nome") or None
+
+        existente = ja_na_base.get(telefone)
+        if existente:
+            # atualiza o cadastro, nunca o andamento do teste: status, nota,
+            # etapas e feedback são progresso de QA e não vêm da planilha
+            existente.nome = nome
+            existente.papel = papel
+            if regional:
+                existente.regional = regional
+            if lider_nome:
+                existente.lider_nome = lider_nome
+            if not existente.token:
+                existente.token = models.novo_token_tecnico()
+            atualizados += 1
+            continue
+
+        novo = models.Tecnico(
             nome=nome, telefone=telefone, papel=papel,
-            regional=valor(row, "regional") or None,
-            lider_nome=valor(row, "lider_nome") or None,
+            regional=regional, lider_nome=lider_nome,
             autor=(autor or "").strip() or None,
             token=models.novo_token_tecnico(),
             status="a_contatar",
-        ))
-        telefones_existentes.add(telefone)
-        criados.append(nome)
+        )
+        db.add(novo)
+        ja_na_base[telefone] = novo
+        criados += 1
     db.commit()
-    return {"criados": len(criados), "nomes": criados, "erros": erros}
+
+    # o resumo é o que responde "por que entraram menos do que a planilha tinha":
+    # cada motivo com a sua contagem, em vez de uma lista de mil linhas soltas
+    resumo = {}
+    for r in rejeitados:
+        chave = r["motivo"].split(" (já veio")[0]
+        resumo[chave] = resumo.get(chave, 0) + 1
+    return {
+        "criados": criados,
+        "atualizados": atualizados,
+        "linhas_planilha": max(len(linhas) - 1, 0),
+        "linhas_em_branco": em_branco,
+        "rejeitados": len(rejeitados),
+        "resumo": resumo,
+        "erros": rejeitados,
+    }

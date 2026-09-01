@@ -943,6 +943,28 @@
   </div>
 </div>
 
+<div class="modal" id="tecnico-import-modal" hidden aria-modal="true" role="dialog">
+  <div class="modal-card ajuste-card">
+    <div class="modal-head">
+      <h3>Resultado da importação</h3>
+      <button type="button" class="modal-close" id="tecnico-import-close" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="import-stats" id="import-stats"></div>
+      <div id="import-rejeitados-box" hidden>
+        <p class="notes-hint">Estas linhas <b>não entraram</b>. Baixe o relatório pra ver linha a linha
+        quem ficou de fora e por quê — dá pra corrigir na planilha e importar de novo (quem já está na
+        base é atualizado, não duplicado).</p>
+        <div class="import-motivos" id="import-motivos"></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="import-baixar" hidden>Baixar relatório dos rejeitados</button>
+        <button type="button" class="btn-primary" id="import-ok">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="tecnico-msg-modal" hidden aria-modal="true" role="dialog">
   <div class="modal-card ajuste-card">
     <div class="modal-head">

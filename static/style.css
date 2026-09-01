@@ -1762,6 +1762,21 @@ body.inline-connecting * { cursor:crosshair !important; }
   border-style:solid; border-color:var(--f-blue); color:var(--f-blue); background:rgba(0,84,236,.06);
 }
 
+/* ---------- resultado da importação da base ---------- */
+.import-stats { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+.import-stats .stat { cursor:default; flex:1; min-width:110px; }
+.import-stats .stat:hover { transform:none; box-shadow:none; border-color:var(--line); }
+.import-motivos { display:flex; flex-direction:column; gap:7px; margin-top:12px; }
+.import-motivo {
+  display:flex; align-items:center; gap:11px; padding:9px 13px; border-radius:var(--radius-sm);
+  background:var(--surface-2); border:1px solid var(--line); font-size:13px; color:var(--text-2);
+}
+.import-motivo-n {
+  min-width:46px; padding:2px 9px; border-radius:999px; text-align:center;
+  background:var(--bad-bg); border:1px solid var(--bad-ln); color:var(--bad);
+  font-family:'Roboto Mono',monospace; font-size:12px; font-weight:600;
+}
+
 /* ---------- Técnicos — QA do Track One ---------- */
 .tecnicos-head-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; flex-shrink:0; }
 .tecnicos-head-actions .btn-ghost { display:inline-flex; align-items:center; text-decoration:none; }
