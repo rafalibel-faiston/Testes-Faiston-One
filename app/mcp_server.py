@@ -32,6 +32,11 @@ from fastapi import HTTPException
 from . import models
 from .activity import log as log_activity, snippet, normaliza_cor
 from .database import SessionLocal
+from .routers.tecnicos import PAPEIS as TECNICO_PAPEIS
+from .routers.tecnicos import STATUSES as TECNICO_STATUSES
+from .routers.tecnicos import TIPOS_OBS as TECNICO_TIPOS_OBS
+from .routers.tecnicos import _mensagem_para as mensagem_para_tecnico
+from .routers.tecnicos import _norm_telefone as norm_telefone_tecnico
 
 VALID_STATUSES = {"Não testado", "Aprovado", "Reprovado", "Bloqueado", "N/A"}
 TODO_STATUSES = {"a_fazer", "fazendo", "feito"}
@@ -159,9 +164,13 @@ mcp = FastMCP(
     "Fluxo C — Console de Teste (Faiston)",
     instructions=(
         "Ferramentas para consultar e atualizar os casos de teste do Fluxo C "
-        "(Despacho NEXO) e o quadro de tarefas do time Faiston. Use "
-        "listar_casos/obter_caso pra consultar, atualizar_status_caso e "
-        "adicionar_observacao pra registrar o resultado de um teste."
+        "(Despacho NEXO), o quadro de tarefas do time Faiston e o QA do Track "
+        "One (app dos técnicos). Use listar_casos/obter_caso pra consultar, "
+        "atualizar_status_caso e adicionar_observacao pra registrar o resultado "
+        "de um teste. Pra técnicos: criar_tecnico cadastra, "
+        "gerar_mensagem_tecnico monta o convite (texto + link do WhatsApp), "
+        "atualizar_status_tecnico acompanha o funil de QA e "
+        "adicionar_observacao_tecnico registra o feedback do teste."
     ),
     stateless_http=True,
     auth_server_provider=oauth_provider,
@@ -561,5 +570,164 @@ def criar_ajuste_ativos(
         db.refresh(ajuste)
         return {"id": ajuste.id, "versao": ajuste.versao, "numero": ajuste.numero,
                 "titulo": ajuste.titulo, "tipo": ajuste.tipo}
+    finally:
+        db.close()
+
+
+def _tecnico_to_dict(tecnico: models.Tecnico) -> dict:
+    return {
+        "id": tecnico.id,
+        "nome": tecnico.nome,
+        "telefone": tecnico.telefone,
+        "papel": tecnico.papel,
+        "regional": tecnico.regional,
+        "lider_nome": tecnico.lider_nome,
+        "status": tecnico.status,
+        "autor": tecnico.autor,
+        "convidado_em": tecnico.convidado_em.isoformat() if tecnico.convidado_em else None,
+        "instalado_em": tecnico.instalado_em.isoformat() if tecnico.instalado_em else None,
+        "concluido_em": tecnico.concluido_em.isoformat() if tecnico.concluido_em else None,
+        "observacoes": [
+            {
+                "id": o.id,
+                "autor": o.autor,
+                "texto": o.texto,
+                "tipo": o.tipo,
+                "data": o.created_at.isoformat() if o.created_at else None,
+            }
+            for o in tecnico.observacoes
+        ],
+    }
+
+
+@mcp.tool()
+def listar_tecnicos(status: Optional[str] = None, papel: Optional[str] = None) -> list[dict]:
+    """Lista os técnicos (e líderes) cadastrados pra testar o Track One, com o
+    funil de QA de cada um. status opcional: a_contatar, convidado, instalado,
+    em_teste, concluido, sem_retorno. papel opcional: "tecnico" ou "lider"."""
+    db = SessionLocal()
+    try:
+        query = db.query(models.Tecnico).options(joinedload(models.Tecnico.observacoes))
+        if status:
+            query = query.filter(models.Tecnico.status == status)
+        if papel:
+            query = query.filter(models.Tecnico.papel == papel)
+        tecnicos = query.order_by(models.Tecnico.nome).all()
+        return [_tecnico_to_dict(t) for t in tecnicos]
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def criar_tecnico(
+    nome: str,
+    telefone: str,
+    papel: str = "tecnico",
+    regional: Optional[str] = None,
+    lider_nome: Optional[str] = None,
+    autor: Optional[str] = None,
+) -> dict:
+    """Cadastra um técnico (ou líder de equipe) na base de QA do Track One.
+    telefone com DDD (e DDI, se não for Brasil) — números brasileiros de 10/11
+    dígitos ganham o 55 na frente automaticamente. papel: "tecnico" (convite
+    direto) ou "lider" (avisa o líder antes de chamar o time dele)."""
+    nome = (nome or "").strip()
+    if not nome:
+        return {"erro": "Nome vazio."}
+    papel = (papel or "tecnico").strip()
+    if papel not in TECNICO_PAPEIS:
+        return {"erro": 'Papel inválido — use "tecnico" ou "lider".'}
+    db = SessionLocal()
+    try:
+        try:
+            tel_norm = norm_telefone_tecnico(telefone)
+        except HTTPException as err:
+            return {"erro": err.detail}
+        tecnico = models.Tecnico(
+            nome=nome, telefone=tel_norm, papel=papel,
+            regional=(regional or "").strip() or None,
+            lider_nome=(lider_nome or "").strip() or None,
+            autor=autor, status="a_contatar",
+        )
+        db.add(tecnico)
+        db.commit()
+        db.refresh(tecnico)
+        return _tecnico_to_dict(tecnico)
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def gerar_mensagem_tecnico(tecnico_id: int) -> dict:
+    """Monta o convite do Track One pronto pra esse técnico: o texto (conforme
+    o papel dele) e o link do WhatsApp já com a mensagem pré-preenchida. O
+    link só leva o texto — o APK e o manual são enviados à parte na conversa."""
+    from urllib.parse import quote
+
+    db = SessionLocal()
+    try:
+        tecnico = db.query(models.Tecnico).filter(models.Tecnico.id == tecnico_id).first()
+        if not tecnico:
+            return {"erro": f"Técnico {tecnico_id} não encontrado"}
+        mensagem = mensagem_para_tecnico(tecnico)
+        return {
+            "tecnico_id": tecnico.id,
+            "telefone": tecnico.telefone,
+            "mensagem": mensagem,
+            "wa_link": f"https://wa.me/{tecnico.telefone}?text={quote(mensagem)}",
+        }
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def atualizar_status_tecnico(tecnico_id: int, status: str) -> dict:
+    """Atualiza o status de QA de um técnico. Status válidos: a_contatar,
+    convidado, instalado, em_teste, concluido, sem_retorno. A primeira vez que
+    o status vira convidado/instalado/concluido, a data fica registrada."""
+    if status not in TECNICO_STATUSES:
+        return {"erro": f"Status inválido: {status}. Use um de {TECNICO_STATUSES}"}
+    db = SessionLocal()
+    try:
+        tecnico = db.query(models.Tecnico).filter(models.Tecnico.id == tecnico_id).first()
+        if not tecnico:
+            return {"erro": f"Técnico {tecnico_id} não encontrado"}
+        tecnico.status = status
+        agora = func.now()
+        if status == "convidado" and tecnico.convidado_em is None:
+            tecnico.convidado_em = agora
+        elif status == "instalado" and tecnico.instalado_em is None:
+            tecnico.instalado_em = agora
+        elif status == "concluido" and tecnico.concluido_em is None:
+            tecnico.concluido_em = agora
+        db.commit()
+        db.refresh(tecnico)
+        return _tecnico_to_dict(tecnico)
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def adicionar_observacao_tecnico(
+    tecnico_id: int, texto: str, autor: Optional[str] = None, tipo: Optional[str] = None
+) -> dict:
+    """Registra uma nota de QA sobre o teste de um técnico com o Track One.
+    tipo opcional: "positivo" (o que ele achou bom), "melhoria" (sugestão) ou
+    "problema" (bug/erro). Sem tipo é uma nota geral do que ele relatou."""
+    texto = (texto or "").strip()
+    if not texto:
+        return {"erro": "Observação vazia."}
+    tipo = (tipo or "").strip() or None
+    if tipo is not None and tipo not in TECNICO_TIPOS_OBS:
+        return {"erro": 'Tipo inválido — use "positivo", "melhoria" ou "problema".'}
+    db = SessionLocal()
+    try:
+        tecnico = db.query(models.Tecnico).filter(models.Tecnico.id == tecnico_id).first()
+        if not tecnico:
+            return {"erro": f"Técnico {tecnico_id} não encontrado"}
+        db.add(models.TecnicoObservacao(tecnico_id=tecnico.id, autor=autor, texto=texto, tipo=tipo))
+        db.commit()
+        db.refresh(tecnico)
+        return _tecnico_to_dict(tecnico)
     finally:
         db.close()

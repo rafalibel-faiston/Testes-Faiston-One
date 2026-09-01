@@ -397,6 +397,66 @@ class FlowDiagramUpdate(BaseModel):
     atualizado_por: Optional[str] = None
 
 
+class TecnicoObservacaoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    autor: Optional[str] = None
+    texto: str
+    tipo: Optional[str] = None   # positivo / melhoria / problema / None
+    created_at: Optional[datetime] = None
+
+
+class TecnicoObservacaoCreate(BaseModel):
+    texto: str
+    autor: Optional[str] = None
+    tipo: Optional[str] = None
+
+
+class TecnicoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    nome: str
+    telefone: str
+    papel: str = "tecnico"
+    regional: Optional[str] = None
+    lider_nome: Optional[str] = None
+    status: str = "a_contatar"
+    autor: Optional[str] = None
+    convidado_em: Optional[datetime] = None
+    instalado_em: Optional[datetime] = None
+    concluido_em: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    observacoes: List[TecnicoObservacaoOut] = []
+
+
+class TecnicoCreate(BaseModel):
+    nome: str
+    telefone: str
+    papel: Optional[str] = "tecnico"
+    regional: Optional[str] = None
+    lider_nome: Optional[str] = None
+    autor: Optional[str] = None
+
+
+class TecnicoUpdate(BaseModel):
+    nome: Optional[str] = None
+    telefone: Optional[str] = None
+    papel: Optional[str] = None
+    regional: Optional[str] = None
+    lider_nome: Optional[str] = None
+    status: Optional[str] = None
+
+
+class TecnicoMensagemOut(BaseModel):
+    tecnico_id: int
+    telefone: str
+    mensagem: str
+    wa_link: str
+
+
 class AtivoAjustePrintOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

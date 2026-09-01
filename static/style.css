@@ -1761,3 +1761,80 @@ body.inline-connecting * { cursor:crosshair !important; }
 .ajuste-item.paste-alvo .ajuste-upload {
   border-style:solid; border-color:var(--f-blue); color:var(--f-blue); background:rgba(0,84,236,.06);
 }
+
+/* ---------- Técnicos — QA do Track One ---------- */
+.tecnicos-busca {
+  height:36px; padding:0 12px; border-radius:var(--radius-sm); border:1px solid var(--line-2);
+  background:var(--surface-2); color:var(--text); font-family:'Roboto',sans-serif; font-size:13px;
+  width:100%; max-width:280px;
+}
+.tecnicos-busca:focus { outline:none; border-color:var(--f-blue); background:var(--surface); }
+
+/* faixa lateral pelo estágio do funil de QA — mesma ideia do bug/melhoria dos ajustes */
+.tecnico-item::before { background:var(--na); }
+.tecnico-item.st-a-contatar::before { background:var(--na); }
+.tecnico-item.st-convidado::before { background:linear-gradient(180deg,#d97706,#fbbf24); }
+.tecnico-item.st-instalado::before { background:var(--grad-primary); }
+.tecnico-item.st-em-teste::before { background:var(--grad-warm); }
+.tecnico-item.st-concluido::before { background:linear-gradient(180deg,#0d9d6c,#34d399); }
+.tecnico-item.st-sem-retorno::before { background:var(--bad); }
+.tecnico-item.st-concluido { background:linear-gradient(180deg, var(--ok-bg), var(--surface) 60%); }
+.tecnico-item.st-sem-retorno { opacity:.65; }
+
+.ajuste-tag.t-tecnico { background:rgba(0,84,236,.08); border-color:rgba(0,84,236,.28); color:var(--f-blue); }
+.ajuste-tag.t-lider { background:rgba(150,10,156,.08); border-color:rgba(150,10,156,.26); color:var(--f-purple); }
+
+.tecnico-status.st-a-contatar { background:var(--na-bg); border-color:var(--na-ln); color:var(--na); }
+.tecnico-status.st-convidado { background:var(--warn-bg); border-color:var(--warn-ln); color:var(--warn); }
+.tecnico-status.st-instalado { background:rgba(0,84,236,.08); border-color:rgba(0,84,236,.28); color:var(--f-blue); }
+.tecnico-status.st-em-teste { background:rgba(253,17,164,.08); border-color:rgba(253,17,164,.26); color:var(--f-magenta); }
+.tecnico-status.st-concluido { background:var(--ok-bg); border-color:var(--ok-ln); color:var(--ok); }
+.tecnico-status.st-sem-retorno { background:var(--bad-bg); border-color:var(--bad-ln); color:var(--bad); }
+
+.tecnico-actions {
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  margin-top:13px; padding-top:11px; border-top:1px dashed var(--line-2);
+}
+.tecnico-wa-btn {
+  height:32px; padding:0 14px; font-size:12.5px; font-weight:700; color:#0d9d6c;
+  border-color:var(--ok-ln); background:var(--ok-bg);
+}
+.tecnico-wa-btn:hover { background:rgba(13,157,108,.16); }
+.tecnico-tel { font-family:'Roboto Mono',monospace; font-size:12px; color:var(--text-3); }
+
+.tecnico-obs-add {
+  display:flex; gap:8px; align-items:flex-start; margin-top:12px; flex-wrap:wrap;
+}
+.tecnico-obs-add select {
+  height:34px; padding:0 8px; border-radius:var(--radius-sm); border:1px solid var(--line-2);
+  background:var(--surface-2); color:var(--text-2); font-size:12.5px; flex-shrink:0;
+}
+.tecnico-obs-add textarea {
+  flex:1; min-width:160px; padding:7px 10px; border-radius:var(--radius-sm); border:1px solid var(--line-2);
+  background:var(--surface-2); color:var(--text); font-family:'Roboto',sans-serif; font-size:12.5px; resize:vertical;
+}
+.tecnico-obs-add textarea:focus { outline:none; border-color:var(--f-blue); background:var(--surface); }
+.tecnico-obs-add .btn-primary { height:34px; padding:0 14px; font-size:12.5px; flex-shrink:0; }
+
+.tecnico-obs-list {
+  display:flex; flex-direction:column; gap:8px; margin-top:12px; padding-top:11px;
+  border-top:1px dashed var(--line-2);
+}
+.tecnico-obs-item {
+  position:relative; display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+  padding:8px 30px 8px 10px; border-radius:var(--radius-sm); background:var(--surface-2);
+  border:1px solid var(--line);
+}
+.tecnico-obs-item p { flex:1 1 100%; font-size:12.5px; line-height:1.55; color:var(--text-2); margin:0; }
+.tecnico-obs-meta { font-size:10.5px; color:var(--text-3); }
+.tecnico-obs-item .del {
+  position:absolute; top:7px; right:7px; width:18px; height:18px; border-radius:50%;
+  background:transparent; color:var(--text-3); font-size:10px; line-height:18px; text-align:center;
+  border:none; cursor:pointer; transition:all .15s var(--ease);
+}
+.tecnico-obs-item .del:hover { background:var(--bad-bg); color:var(--bad); }
+
+@media (max-width: 760px) {
+  .tecnico-obs-add { flex-direction:column; }
+  .tecnico-obs-add textarea, .tecnico-obs-add select, .tecnico-obs-add .btn-primary { width:100%; }
+}

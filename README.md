@@ -299,6 +299,59 @@ Vale pros dois lugares em que a observação existe: caso de teste (`Observation
 `SituacaoObservationRevision`). Cada atualização também entra nas Novidades
 (trilha de atividades). Apagar a observação apaga a trilha dela junto.
 
+## Técnicos — QA do Track One
+
+Aba **Técnicos** (só perfil Faiston, ao lado de Agenda e Todo) — a base dos técnicos
+e líderes de equipe convidados a testar o **Track One** (o app novo que acompanha o
+atendimento do chamado até o fechamento da RAT) antes de liberar geral. Ela resolve os
+dois pedidos que geraram esse módulo: ter um lugar só pra acompanhar quem já foi
+chamado, o que cada um relatou e um jeito rápido de mandar o convite pra cada técnico
+sem escrever a mensagem toda vez.
+
+Cada técnico tem:
+
+- **Dados**: nome, telefone (WhatsApp), papel (**Técnico** ou **Líder de equipe**),
+  regional e, quando é técnico, o nome do líder direto — pra cruzar rápido quem
+  responde a quem.
+- **Funil de QA**: `a_contatar` → `convidado` → `instalado` → `em_teste` →
+  `concluido` (ou `sem_retorno`, quando ele não respondeu). A data de quando entrou
+  em cada estágio-chave (convidado/instalado/concluído) fica registrada.
+- **Feedback do teste**: histórico de observações, cada uma marcada como
+  **Achou bom**, **Melhoria** ou **Problema** (ou nota geral, sem marcação) — é o
+  "o que ele achou bom / o que precisa melhorar / o que deu problema" pedido pra
+  acompanhar o piloto.
+
+### Convite pronto (WhatsApp)
+
+O botão **Enviar convite pelo WhatsApp** no card do técnico monta a mensagem certa
+pro papel dele (as duas mensagens combinadas com o Rafa — uma pro técnico direto,
+outra pro líder avisando que o time dele vai ser chamado), já com o nome
+substituído, e abre `wa.me/<telefone>?text=...` com o texto preenchido. Como esse
+link só leva texto (não anexa arquivo), o **APK** e o **manual de uso** são enviados
+à parte, na própria conversa do WhatsApp — o modal do convite lembra disso e tem um
+botão pra copiar o texto caso prefira colar manualmente. Gerar o convite pela
+primeira vez já move o técnico de "a contatar" pra "convidado" automaticamente.
+
+Os textos dos dois convites vivem em `app/routers/tecnicos.py`
+(`TEMPLATE_TECNICO` / `TEMPLATE_LIDER`) e são espelhados em `static/app.js` — mudar
+a mensagem exige editar os dois lugares (mesmo padrão de duplicação que o resto do
+app já usa entre a lista de status do Python e a do JS).
+
+### API
+
+- `GET  /api/tecnicos` — lista (filtros opcionais: `status`, `papel`, `regional`, `busca`)
+- `GET  /api/tecnicos/resumo` — contagem por status + total de feedback por tipo
+- `POST /api/tecnicos` — cadastra (telefone sem DDI de 10/11 dígitos ganha o 55 na frente sozinho)
+- `PATCH /api/tecnicos/{id}` — edita dados ou muda o status (grava a data automaticamente)
+- `DELETE /api/tecnicos/{id}` — remove
+- `GET  /api/tecnicos/{id}/mensagem` — devolve o texto do convite pronto + o link do WhatsApp
+- `POST /api/tecnicos/{id}/observacoes` — registra uma nota (`texto`, `autor`, `tipo` opcional: positivo/melhoria/problema)
+- `DELETE /api/tecnicos/observacoes/{id}` — remove uma nota
+
+Também dá pra pedir isso direto no Claude via MCP: `listar_tecnicos`, `criar_tecnico`,
+`gerar_mensagem_tecnico`, `atualizar_status_tecnico`, `adicionar_observacao_tecnico`
+(ver "Conectar no Claude/Cowork via MCP" acima).
+
 ## Ticket filho — pendente
 
 O caso `FC-TKFILHO-01` (Grupo D) está como placeholder — falta descrever o gatilho

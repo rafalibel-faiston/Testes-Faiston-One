@@ -3054,12 +3054,13 @@
   // não têm nada que a LP precise acompanhar.
   let currentModule = "dispatcher";
 
-  const MODULOS_FAISTON = ["agenda", "todo"];
+  const MODULOS_FAISTON = ["agenda", "todo", "tecnicos"];
 
   function applyModuleVisibility() {
     const isFaiston = PERFIL === "Faiston";
     $("#module-tab-agenda").hidden = !isFaiston;
     $("#module-tab-todo").hidden = !isFaiston;
+    $("#module-tab-tecnicos").hidden = !isFaiston;
     if (!isFaiston && MODULOS_FAISTON.includes(currentModule)) switchModule("dispatcher");
   }
 
@@ -3074,9 +3075,11 @@
     $("#module-ativos").hidden = mod !== "ativos";
     $("#module-agenda").hidden = mod !== "agenda";
     $("#module-todo").hidden = mod !== "todo";
+    $("#module-tecnicos").hidden = mod !== "tecnicos";
     if (mod === "ativos") loadAjustes();
     if (mod === "agenda") loadAgenda();
     if (mod === "todo") loadTodo();
+    if (mod === "tecnicos") loadTecnicos();
   }
 
   $$(".module-tab").forEach((t) => t.addEventListener("click", () => {
@@ -3861,6 +3864,334 @@
     } catch (e) { toast("Erro ao excluir: " + e.message, true); }
   });
 
+  // ---------------- Técnicos — QA do Track One ----------------
+  // convite, funil de instalação/teste e o feedback (bom / melhoria / problema)
+  // de cada técnico/líder chamado pra testar o app antes de liberar geral.
+  let TECNICOS = [];
+  const TECNICO_STATUS_META = {
+    a_contatar:  { label: "A contatar",       cls: "st-a-contatar" },
+    convidado:   { label: "Convidado",        cls: "st-convidado" },
+    instalado:   { label: "App instalado",    cls: "st-instalado" },
+    em_teste:    { label: "Em teste",         cls: "st-em-teste" },
+    concluido:   { label: "Teste concluído",  cls: "st-concluido" },
+    sem_retorno: { label: "Sem retorno",      cls: "st-sem-retorno" },
+  };
+  const TECNICO_STATUS_ORDEM = Object.keys(TECNICO_STATUS_META);
+  const tecnicoFiltros = { status: "", papel: "", busca: "" };
+
+  // mesmos textos combinados com o Rafa — espelham app/routers/tecnicos.py
+  // (TEMPLATE_TECNICO / TEMPLATE_LIDER). Mudou o texto lá, muda aqui também.
+  const TECNICO_TEMPLATE_TECNICO = `Fala, {nome}! Tudo certo?
+Estamos lançando um app novo pra técnicos (Track One) e você foi selecionado pra testar antes de liberar geral.
+O que ele faz:
+
+• Acompanha o fluxo inteiro do atendimento, desde o chamado atribuído a você até o fechamento da RAT, tudo pelo app
+• Mostra rastreio e previsão de entrega quando o atendimento precisa de peça
+• Você confirma o recebimento do equipamento direto por lá
+
+Vou te chamar pra fazer a instalação e já passo o manual de uso na hora. Depois é só usar normal no seu próximo atendimento, do começo ao fim, e qualquer coisa estranha (tela que não atualiza, notificação que não chega, informação que falta) me avisa direto — print ajuda muito.
+Bora marcar a instalação?`;
+
+  const TECNICO_TEMPLATE_LIDER = `Fala, {nome}! Tudo certo?
+Estamos lançando um app novo pra técnicos (Track One) e já vou entrar em contato direto com o seu time pra fazer a instalação. Só queria te avisar antes.
+O que ele faz:
+
+• Acompanha o fluxo inteiro do atendimento, desde o chamado atribuído ao técnico até o fechamento da RAT, tudo pelo app
+• Mostra rastreio e previsão de entrega quando precisa de peça
+• O técnico confirma o recebimento do equipamento direto por lá
+
+Tem manual de uso, vou passar junto na instalação com cada um. Pode avisar o pessoal que eu vou chamar eles nos próximos dias pra instalar e usar no próximo atendimento?`;
+
+  function mensagemTecnico(t) {
+    const template = t.papel === "lider" ? TECNICO_TEMPLATE_LIDER : TECNICO_TEMPLATE_TECNICO;
+    const primeiroNome = (t.nome || "").trim().split(" ")[0] || t.nome;
+    return template.replace("{nome}", primeiroNome);
+  }
+
+  function waLink(t) {
+    return `https://wa.me/${t.telefone}?text=${encodeURIComponent(mensagemTecnico(t))}`;
+  }
+
+  function formatTelefone(digits) {
+    const d = (digits || "").replace(/\D/g, "");
+    if (d.startsWith("55") && d.length >= 12) {
+      const ddd = d.slice(2, 4), resto = d.slice(4);
+      return `+55 (${ddd}) ${resto.length >= 9 ? resto.slice(0, 5) + "-" + resto.slice(5) : resto.slice(0, 4) + "-" + resto.slice(4)}`;
+    }
+    return d ? "+" + d : "";
+  }
+
+  async function loadTecnicos() {
+    try {
+      TECNICOS = await api("/api/tecnicos");
+    } catch (e) {
+      TECNICOS = [];
+      toast("Erro ao carregar técnicos: " + e.message, true);
+    }
+    renderTecnicos();
+  }
+
+  function tecnicosFiltrados() {
+    const busca = tecnicoFiltros.busca.toLowerCase();
+    return TECNICOS
+      .filter((t) => !tecnicoFiltros.status || t.status === tecnicoFiltros.status)
+      .filter((t) => !tecnicoFiltros.papel || t.papel === tecnicoFiltros.papel)
+      .filter((t) => !busca || t.nome.toLowerCase().includes(busca));
+  }
+
+  function renderTecnicos() {
+    renderTecnicoStats();
+    renderTecnicoStatusChips();
+    renderTecnicoList();
+    atualizaContadorTecnicos();
+  }
+
+  function renderTecnicoStats() {
+    const total = TECNICOS.length;
+    const emTeste = TECNICOS.filter((t) => t.status === "em_teste").length;
+    const concluidos = TECNICOS.filter((t) => t.status === "concluido").length;
+    const problemas = TECNICOS.reduce((n, t) => n + t.observacoes.filter((o) => o.tipo === "problema").length, 0);
+    $("#tecnicos-stats").innerHTML = `
+      <div class="stat"><span class="stat-n">${total}</span><span class="stat-l">Técnicos</span></div>
+      <div class="stat warn"><span class="stat-n">${emTeste}</span><span class="stat-l">Em teste</span></div>
+      <div class="stat ok"><span class="stat-n">${concluidos}</span><span class="stat-l">Concluídos</span></div>
+      <div class="stat bad"><span class="stat-n">${problemas}</span><span class="stat-l">Problemas relatados</span></div>`;
+  }
+
+  function renderTecnicoStatusChips() {
+    const box = $("#tecnicos-chips-status");
+    const chips = [`<button type="button" class="chip${tecnicoFiltros.status ? "" : " active"}" data-status="">Todas</button>`];
+    TECNICO_STATUS_ORDEM.forEach((key) => {
+      const n = TECNICOS.filter((t) => t.status === key).length;
+      if (!n && tecnicoFiltros.status !== key) return;
+      chips.push(`<button type="button" class="chip${tecnicoFiltros.status === key ? " active" : ""}" data-status="${key}">${esc(TECNICO_STATUS_META[key].label)} <b>${n}</b></button>`);
+    });
+    box.innerHTML = chips.join("");
+    $$(".chip", box).forEach((c) => c.addEventListener("click", () => {
+      tecnicoFiltros.status = c.dataset.status;
+      renderTecnicos();
+    }));
+  }
+
+  function tecnicoObsBadge(o) {
+    const meta = { positivo: ["Achou bom", "t-melhoria"], melhoria: ["Melhoria", "t-area"], problema: ["Problema", "t-bug"] }[o.tipo] || ["Nota", "t-resp"];
+    return `<span class="ajuste-tag ${meta[1]}">${meta[0]}</span>`;
+  }
+
+  function tecnicoCard(t) {
+    const st = TECNICO_STATUS_META[t.status] || TECNICO_STATUS_META.a_contatar;
+    const opts = TECNICO_STATUS_ORDEM.map((k) =>
+      `<option value="${k}"${k === t.status ? " selected" : ""}>${esc(TECNICO_STATUS_META[k].label)}</option>`).join("");
+    const obsHtml = (t.observacoes || []).slice().reverse().map((o) => `
+      <div class="tecnico-obs-item">
+        ${tecnicoObsBadge(o)}
+        <p>${esc(o.texto)}</p>
+        <span class="tecnico-obs-meta">${esc(o.autor || "—")} · ${fmtWhen(o.created_at)}</span>
+        <button type="button" class="del" data-del-obs="${o.id}" title="Remover">✕</button>
+      </div>`).join("");
+    return `<article class="ajuste-item tecnico-item ${st.cls}" data-id="${t.id}">
+      <header class="ajuste-item-head">
+        <div class="ajuste-item-copy">
+          <h3>${esc(t.nome)}</h3>
+          <div class="ajuste-tags">
+            <span class="ajuste-tag ${t.papel === "lider" ? "t-lider" : "t-tecnico"}">${t.papel === "lider" ? "Líder de equipe" : "Técnico"}</span>
+            ${t.regional ? `<span class="ajuste-tag t-area">${esc(t.regional)}</span>` : ""}
+            ${t.lider_nome ? `<span class="ajuste-tag t-resp">responde a ${esc(t.lider_nome)}</span>` : ""}
+          </div>
+        </div>
+        <select class="ajuste-status tecnico-status" title="Situação do QA">${opts}</select>
+        <button type="button" class="ajuste-edit" aria-label="Editar técnico" title="Editar">✎</button>
+      </header>
+      <div class="tecnico-actions">
+        <button type="button" class="btn-ghost tecnico-wa-btn">Enviar convite pelo WhatsApp</button>
+        <span class="tecnico-tel">${esc(formatTelefone(t.telefone))}</span>
+      </div>
+      <div class="tecnico-obs-add">
+        <select class="tecnico-obs-tipo">
+          <option value="">Nota geral</option>
+          <option value="positivo">Achou bom</option>
+          <option value="melhoria">Melhoria</option>
+          <option value="problema">Problema</option>
+        </select>
+        <textarea class="tecnico-obs-texto" rows="2" placeholder="o que ele relatou no atendimento…"></textarea>
+        <button type="button" class="btn-primary tecnico-obs-add-btn">Registrar</button>
+      </div>
+      ${obsHtml ? `<div class="tecnico-obs-list">${obsHtml}</div>` : ""}
+    </article>`;
+  }
+
+  function renderTecnicoList() {
+    const lista = $("#tecnicos-list");
+    const itens = tecnicosFiltrados();
+    const semNada = !TECNICOS.length;
+    $("#tecnicos-empty").hidden = !semNada;
+    if (semNada) { lista.innerHTML = ""; return; }
+    lista.innerHTML = itens.length
+      ? itens.map(tecnicoCard).join("")
+      : '<div class="ajustes-nofilter">Nenhum técnico com esses filtros.</div>';
+
+    $$(".tecnico-item", lista).forEach((card) => {
+      const id = Number(card.dataset.id);
+      $(".ajuste-edit", card).addEventListener("click", () => openTecnicoModal(id));
+      $(".ajuste-item-copy h3", card).addEventListener("click", () => openTecnicoModal(id));
+      $(".tecnico-status", card).addEventListener("change", (e) => setTecnicoStatus(id, e.target.value));
+      $(".tecnico-wa-btn", card).addEventListener("click", () => abrirConviteTecnico(id));
+      $(".tecnico-obs-add-btn", card).addEventListener("click", () => addTecnicoObs(id, card));
+      $$("[data-del-obs]", card).forEach((btn) => btn.addEventListener("click", () => delTecnicoObs(Number(btn.dataset.delObs))));
+    });
+  }
+
+  function atualizaContadorTecnicos() {
+    const badge = $("#module-tab-tecnicos-count");
+    if (!badge) return;
+    const ativos = TECNICOS.filter((t) => t.status !== "concluido" && t.status !== "sem_retorno").length;
+    badge.textContent = ativos;
+    badge.hidden = !ativos;
+  }
+
+  function substituiTecnicoLocal(atualizado) {
+    const i = TECNICOS.findIndex((x) => x.id === atualizado.id);
+    if (i >= 0) TECNICOS[i] = atualizado;
+  }
+
+  async function setTecnicoStatus(id, status) {
+    try {
+      substituiTecnicoLocal(await api(`/api/tecnicos/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }),
+      }));
+      renderTecnicos();
+      toast("Situação atualizada.");
+    } catch (e) { toast("Erro ao atualizar: " + e.message, true); }
+  }
+
+  function abrirConviteTecnico(id) {
+    const t = TECNICOS.find((x) => x.id === id);
+    if (!t) return;
+    $("#tecnico-msg-texto").value = mensagemTecnico(t);
+    $("#tecnico-msg-abrir").href = waLink(t);
+    $("#tecnico-msg-modal").hidden = false;
+    // primeira vez que o convite é gerado, já sai de "a contatar"
+    if (t.status === "a_contatar") setTecnicoStatus(id, "convidado");
+  }
+
+  $("#tecnico-msg-close").addEventListener("click", () => { $("#tecnico-msg-modal").hidden = true; });
+  $("#tecnico-msg-modal").addEventListener("click", (e) => { if (e.target.id === "tecnico-msg-modal") $("#tecnico-msg-modal").hidden = true; });
+  $("#tecnico-msg-copiar").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText($("#tecnico-msg-texto").value); toast("Mensagem copiada."); }
+    catch (e) { toast("Não deu pra copiar automaticamente — selecione o texto e copie manualmente.", true); }
+  });
+
+  async function addTecnicoObs(id, card) {
+    const tipo = $(".tecnico-obs-tipo", card).value;
+    const texto = $(".tecnico-obs-texto", card).value.trim();
+    if (!texto) { toast("Escreva a observação antes de registrar.", true); return; }
+    try {
+      substituiTecnicoLocal(await api(`/api/tecnicos/${id}/observacoes`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ texto, tipo: tipo || null, autor: testerName() || null }),
+      }));
+      renderTecnicos();
+      toast("Observação registrada.");
+    } catch (e) { toast("Erro ao registrar: " + e.message, true); }
+  }
+
+  async function delTecnicoObs(obsId) {
+    if (!confirm("Remover esta observação?")) return;
+    try {
+      substituiTecnicoLocal(await api(`/api/tecnicos/observacoes/${obsId}`, { method: "DELETE" }));
+      renderTecnicos();
+      toast("Observação removida.");
+    } catch (e) { toast("Erro ao remover: " + e.message, true); }
+  }
+
+  let editingTecnicoId = null;
+  const tecnicoModal = $("#tecnico-modal");
+  const tecnicoForm = $("#tecnico-form");
+
+  function openTecnicoModal(id) {
+    editingTecnicoId = id || null;
+    tecnicoForm.reset();
+    const t = id ? TECNICOS.find((x) => x.id === id) : null;
+    $("#tecnico-modal-title").textContent = id ? "Editar técnico" : "Novo técnico";
+    $("#tecnico-delete").hidden = !id;
+    if (t) {
+      tecnicoForm.nome.value = t.nome;
+      tecnicoForm.telefone.value = formatTelefone(t.telefone);
+      tecnicoForm.papel.value = t.papel;
+      tecnicoForm.regional.value = t.regional || "";
+      tecnicoForm.lider_nome.value = t.lider_nome || "";
+    }
+    tecnicoModal.hidden = false;
+  }
+  function closeTecnicoModal() { tecnicoModal.hidden = true; editingTecnicoId = null; }
+
+  $("#btn-add-tecnico").addEventListener("click", () => openTecnicoModal(null));
+  $("#btn-add-tecnico-vazio").addEventListener("click", () => openTecnicoModal(null));
+  $("#tecnico-cancel").addEventListener("click", closeTecnicoModal);
+  $("#tecnico-modal-close").addEventListener("click", closeTecnicoModal);
+  tecnicoModal.addEventListener("click", (e) => { if (e.target.id === "tecnico-modal") closeTecnicoModal(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!tecnicoModal.hidden) closeTecnicoModal();
+    if (!$("#tecnico-msg-modal").hidden) $("#tecnico-msg-modal").hidden = true;
+  });
+
+  tecnicoForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(tecnicoForm);
+    const nome = (fd.get("nome") || "").trim();
+    const telefone = (fd.get("telefone") || "").trim();
+    if (!nome || !telefone) return;
+    const payload = {
+      nome, telefone,
+      papel: fd.get("papel"),
+      regional: fd.get("regional") || null,
+      lider_nome: fd.get("lider_nome") || null,
+    };
+    try {
+      if (editingTecnicoId) {
+        substituiTecnicoLocal(await api(`/api/tecnicos/${editingTecnicoId}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        }));
+      } else {
+        TECNICOS.push(await api("/api/tecnicos", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, autor: testerName() || null }),
+        }));
+      }
+      closeTecnicoModal();
+      renderTecnicos();
+      toast("Técnico salvo.");
+    } catch (err) { toast("Erro ao salvar: " + err.message, true); }
+  });
+
+  $("#tecnico-delete").addEventListener("click", async () => {
+    if (!editingTecnicoId) return;
+    if (!confirm("Excluir este técnico?")) return;
+    try {
+      await api(`/api/tecnicos/${editingTecnicoId}`, { method: "DELETE" });
+      TECNICOS = TECNICOS.filter((t) => t.id !== editingTecnicoId);
+      closeTecnicoModal();
+      renderTecnicos();
+      toast("Técnico excluído.");
+    } catch (e) { toast("Erro ao excluir: " + e.message, true); }
+  });
+
+  $$("#tecnicos-chips-papel .chip").forEach((c) => c.addEventListener("click", () => {
+    tecnicoFiltros.papel = c.dataset.papel;
+    $$("#tecnicos-chips-papel .chip").forEach((o) => o.classList.toggle("active", o === c));
+    renderTecnicoList();
+  }));
+
+  let tecnicoBuscaTimer = null;
+  $("#tecnicos-busca").addEventListener("input", (e) => {
+    clearTimeout(tecnicoBuscaTimer);
+    tecnicoBuscaTimer = setTimeout(() => {
+      tecnicoFiltros.busca = e.target.value.trim();
+      renderTecnicoList();
+    }, 200);
+  });
+
   // na entrada: aplica o chip e, se ninguém escolheu ainda, força a escolha do perfil
   applyPerfilChip();
   applyModuleVisibility();
@@ -3879,4 +4210,5 @@
   loadNotes();
   loadSituacoes();
   loadAjustes();
+  loadTecnicos();
 })();

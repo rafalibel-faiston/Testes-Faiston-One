@@ -76,6 +76,9 @@
     </button>
     <button type="button" class="module-tab" data-module="agenda" id="module-tab-agenda" aria-selected="false" hidden>Agenda</button>
     <button type="button" class="module-tab" data-module="todo" id="module-tab-todo" aria-selected="false" hidden>Todo</button>
+    <button type="button" class="module-tab" data-module="tecnicos" id="module-tab-tecnicos" aria-selected="false" hidden>
+      Técnicos <span class="module-tab-count" id="module-tab-tecnicos-count" hidden>0</span>
+    </button>
   </nav>
 
   <div id="module-dispatcher">
@@ -395,6 +398,49 @@
         <div class="kanban-col-head"><h3>Feito</h3><span class="kanban-count" id="kanban-count-feito">0</span></div>
         <div class="kanban-list" id="kanban-list-feito"></div>
       </div>
+    </div>
+  </div>
+
+  <div id="module-tecnicos" hidden>
+    <section class="diagrams-head">
+      <div class="diagrams-head-copy">
+        <h2>Técnicos — QA do Track One</h2>
+        <p>Base dos técnicos e líderes convidados a testar o <b>Track One</b> antes de liberar geral.
+        Cada um tem o funil de QA (a contatar → convidado → instalado → em teste → concluído) e o
+        histórico do que relatou no atendimento real: o que achou bom, o que precisa melhorar e os
+        problemas encontrados.</p>
+      </div>
+      <button type="button" class="add-btn" id="btn-add-tecnico">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Novo técnico
+      </button>
+    </section>
+
+    <div class="ajustes-stats" id="tecnicos-stats"></div>
+
+    <div class="ajustes-filters">
+      <div class="chip-row">
+        <span class="chip-row-label">Situação</span>
+        <div class="chips" id="tecnicos-chips-status"></div>
+      </div>
+      <div class="chip-row">
+        <span class="chip-row-label">Papel</span>
+        <div class="chips" id="tecnicos-chips-papel">
+          <button type="button" class="chip active" data-papel="">Todos</button>
+          <button type="button" class="chip" data-papel="tecnico">Técnico</button>
+          <button type="button" class="chip" data-papel="lider">Líder</button>
+        </div>
+      </div>
+      <input type="search" id="tecnicos-busca" class="tecnicos-busca" placeholder="Buscar por nome…" autocomplete="off">
+    </div>
+
+    <div class="ajustes-list" id="tecnicos-list"></div>
+    <div class="ajustes-empty" id="tecnicos-empty" hidden>
+      <p>Nenhum técnico cadastrado ainda.</p>
+      <button type="button" class="add-btn" id="btn-add-tecnico-vazio">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Cadastrar o primeiro
+      </button>
     </div>
   </div>
 
@@ -851,6 +897,62 @@
         <button type="submit" class="btn-primary" id="ajuste-save">Salvar ajuste</button>
       </div>
     </form>
+  </div>
+</div>
+
+<div class="modal" id="tecnico-modal" hidden aria-modal="true" role="dialog">
+  <div class="modal-card ajuste-card">
+    <div class="modal-head">
+      <h3 id="tecnico-modal-title">Novo técnico</h3>
+      <button type="button" class="modal-close" id="tecnico-modal-close" aria-label="Fechar">✕</button>
+    </div>
+    <form id="tecnico-form" class="modal-body">
+      <label class="fld fld-wide">Nome <b>*</b>
+        <input name="nome" placeholder="nome completo" required>
+      </label>
+      <div class="form-grid">
+        <label class="fld">Telefone (WhatsApp) <b>*</b>
+          <input name="telefone" placeholder="(11) 99999-8888" required>
+        </label>
+        <label class="fld">Papel
+          <select name="papel">
+            <option value="tecnico" selected>Técnico</option>
+            <option value="lider">Líder de equipe</option>
+          </select>
+        </label>
+        <label class="fld">Regional
+          <input name="regional" placeholder="ex.: SP capital (opcional)" autocomplete="off">
+        </label>
+      </div>
+      <label class="fld">Líder direto
+        <input name="lider_nome" placeholder="a quem ele responde (opcional, quando papel = técnico)" autocomplete="off">
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="tecnico-delete" hidden>Excluir</button>
+        <button type="button" class="btn-ghost" id="tecnico-cancel">Cancelar</button>
+        <button type="submit" class="btn-primary" id="tecnico-save">Salvar técnico</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal" id="tecnico-msg-modal" hidden aria-modal="true" role="dialog">
+  <div class="modal-card ajuste-card">
+    <div class="modal-head">
+      <h3>Convite pronto</h3>
+      <button type="button" class="modal-close" id="tecnico-msg-close" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="notes-hint">O link abre o WhatsApp já com o texto preenchido. Ele só leva o texto —
+      envie o <b>APK</b> e o <b>manual</b> como anexo direto na conversa, já que o link não anexa arquivo.</p>
+      <label class="fld fld-wide">Mensagem
+        <textarea id="tecnico-msg-texto" rows="10" readonly></textarea>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="tecnico-msg-copiar">Copiar texto</button>
+        <a class="btn-primary" id="tecnico-msg-abrir" target="_blank" rel="noopener">Abrir no WhatsApp</a>
+      </div>
+    </div>
   </div>
 </div>
 

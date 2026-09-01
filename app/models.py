@@ -344,6 +344,57 @@ AJUSTE_PRIORIDADE_ORDEM = case(
 )
 
 
+class Tecnico(Base):
+    """Um técnico (ou líder de equipe) convidado a testar o Track One — o app
+    novo que acompanha o atendimento do chamado até o fechamento da RAT.
+
+    `papel` decide qual mensagem de convite é usada: "tecnico" manda o convite
+    direto pro celular dele; "lider" avisa o líder antes de a Faiston chamar o
+    time dele um a um pra instalação (ver TEMPLATE_LIDER em routers/tecnicos.py).
+    `status` é o funil de QA: convite -> instalação -> uso no atendimento real
+    -> feedback registrado.
+    """
+    __tablename__ = "tecnicos"
+
+    id = Column(Integer, primary_key=True)
+    nome = Column(String, nullable=False)
+    # dígitos só, com DDI (ex.: 5511999998888) — normalizado no router antes de gravar
+    telefone = Column(String, nullable=False)
+    papel = Column(String, nullable=False, default="tecnico", server_default="tecnico")  # tecnico / lider
+    regional = Column(String, nullable=True)      # cidade/regional de atuação
+    lider_nome = Column(String, nullable=True)    # a quem o técnico responde (quando papel=tecnico)
+    status = Column(String, nullable=False, default="a_contatar", server_default="a_contatar")
+    autor = Column(String, nullable=True)         # quem cadastrou/está conduzindo o teste
+    convidado_em = Column(DateTime(timezone=True), nullable=True)
+    instalado_em = Column(DateTime(timezone=True), nullable=True)
+    concluido_em = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+    observacoes = relationship(
+        "TecnicoObservacao", back_populates="tecnico", cascade="all, delete-orphan",
+        order_by="TecnicoObservacao.id",
+    )
+
+
+class TecnicoObservacao(Base):
+    """Uma nota de QA sobre o teste de um técnico com o Track One.
+
+    `tipo` classifica a nota pra virar leitura rápida na tela: "positivo" (o
+    que ele achou bom), "melhoria" (sugestão/ponto a evoluir), "problema"
+    (bug/erro encontrado) ou None (nota geral — o que ele só relatou)."""
+    __tablename__ = "tecnico_observacoes"
+
+    id = Column(Integer, primary_key=True)
+    tecnico_id = Column(Integer, ForeignKey("tecnicos.id", ondelete="CASCADE"), nullable=False)
+    autor = Column(String, nullable=True)     # quem registrou a nota (geralmente quem entrevistou o técnico)
+    texto = Column(Text, nullable=False)
+    tipo = Column(String, nullable=True)      # positivo / melhoria / problema / None
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    tecnico = relationship("Tecnico", back_populates="observacoes")
+
+
 class Observation(Base):
     """Uma nota do historico de observacoes de um caso — cada uma com seu proprio autor,
     diferente do campo antigo `TestCase.observacao` (unico, qualquer um sobrescrevia)."""

@@ -20,6 +20,7 @@ from .routers import agenda as agenda_router
 from .routers import todo as todo_router
 from .routers import ativos as ativos_router
 from .routers import relatorio as relatorio_router
+from .routers import tecnicos as tecnicos_router
 from .mcp_server import mcp as mcp_server, oauth_provider, MCP_TOKEN
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -66,6 +67,7 @@ app.include_router(auth_router.router, prefix="/api")
 app.include_router(agenda_router.router, prefix="/api")
 app.include_router(todo_router.router, prefix="/api")
 app.include_router(ativos_router.router, prefix="/api")
+app.include_router(tecnicos_router.router, prefix="/api")
 # página pronta da pauta da reunião — sem prefixo /api, é pra abrir no navegador
 app.include_router(relatorio_router.router)
 
