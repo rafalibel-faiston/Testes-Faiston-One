@@ -23,8 +23,20 @@ def _next_situacao_code(db: Session) -> str:
 
 
 def _situacao_query(db: Session):
+    # O print em si (coluna `data`, até 8MB) só é lido no endpoint dedicado
+    # GET /situacoes/screenshots/{id} — aqui só precisamos do nome/tipo pra
+    # miniatura, então evitamos trazer o binário inteiro em toda listagem.
     return db.query(models.Situacao).options(
-        joinedload(models.Situacao.estagios).joinedload(models.SituacaoEstagio.screenshots),
+        joinedload(models.Situacao.estagios)
+        .joinedload(models.SituacaoEstagio.screenshots)
+        .load_only(
+            models.SituacaoScreenshot.id,
+            models.SituacaoScreenshot.estagio_id,
+            models.SituacaoScreenshot.filename,
+            models.SituacaoScreenshot.content_type,
+            models.SituacaoScreenshot.uploaded_by,
+            models.SituacaoScreenshot.created_at,
+        ),
         joinedload(models.Situacao.estagios)
         .joinedload(models.SituacaoEstagio.observations)
         .joinedload(models.SituacaoObservation.revisions),

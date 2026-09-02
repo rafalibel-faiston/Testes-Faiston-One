@@ -83,7 +83,7 @@ class SituacaoEstagio(Base):
     __tablename__ = "situacao_estagios"
 
     id = Column(Integer, primary_key=True)
-    situacao_id = Column(Integer, ForeignKey("situacoes.id", ondelete="CASCADE"), nullable=False)
+    situacao_id = Column(Integer, ForeignKey("situacoes.id", ondelete="CASCADE"), nullable=False, index=True)
     ordem = Column(Integer, nullable=False, default=0, server_default="0")
     nome = Column(String, nullable=False)           # ex.: "03 · Téc. Aceitou"
     frente = Column(String, nullable=False, default="Transversal")
@@ -106,7 +106,7 @@ class SituacaoObservation(Base):
     __tablename__ = "situacao_observations"
 
     id = Column(Integer, primary_key=True)
-    estagio_id = Column(Integer, ForeignKey("situacao_estagios.id", ondelete="CASCADE"), nullable=False)
+    estagio_id = Column(Integer, ForeignKey("situacao_estagios.id", ondelete="CASCADE"), nullable=False, index=True)
     autor = Column(String, nullable=True)
     texto = Column(Text, nullable=False)
     # marcação de cor da observação: "verde" (deu certo, resolvido) ou "vermelho"
@@ -133,7 +133,7 @@ class SituacaoObservationRevision(Base):
 
     id = Column(Integer, primary_key=True)
     observation_id = Column(
-        Integer, ForeignKey("situacao_observations.id", ondelete="CASCADE"), nullable=False
+        Integer, ForeignKey("situacao_observations.id", ondelete="CASCADE"), nullable=False, index=True
     )
     texto = Column(Text, nullable=False)
     cor = Column(String, nullable=True)
@@ -148,7 +148,7 @@ class SituacaoScreenshot(Base):
     __tablename__ = "situacao_screenshots"
 
     id = Column(Integer, primary_key=True)
-    estagio_id = Column(Integer, ForeignKey("situacao_estagios.id", ondelete="CASCADE"), nullable=False)
+    estagio_id = Column(Integer, ForeignKey("situacao_estagios.id", ondelete="CASCADE"), nullable=False, index=True)
     filename = Column(String, nullable=False)
     content_type = Column(String, nullable=False)
     data = Column(LargeBinary, nullable=False)
@@ -324,7 +324,7 @@ class AtivoAjustePrint(Base):
     __tablename__ = "ativo_ajuste_prints"
 
     id = Column(Integer, primary_key=True)
-    ajuste_id = Column(Integer, ForeignKey("ativo_ajustes.id", ondelete="CASCADE"), nullable=False)
+    ajuste_id = Column(Integer, ForeignKey("ativo_ajustes.id", ondelete="CASCADE"), nullable=False, index=True)
     filename = Column(String, nullable=False)
     content_type = Column(String, nullable=False)
     data = Column(LargeBinary, nullable=False)
@@ -442,14 +442,14 @@ class TecnicoObservacao(Base):
     __tablename__ = "tecnico_observacoes"
 
     id = Column(Integer, primary_key=True)
-    tecnico_id = Column(Integer, ForeignKey("tecnicos.id", ondelete="CASCADE"), nullable=False)
+    tecnico_id = Column(Integer, ForeignKey("tecnicos.id", ondelete="CASCADE"), nullable=False, index=True)
     autor = Column(String, nullable=True)     # quem registrou a nota (geralmente quem entrevistou o técnico)
     texto = Column(Text, nullable=False)
     tipo = Column(String, nullable=True)      # positivo / melhoria / problema / None
     # quando o relato vira item do backlog da Gestão de Ativos: sem isso, dez
     # técnicos reclamando da mesma coisa continuam sendo dez textos soltos em vez
     # de uma linha priorizada que a LP consegue trabalhar
-    ajuste_id = Column(Integer, ForeignKey("ativo_ajustes.id", ondelete="SET NULL"), nullable=True)
+    ajuste_id = Column(Integer, ForeignKey("ativo_ajustes.id", ondelete="SET NULL"), nullable=True, index=True)
     # em qual build o técnico viu isso, e em qual atendimento — o chamado é o que
     # permite ir no Dispatcher/NEXO investigar o caso concreto em vez de discutir
     # o relato no abstrato
@@ -474,7 +474,7 @@ class Observation(Base):
     __tablename__ = "observations"
 
     id = Column(Integer, primary_key=True)
-    test_case_id = Column(Integer, ForeignKey("test_cases.id", ondelete="CASCADE"), nullable=False)
+    test_case_id = Column(Integer, ForeignKey("test_cases.id", ondelete="CASCADE"), nullable=False, index=True)
     autor = Column(String, nullable=True)
     texto = Column(Text, nullable=False)
     # marcação de cor da observação: "verde" (deu certo, resolvido) ou "vermelho"
@@ -518,7 +518,7 @@ class Screenshot(Base):
     __tablename__ = "screenshots"
 
     id = Column(Integer, primary_key=True)
-    test_case_id = Column(Integer, ForeignKey("test_cases.id", ondelete="CASCADE"), nullable=False)
+    test_case_id = Column(Integer, ForeignKey("test_cases.id", ondelete="CASCADE"), nullable=False, index=True)
     filename = Column(String, nullable=False)
     content_type = Column(String, nullable=False)
     data = Column(LargeBinary, nullable=False)

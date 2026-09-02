@@ -38,11 +38,26 @@ def _next_manual_code(db: Session) -> str:
     return f"FC-MAN-{n:02d}"
 
 
+# O print em si (coluna `data`, até 8MB) só é lido no endpoint dedicado
+# GET /screenshots/{id} — aqui a tela só precisa de nome/tipo/autor pra
+# montar a miniatura, então evitamos trazer o binário inteiro do banco
+# em toda listagem/detalhe de caso.
+def _screenshots_metadata_only(loader):
+    return loader.load_only(
+        models.Screenshot.id,
+        models.Screenshot.test_case_id,
+        models.Screenshot.filename,
+        models.Screenshot.content_type,
+        models.Screenshot.uploaded_by,
+        models.Screenshot.created_at,
+    )
+
+
 def _get_case_or_404(db: Session, code: str) -> models.TestCase:
     case = (
         db.query(models.TestCase)
         .options(
-            joinedload(models.TestCase.screenshots),
+            _screenshots_metadata_only(joinedload(models.TestCase.screenshots)),
             joinedload(models.TestCase.observations).joinedload(models.Observation.revisions),
         )
         .filter(models.TestCase.code == code, models.TestCase.active.is_(True))
@@ -58,7 +73,7 @@ def list_cases(db: Session = Depends(get_db)):
     cases = (
         db.query(models.TestCase)
         .options(
-            joinedload(models.TestCase.screenshots),
+            _screenshots_metadata_only(joinedload(models.TestCase.screenshots)),
             joinedload(models.TestCase.observations).joinedload(models.Observation.revisions),
         )
         .filter(models.TestCase.active.is_(True))

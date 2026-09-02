@@ -445,6 +445,28 @@ def migrate_schema(engine):
             stmts.append("ALTER TABLE agenda_eventos ADD COLUMN concluido BOOLEAN NOT NULL DEFAULT "
                          + ("FALSE" if pg else "0"))
 
+    # índices nas FKs que ficaram sem — sem eles, achar os filhos de um caso/
+    # estágio/técnico é sequential scan na tabela inteira. IF NOT EXISTS é
+    # suportado tanto no Postgres (produção) quanto no SQLite (dev local).
+    fk_indexes = [
+        ("screenshots", "test_case_id"),
+        ("observations", "test_case_id"),
+        ("situacao_estagios", "situacao_id"),
+        ("situacao_observations", "estagio_id"),
+        ("situacao_observation_revisions", "observation_id"),
+        ("situacao_screenshots", "estagio_id"),
+        ("ativo_ajuste_prints", "ajuste_id"),
+        ("tecnico_observacoes", "tecnico_id"),
+        ("tecnico_observacoes", "ajuste_id"),
+    ]
+    for tabela, coluna in fk_indexes:
+        if tabela not in existing_tables:
+            continue
+        if coluna not in {c["name"] for c in insp.get_columns(tabela)}:
+            continue
+        nome_indice = f"ix_{tabela}_{coluna}"
+        stmts.append(f"CREATE INDEX IF NOT EXISTS {nome_indice} ON {tabela} ({coluna})")
+
     if not stmts:
         return 0
     with engine.begin() as conn:
