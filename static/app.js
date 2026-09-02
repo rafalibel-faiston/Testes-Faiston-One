@@ -2996,7 +2996,10 @@
 
   // leva da trilha de novidades até o card do teste: garante o fluxo/sub-aba
   // certos, limpa filtro que poderia esconder o card, rola até ele e destaca.
+  // Atividades de Situação reaproveitam o mesmo campo case_code (códigos
+  // SIT-xx) — essas vivem na aba "Situações", não em "Testes".
   function goToCase(code) {
+    if (String(code).startsWith("SIT-")) { goToSituacao(code); return; }
     const c = findCase(code);
     closeActivityModal();
     if (c && caseFlow(c) !== currentFlow) setFlow(caseFlow(c));
@@ -3010,6 +3013,29 @@
       const card = document.querySelector(`.case[data-code="${cssEscape(code)}"]`);
       if (!card) { toast("Esse teste não está mais na lista (pode ter sido excluído)."); return; }
       card.classList.remove("hidden");
+      card.scrollIntoView({ behavior: "smooth", block: "center" });
+      card.classList.add("case-flash");
+      setTimeout(() => card.classList.remove("case-flash"), 1800);
+    }, 80);
+  }
+
+  // mesma ideia de goToCase, mas pra Situação: troca de fluxo/aba, limpa
+  // filtro e re-renderiza na hora (sem esperar o fetch que o switchView
+  // dispara) pra garantir que o card já esteja no DOM quando for rolar até ele.
+  function goToSituacao(code) {
+    const s = findSituacao(code);
+    closeActivityModal();
+    if (s && situacaoFlow(s) !== currentFlow) setFlow(situacaoFlow(s));
+    switchView("situacoes");
+    expandedSituacoes.add(code);
+    sitActiveFilters.situacao = sitActiveFilters.frente = sitActiveFilters.status = "";
+    const sitBusca = $("#sit-f-busca");
+    if (sitBusca) sitBusca.value = "";
+    renderSituacoes();
+    setTimeout(() => {
+      const card = document.querySelector(`.situacao[data-code="${cssEscape(code)}"]`);
+      if (!card) { toast("Essa situação não está mais na lista (pode ter sido excluída)."); return; }
+      card.classList.remove("sit-hidden");
       card.scrollIntoView({ behavior: "smooth", block: "center" });
       card.classList.add("case-flash");
       setTimeout(() => card.classList.remove("case-flash"), 1800);
