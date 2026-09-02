@@ -4026,6 +4026,9 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
       <button type="button" class="fase-aba${f.id === FASE_ATUAL ? " active" : ""} st-${f.status}" data-fase="${f.id}">
         <span class="fase-nome">${esc(f.nome)}</span>
         <span class="fase-sub">${f.total_tecnicos} técnico(s) · ${FASE_STATUS_LABEL[f.status] || f.status}${f.versao_app ? ` · ${esc(f.versao_app)}` : ""}</span>
+        <span class="fase-editar" data-editar-fase="${f.id}" title="Editar ou excluir esta fase">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </span>
       </button>`).join("");
     nav.innerHTML = abas + `
       <button type="button" class="fase-aba fase-base${FASE_ATUAL === null ? " active" : ""}" data-fase="">
@@ -4040,6 +4043,10 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
       localStorage.setItem(FASE_KEY, FASE_ATUAL || "");
       renderFasesNav();
       loadTecnicos();
+    }));
+    $$("[data-editar-fase]", nav).forEach((el) => el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      abrirFaseModal(Number(el.dataset.editarFase));
     }));
   }
 

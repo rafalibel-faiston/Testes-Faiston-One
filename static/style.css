@@ -1768,8 +1768,8 @@ body.inline-connecting * { cursor:crosshair !important; }
    card) e o que faz o critério de liberação ser por leva, não global. */
 .fases-nav { display:flex; gap:8px; flex-wrap:wrap; margin:16px 0 14px; }
 .fase-aba {
-  display:flex; flex-direction:column; gap:2px; align-items:flex-start; cursor:pointer;
-  padding:9px 15px; border-radius:var(--radius); border:1px solid var(--line);
+  position:relative; display:flex; flex-direction:column; gap:2px; align-items:flex-start; cursor:pointer;
+  padding:9px 30px 9px 15px; border-radius:var(--radius); border:1px solid var(--line);
   background:var(--surface); color:var(--text-2); font-family:'Roboto',sans-serif;
   transition:transform .18s var(--ease), box-shadow .18s var(--ease), border-color .18s var(--ease);
 }
@@ -1778,6 +1778,12 @@ body.inline-connecting * { cursor:crosshair !important; }
 .fase-sub { font-size:10.5px; color:var(--text-3); }
 .fase-aba.active { border-color:transparent; background:var(--grad-primary); box-shadow:0 10px 24px -14px rgba(0,84,236,.7); }
 .fase-aba.active .fase-nome, .fase-aba.active .fase-sub { color:#fff; }
+.fase-editar {
+  position:absolute; top:7px; right:7px; display:flex; align-items:center; justify-content:center;
+  width:20px; height:20px; border-radius:50%; color:inherit; opacity:.55;
+}
+.fase-editar:hover { opacity:1; background:rgba(0,0,0,.08); }
+.fase-aba.active .fase-editar:hover { background:rgba(255,255,255,.22); }
 /* fase liberada é destino cumprido: verde, mesmo quando não é a aba aberta */
 .fase-aba.st-liberada { border-color:var(--ok-ln); background:var(--ok-bg); }
 .fase-aba.st-liberada.active { background:linear-gradient(120deg,#0d9d6c,#34d399); border-color:transparent; }
