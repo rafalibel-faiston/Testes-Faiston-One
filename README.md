@@ -353,6 +353,35 @@ No card, três botões cobrem a conversa inteira do piloto:
   formulário dentro.
 - **Copiar link do formulário** — só o link, pra colar onde quiser.
 
+### Painel do piloto — "já dá pra liberar geral?"
+
+No topo da aba, o painel responde a pergunta que a diretoria faz, com os números
+vivos do piloto:
+
+- **Parados no funil** — quem não avança há 3+ dias, com o tempo parado e um botão
+  **cobrar** que já monta a mensagem certa pro ponto onde a pessoa travou (quem não
+  instalou é chamado pra instalação, quem instalou é lembrado de usar no próximo
+  atendimento, quem já usou recebe o link do formulário). Piloto morre de silêncio,
+  não de bug.
+- **Funil de adoção** — quantos chegaram em cada etapa, pra ver onde trava.
+- **Cobertura do fluxo** — quantos exercitaram cada etapa no atendimento real. É o
+  número que desmente o "está testado": 40 técnicos usando não valem nada se só 2
+  fecharam RAT pelo app.
+- **Notas dadas ao app** — média e distribuição de 1 a 5.
+- **Termos mais citados** — as palavras que se repetem nos relatos de problema e
+  melhoria. É leitura rápida pra achar padrão ("notificação apareceu 12 vezes"),
+  não classificação: o agrupamento que vale é o vínculo com o ajuste.
+- **O que já virou trabalho pra LP** — os ajustes gerados pelo piloto, ordenados
+  por quantos técnicos relataram o mesmo ponto.
+- **Critérios pra liberar geral** — concluídos, nota média, cobertura de cada etapa
+  e nenhum problema fora do backlog, cada um com o valor atual contra a meta.
+
+Cada bloco mostra uma métrica só (quantos técnicos), então usa uma cor só — cor por
+categoria ali seria arco-íris sem significado. A exceção é a distribuição de notas,
+que usa a escala ruim/ok/bom e vem sempre com o rótulo escrito ao lado, nunca só a
+cor. As metas são parâmetros do endpoint (`meta_concluidos`, `meta_nota`,
+`meta_etapa`, `dias_parado`).
+
 ### Do relato do técnico pro backlog da LP
 
 Feedback que fica só no card do técnico não vira correção. Todo relato de
@@ -435,6 +464,12 @@ app já usa entre a lista de status do Python e a do JS).
   a palavra exata devolve 400 e não apaga nada)
 - `POST /api/tecnicos/observacoes/{id}/virar-ajuste` — transforma o relato em item
   da Gestão de Ativos e amarra os dois (recusa se aquele relato já virou ajuste)
+- `POST /api/tecnicos/observacoes/{id}/vincular-ajuste` — aponta o relato pra um
+  ajuste que já existe, em vez de criar outro: é assim que vários técnicos
+  relatando o mesmo ponto viram um item com vários relatos
+- `GET  /api/tecnicos/piloto` — os números do painel (funil, cobertura, notas,
+  termos, parados, ranking e critérios); aceita `meta_concluidos`, `meta_nota`,
+  `meta_etapa` e `dias_parado`
 - `POST /api/tecnicos/importar` — sobe a base (multipart, campo `file`); devolve
   `criados`, `atualizados`, `rejeitados`, o `resumo` por motivo e a lista `erros`
   com linha/nome/telefone/motivo de cada rejeitada

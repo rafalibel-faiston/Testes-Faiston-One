@@ -3944,12 +3944,34 @@ São 2 minutinhos, direto no link:
 
 Pode ser sincero, é justamente pra ajustar o que estiver ruim antes de liberar pra todo mundo. Valeu demais!`;
 
+  // cobrança de quem parou no meio — espelha TEMPLATES_COBRANCA do router
+  const TECNICO_TEMPLATES_COBRANCA = {
+    convidado: `Fala, {nome}! Tudo certo?
+Passando pra lembrar do Track One — ficou de marcar a instalação comigo e ainda não conseguimos fechar.
+São 10 minutinhos pra instalar e eu te passo o manual na hora. Quando fica bom pra você?`,
+    instalado: `Fala, {nome}! Tudo certo?
+Você já está com o Track One instalado — é só usar no seu próximo atendimento, do começo ao fim.
+Qualquer coisa estranha me chama, e no fim eu te mando um link rapidinho pra contar como foi. Fechou?`,
+    em_teste: `Fala, {nome}! Tudo certo?
+Vi que você já usou o Track One no atendimento — só falta me contar como foi, são 2 minutinhos:
+
+{link}
+
+Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
+  };
+
   function linkFormulario(t) {
     return `${window.location.origin}/formulario/${t.token || ""}`;
   }
 
   function mensagemTecnico(t, tipo) {
     const primeiroNome = (t.nome || "").trim().split(" ")[0] || t.nome;
+    if (tipo === "cobranca") {
+      const template = TECNICO_TEMPLATES_COBRANCA[t.status];
+      // quem ainda nem foi convidado não tem o que cobrar: recebe o convite
+      if (!template) return mensagemTecnico(t, "convite");
+      return template.replace("{nome}", primeiroNome).replace("{link}", linkFormulario(t));
+    }
     if (tipo === "feedback") {
       return TECNICO_TEMPLATE_FEEDBACK.replace("{nome}", primeiroNome).replace("{link}", linkFormulario(t));
     }
@@ -3978,7 +4000,153 @@ Pode ser sincero, é justamente pra ajustar o que estiver ruim antes de liberar 
       toast("Erro ao carregar técnicos: " + e.message, true);
     }
     renderTecnicos();
+    loadPiloto();
   }
+
+  // ---------------- painel do piloto ----------------
+  // Responde a pergunta que a diretoria faz: "já dá pra liberar pra todo mundo?".
+  // Tudo aqui é barra horizontal de uma cor só: cada gráfico mostra UMA métrica
+  // (quantos técnicos) em categorias diferentes — cor categórica aqui só criaria
+  // um arco-íris sem significado. A exceção é a distribuição de notas, que usa a
+  // escala de status (ruim/ok/bom) sempre acompanhada do rótulo em texto.
+  let PILOTO_ABERTO = localStorage.getItem("fluxoc_piloto_aberto") !== "0";
+
+  function barra(valor, maximo, classe, rotulo, detalhe) {
+    const pct = maximo ? Math.round((valor / maximo) * 100) : 0;
+    // zero não desenha barra: um tracinho mínimo com valor 0 faria parecer que
+    // existe alguma coisa ali
+    const marca = valor > 0
+      ? `<span class="pb-barra ${classe}" style="width:${Math.max(pct, 2)}%"></span>`
+      : "";
+    return `<div class="pb-linha" title="${esc(detalhe || `${rotulo}: ${valor}`)}">
+      <span class="pb-rotulo">${esc(rotulo)}</span>
+      <span class="pb-trilho">${marca}</span>
+      <span class="pb-valor">${valor}</span>
+    </div>`;
+  }
+
+  async function loadPiloto() {
+    const painel = $("#piloto-painel");
+    if (!TECNICOS.length) { painel.hidden = true; return; }
+    let d;
+    try { d = await api("/api/tecnicos/piloto"); }
+    catch (e) { painel.hidden = true; return; }
+    painel.hidden = false;
+    renderPiloto(d);
+  }
+
+  function renderPiloto(d) {
+    const veredito = $("#piloto-veredito");
+    const faltando = d.criterios.filter((c) => !c.ok);
+    veredito.innerHTML = d.liberado
+      ? `<b class="pv-ok">Critérios batidos</b> — dá pra levar a liberação geral pra decisão.`
+      : `Falta${faltando.length === 1 ? "" : "m"} <b>${faltando.length}</b> critério${faltando.length === 1 ? "" : "s"} pra liberar geral.`;
+
+    const maxFunil = d.funil.length ? d.funil[0].total : 0;
+    const funil = d.funil.map((f) =>
+      barra(f.total, maxFunil, "b-azul", f.label, `${f.label}: ${f.total} de ${d.total} (${f.pct}%) · ${f.parados} parado(s) aqui`)).join("");
+
+    const maxEtapa = Math.max(1, ...d.cobertura.map((c) => c.total));
+    const cobertura = d.cobertura.map((c) =>
+      barra(c.total, maxEtapa, c.ok ? "b-verde" : "b-ambar", c.curto || c.etapa,
+        `${c.etapa}: ${c.total} técnico(s) — ${c.ok ? "cobertura ok" : "abaixo da meta"}`)).join("");
+
+    const maxNota = Math.max(1, ...d.notas.distribuicao.map((n) => n.total));
+    const NOTA_LABEL = { 1: "1 · Ruim", 2: "2 · Fraco", 3: "3 · Ok", 4: "4 · Bom", 5: "5 · Ótimo" };
+    const NOTA_CLASSE = { 1: "b-vermelho", 2: "b-vermelho", 3: "b-ambar", 4: "b-verde", 5: "b-verde" };
+    const notas = d.notas.distribuicao.map((n) =>
+      barra(n.total, maxNota, NOTA_CLASSE[n.nota], NOTA_LABEL[n.nota],
+        `Nota ${n.nota}: ${n.total} técnico(s)`)).join("");
+
+    const maxTermo = Math.max(1, ...d.termos.map((t) => t.total));
+    const termos = d.termos.length
+      ? d.termos.map((t) => barra(t.total, maxTermo, "b-roxo", t.termo, `"${t.termo}" apareceu em ${t.total} relatos`)).join("")
+      : `<p class="pb-vazio">Ainda não há relato suficiente pra achar padrão.</p>`;
+
+    const ranking = d.ranking_ajustes.length
+      ? d.ranking_ajustes.map((a) => `
+        <div class="pb-item">
+          <span class="pb-ref ${a.tipo === "Bug" ? "t-bug" : "t-melhoria"}">${esc(a.ref)}</span>
+          <span class="pb-item-titulo">${esc(a.titulo)}</span>
+          <span class="pb-item-n">${a.relatos} relato${a.relatos === 1 ? "" : "s"}</span>
+        </div>`).join("")
+      : `<p class="pb-vazio">Nenhum relato virou ajuste ainda.</p>`;
+
+    const criterios = d.criterios.map((c) => `
+      <div class="pc-item ${c.ok ? "ok" : "falta"}">
+        <span class="pc-icone" aria-hidden="true">${c.ok ? "✓" : "•"}</span>
+        <span class="pc-nome">${esc(c.nome)}</span>
+        <span class="pc-valor">${c.atual}<span class="pc-meta">/${c.meta}</span></span>
+      </div>`).join("");
+
+    // quem travou no meio: cada linha já vem com a cobrança pronta pro ponto
+    // onde a pessoa parou — cobrar instalação é diferente de cobrar o retorno
+    const parados = d.parados.length
+      ? d.parados.map((p) => `
+        <div class="pb-item">
+          <span class="pb-dias" title="Parado há ${p.dias} dia(s)">${p.dias}d</span>
+          <span class="pb-item-titulo">${esc(p.nome)}</span>
+          <span class="pb-item-n">${esc(p.status_label)}</span>
+          <button type="button" class="pb-cobrar" data-cobrar="${p.id}">cobrar</button>
+        </div>`).join("")
+        + (d.parados_total > d.parados.length
+            ? `<p class="pb-vazio">e mais ${d.parados_total - d.parados.length} parado(s).</p>` : "")
+      : `<p class="pb-vazio">Ninguém parado há mais de ${d.dias_parado} dias.</p>`;
+
+    $("#piloto-corpo").innerHTML = `
+      <div class="pb-grid">
+        <section class="pb-bloco pb-largo">
+          <h4>Parados no funil</h4>
+          <p class="pb-sub">sem avançar há ${d.dias_parado}+ dias — piloto morre de silêncio, não de bug</p>
+          ${parados}
+        </section>
+        <section class="pb-bloco">
+          <h4>Funil de adoção</h4>
+          <p class="pb-sub">quantos chegaram em cada etapa, de ${d.total} cadastrados${d.sem_retorno ? ` · ${d.sem_retorno} sem retorno` : ""}</p>
+          ${funil}
+        </section>
+        <section class="pb-bloco">
+          <h4>Cobertura do fluxo</h4>
+          <p class="pb-sub">quantos exercitaram cada etapa no atendimento real</p>
+          ${cobertura}
+        </section>
+        <section class="pb-bloco">
+          <h4>Notas dadas ao app</h4>
+          <p class="pb-sub">${d.notas.media ? `média ${d.notas.media} · ${d.notas.respostas} resposta(s)` : "ninguém avaliou ainda"}</p>
+          ${notas}
+        </section>
+        <section class="pb-bloco">
+          <h4>Termos mais citados</h4>
+          <p class="pb-sub">palavras que se repetem nos relatos de problema e melhoria</p>
+          ${termos}
+        </section>
+        <section class="pb-bloco pb-largo">
+          <h4>O que já virou trabalho pra LP</h4>
+          <p class="pb-sub">ajustes gerados pelo piloto, do mais relatado pro menos · ${d.relatos.problema} problema(s) e ${d.relatos.melhoria} melhoria(s) relatados no total</p>
+          ${ranking}
+        </section>
+        <section class="pb-bloco pb-largo">
+          <h4>Critérios pra liberar geral</h4>
+          <p class="pb-sub">o que precisa estar batido antes de tirar o app do piloto</p>
+          <div class="pc-grid">${criterios}</div>
+        </section>
+      </div>`;
+
+    $$("[data-cobrar]", $("#piloto-corpo")).forEach((b) =>
+      b.addEventListener("click", () => abrirMensagemTecnico(Number(b.dataset.cobrar), "cobranca")));
+    aplicaPilotoAberto();
+  }
+
+  function aplicaPilotoAberto() {
+    $("#piloto-corpo").hidden = !PILOTO_ABERTO;
+    $("#piloto-toggle").textContent = PILOTO_ABERTO ? "ocultar" : "mostrar";
+  }
+
+  $("#piloto-toggle").addEventListener("click", () => {
+    PILOTO_ABERTO = !PILOTO_ABERTO;
+    localStorage.setItem("fluxoc_piloto_aberto", PILOTO_ABERTO ? "1" : "0");
+    aplicaPilotoAberto();
+  });
 
   function tecnicosFiltrados() {
     const busca = tecnicoFiltros.busca.toLowerCase();
@@ -4264,10 +4432,14 @@ Pode ser sincero, é justamente pra ajustar o que estiver ruim antes de liberar 
       toast("Esse técnico ainda não tem link de formulário — recarregue a página.", true);
       return;
     }
-    $("#tecnico-msg-titulo").textContent = tipo === "feedback" ? "Pedir feedback" : "Convite pronto";
-    $("#tecnico-msg-dica").innerHTML = tipo === "feedback"
-      ? "O link abre o formulário no celular dele. O que ele responder cai direto aqui no card — nota, o que achou bom, o que precisa melhorar e os problemas."
-      : "O link abre o WhatsApp já com o texto preenchido. Ele só leva o texto — envie o <b>APK</b> e o <b>manual</b> como anexo direto na conversa.";
+    const TITULOS = { feedback: "Pedir feedback", cobranca: "Cobrar retorno", convite: "Convite pronto" };
+    const DICAS = {
+      feedback: "O link abre o formulário no celular dele. O que ele responder cai direto aqui no card — nota, o que achou bom, o que precisa melhorar e os problemas.",
+      cobranca: "A mensagem muda conforme onde ele parou: quem não instalou é chamado pra instalação, quem instalou é lembrado de usar no próximo atendimento, e quem já usou recebe o link do formulário.",
+      convite: "O link abre o WhatsApp já com o texto preenchido. Ele só leva o texto — envie o <b>APK</b> e o <b>manual</b> como anexo direto na conversa.",
+    };
+    $("#tecnico-msg-titulo").textContent = TITULOS[tipo] || TITULOS.convite;
+    $("#tecnico-msg-dica").innerHTML = DICAS[tipo] || DICAS.convite;
     $("#tecnico-msg-texto").value = mensagemTecnico(t, tipo);
     $("#tecnico-msg-abrir").href = waLink(t, tipo);
     $("#tecnico-msg-modal").hidden = false;

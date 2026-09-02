@@ -477,6 +477,12 @@ class TecnicoMensagemOut(BaseModel):
     wa_link: str
 
 
+class VincularAjuste(BaseModel):
+    """Aponta o relato para um ajuste que já existe — é assim que vários técnicos
+    relatando o mesmo ponto viram um item com vários relatos."""
+    ajuste_id: int
+
+
 class LimparBaseTecnicos(BaseModel):
     """Apagar a base inteira não pode acontecer por um clique errado nem por uma
     chamada solta na API: exige a palavra APAGAR escrita à mão."""

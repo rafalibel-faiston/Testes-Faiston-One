@@ -77,6 +77,23 @@ São 2 minutinhos, direto no link:
 
 Pode ser sincero, é justamente pra ajustar o que estiver ruim antes de liberar pra todo mundo. Valeu demais!"""
 
+# cobrança de quem parou no meio do caminho — muda conforme onde ele travou, que
+# é a diferença entre "instala aí" e "usa no próximo atendimento"
+TEMPLATES_COBRANCA = {
+    "convidado": """Fala, {nome}! Tudo certo?
+Passando pra lembrar do Track One — ficou de marcar a instalação comigo e ainda não conseguimos fechar.
+São 10 minutinhos pra instalar e eu te passo o manual na hora. Quando fica bom pra você?""",
+    "instalado": """Fala, {nome}! Tudo certo?
+Você já está com o Track One instalado — é só usar no seu próximo atendimento, do começo ao fim.
+Qualquer coisa estranha me chama, e no fim eu te mando um link rapidinho pra contar como foi. Fechou?""",
+    "em_teste": """Fala, {nome}! Tudo certo?
+Vi que você já usou o Track One no atendimento — só falta me contar como foi, são 2 minutinhos:
+
+{link}
+
+Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!""",
+}
+
 
 def _norm_txt(valor) -> str:
     """Normaliza texto de célula de planilha pra comparar sem acento/maiúscula:
@@ -101,10 +118,17 @@ def _norm_telefone(valor: str) -> str:
 
 def _mensagem_para(tecnico: models.Tecnico, tipo: str = "convite", base_url: str = "") -> str:
     """Monta o texto pronto pra mandar: o convite (antes do teste, conforme o
-    papel) ou o pedido de feedback com o link do formulário (depois dele)."""
+    papel), o pedido de feedback com o link do formulário (depois dele) ou a
+    cobrança de quem travou no meio (que muda conforme a etapa onde parou)."""
     primeiro_nome = (tecnico.nome or "").strip().split(" ")[0] or tecnico.nome
+    link = f"{(base_url or '').rstrip('/')}/formulario/{tecnico.token or ''}"
+    if tipo == "cobranca":
+        # quem ainda nem foi convidado não tem o que cobrar: recebe o convite
+        template = TEMPLATES_COBRANCA.get(tecnico.status)
+        if not template:
+            return _mensagem_para(tecnico, "convite", base_url)
+        return template.format(nome=primeiro_nome, link=link)
     if tipo == "feedback":
-        link = f"{(base_url or '').rstrip('/')}/formulario/{tecnico.token or ''}"
         return TEMPLATE_FEEDBACK.format(nome=primeiro_nome, link=link)
     template = TEMPLATE_LIDER if tecnico.papel == "lider" else TEMPLATE_TECNICO
     return template.format(nome=primeiro_nome)
@@ -149,6 +173,225 @@ def resumo_tecnicos(db: Session = Depends(get_db)):
             if o.tipo in feedback:
                 feedback[o.tipo] += 1
     return {"total": len(tecnicos), "counts": counts, "feedback": feedback}
+
+
+# palavras que aparecem em quase todo relato e não dizem nada sobre o problema —
+# sem tirá-las, o "mais citado" viraria "que, não, para, app"
+TERMOS_IGNORADOS = {
+    "para", "pelo", "pela", "como", "mais", "muito", "quando", "porque", "também",
+    "ainda", "então", "isso", "esse", "essa", "aqui", "está", "estava", "tem",
+    "ter", "foi", "ser", "sempre", "nunca", "tudo", "todo", "toda", "cada",
+    "mas", "sem", "com", "uma", "num", "numa", "dos", "das", "nos", "nas",
+    "que", "não", "sim", "vez", "vezes", "pra", "pro", "meu", "minha", "seu",
+    "sua", "ele", "ela", "eles", "elas", "você", "voce", "gente", "coisa",
+    # domínio: aparecem em todo relato do piloto e não separam um problema do outro
+    "app", "aplicativo", "track", "one", "sistema", "celular", "consegui",
+    "consegue", "fazer", "ficou", "ficar", "deu", "dar", "usar", "uso",
+}
+
+
+def _termos_mais_citados(observacoes, limite: int = 8):
+    """Conta as palavras que mais aparecem nos relatos de problema e melhoria.
+
+    É uma heurística de leitura rápida, não classificação: serve pra alguém bater
+    o olho e perceber "notificação apareceu 12 vezes" antes de abrir relato por
+    relato. O agrupamento que vale de verdade é o vínculo com o ajuste."""
+    contagem = {}
+    forma_original = {}
+    for o in observacoes:
+        if o.tipo not in ("problema", "melhoria"):
+            continue
+        vistos_na_nota = set()   # a mesma palavra repetida num relato conta uma vez
+        for palavra in (o.texto or "").split():
+            limpa = "".join(c for c in palavra if c.isalpha() or c == "-").strip("-")
+            if len(limpa) < 4:
+                continue
+            chave = _norm_txt(limpa)
+            if chave in TERMOS_IGNORADOS or chave in vistos_na_nota:
+                continue
+            vistos_na_nota.add(chave)
+            contagem[chave] = contagem.get(chave, 0) + 1
+            forma_original.setdefault(chave, limpa.lower())
+    ordenados = sorted(contagem.items(), key=lambda kv: (-kv[1], kv[0]))
+    return [
+        {"termo": forma_original[chave], "total": n}
+        for chave, n in ordenados[:limite] if n > 1   # citado uma vez só não é padrão
+    ]
+
+
+@router.get("/tecnicos/piloto")
+def painel_piloto(
+    meta_concluidos: int = 10,
+    meta_nota: float = 4.0,
+    meta_etapa: int = 5,
+    dias_parado: int = 3,
+    db: Session = Depends(get_db),
+):
+    """Os números que respondem "já dá pra liberar o Track One pra todo mundo?".
+
+    Junta o funil de adoção, a cobertura de cada etapa do fluxo (de nada adianta
+    40 técnicos testando se ninguém fechou RAT pelo app), as notas, os termos que
+    mais aparecem nos relatos e os ajustes que já saíram do piloto — e fecha com
+    os critérios de liberação batidos contra as metas.
+    """
+    tecnicos = db.query(models.Tecnico).options(joinedload(models.Tecnico.observacoes)).all()
+    total = len(tecnicos)
+    por_status = {s: 0 for s in STATUSES}
+    for t in tecnicos:
+        por_status[t.status] = por_status.get(t.status, 0) + 1
+
+    # no funil, cada etapa conta quem chegou nela OU passou dela — é o que mostra
+    # onde o piloto está travando, e não só onde cada um parou
+    caminho = [s for s in STATUSES if s != "sem_retorno"]
+    alcancou = {}
+    for i, etapa in enumerate(caminho):
+        alcancou[etapa] = sum(por_status.get(e, 0) for e in caminho[i:])
+    funil = [
+        {
+            "key": etapa,
+            "label": STATUS_LABELS[etapa],
+            "total": alcancou[etapa],
+            "pct": round(alcancou[etapa] / total * 100) if total else 0,
+            "parados": por_status.get(etapa, 0),
+        }
+        for etapa in caminho
+    ]
+
+    responderam = [t for t in tecnicos if t.respondido_em]
+    etapas_contagem = {etapa: 0 for etapa in formulario.ETAPAS}
+    for t in tecnicos:
+        for etapa in (t.etapas_testadas or "").split("|"):
+            if etapa in etapas_contagem:
+                etapas_contagem[etapa] += 1
+    cobertura = [
+        {
+            "etapa": etapa,
+            "curto": formulario.ETAPAS_CURTAS.get(etapa, etapa),
+            "total": n,
+            "pct": round(n / len(responderam) * 100) if responderam else 0,
+            "ok": n >= meta_etapa,
+        }
+        for etapa, n in etapas_contagem.items()
+    ]
+
+    notas = [t.nota for t in tecnicos if t.nota]
+    media = round(sum(notas) / len(notas), 1) if notas else None
+    distribuicao = [{"nota": n, "total": sum(1 for x in notas if x == n)} for n in (1, 2, 3, 4, 5)]
+
+    todas_obs = [o for t in tecnicos for o in t.observacoes]
+    relatos = {
+        "positivo": sum(1 for o in todas_obs if o.tipo == "positivo"),
+        "melhoria": sum(1 for o in todas_obs if o.tipo == "melhoria"),
+        "problema": sum(1 for o in todas_obs if o.tipo == "problema"),
+        "no_backlog": sum(1 for o in todas_obs if o.ajuste_id),
+    }
+
+    # ajustes que nasceram do piloto, ordenados por quantos técnicos relataram o
+    # mesmo ponto — é a fila de prioridade real pra levar pra LP
+    por_ajuste = {}
+    for o in todas_obs:
+        if o.ajuste_id:
+            por_ajuste.setdefault(o.ajuste_id, []).append(o)
+    ranking = []
+    for ajuste_id, obs_list in por_ajuste.items():
+        ajuste = obs_list[0].ajuste
+        if not ajuste:
+            continue
+        ranking.append({
+            "ajuste_id": ajuste_id,
+            "ref": f"{ajuste.versao} #{ajuste.numero:02d}",
+            "titulo": ajuste.titulo,
+            "tipo": ajuste.tipo,
+            "status": ajuste.status,
+            "relatos": len(obs_list),
+        })
+    ranking.sort(key=lambda a: (-a["relatos"], a["ref"]))
+
+    # quem travou no meio do funil: o piloto morre de silêncio, não de bug, então
+    # essa lista é o que evita perder técnico por falta de cobrança
+    agora = datetime.now(timezone.utc)
+
+    def _dias(quando):
+        if not quando:
+            return None
+        if quando.tzinfo is None:
+            quando = quando.replace(tzinfo=timezone.utc)
+        return (agora - quando).days
+
+    parados = []
+    for t in tecnicos:
+        if t.status not in ("convidado", "instalado", "em_teste"):
+            continue
+        marco = {"convidado": t.convidado_em, "instalado": t.instalado_em}.get(t.status) or t.updated_at
+        dias = _dias(marco)
+        if dias is None or dias < dias_parado:
+            continue
+        parados.append({
+            "id": t.id, "nome": t.nome, "status": t.status,
+            "status_label": STATUS_LABELS[t.status], "dias": dias,
+        })
+    parados.sort(key=lambda p: -p["dias"])
+
+    concluidos = por_status.get("concluido", 0)
+    etapas_ok = sum(1 for c in cobertura if c["ok"])
+    criterios = [
+        {
+            "nome": f"{meta_concluidos} técnicos com teste concluído",
+            "atual": concluidos, "meta": meta_concluidos, "ok": concluidos >= meta_concluidos,
+        },
+        {
+            "nome": f"Nota média igual ou acima de {meta_nota}",
+            "atual": media if media is not None else 0, "meta": meta_nota,
+            "ok": media is not None and media >= meta_nota,
+        },
+        {
+            "nome": f"Cada etapa testada por {meta_etapa}+ técnicos",
+            "atual": etapas_ok, "meta": len(formulario.ETAPAS),
+            "ok": etapas_ok == len(formulario.ETAPAS),
+        },
+        {
+            "nome": "Nenhum problema relatado fora do backlog",
+            "atual": relatos["no_backlog"], "meta": relatos["problema"],
+            "ok": relatos["problema"] == 0 or relatos["no_backlog"] >= relatos["problema"],
+        },
+    ]
+
+    return {
+        "total": total,
+        "responderam": len(responderam),
+        "funil": funil,
+        "sem_retorno": por_status.get("sem_retorno", 0),
+        "cobertura": cobertura,
+        "notas": {"media": media, "respostas": len(notas), "distribuicao": distribuicao},
+        "relatos": relatos,
+        "termos": _termos_mais_citados(todas_obs),
+        "parados": parados[:8],
+        "parados_total": len(parados),
+        "dias_parado": dias_parado,
+        "ranking_ajustes": ranking[:6],
+        "criterios": criterios,
+        "liberado": all(c["ok"] for c in criterios),
+    }
+
+
+@router.post("/tecnicos/observacoes/{observacao_id}/vincular-ajuste", response_model=schemas.TecnicoOut)
+def vincular_ajuste(observacao_id: int, payload: schemas.VincularAjuste, db: Session = Depends(get_db)):
+    """Aponta o relato para um ajuste que já existe, em vez de criar outro.
+
+    É o que faz dez técnicos reclamando da mesma coisa virarem um item com dez
+    relatos — sem isso, o backlog encheria de duplicata e ninguém saberia qual
+    ponto dói mais."""
+    obs = db.query(models.TecnicoObservacao).filter(models.TecnicoObservacao.id == observacao_id).first()
+    if not obs:
+        raise HTTPException(status_code=404, detail="Observação não encontrada")
+    ajuste = db.query(models.AtivoAjuste).filter(models.AtivoAjuste.id == payload.ajuste_id).first()
+    if not ajuste:
+        raise HTTPException(status_code=404, detail="Ajuste não encontrado")
+    obs.ajuste_id = ajuste.id
+    db.commit()
+    tecnico = _get_tecnico_or_404(db, obs.tecnico_id)
+    db.refresh(tecnico)
+    return tecnico
 
 
 @router.post("/tecnicos/limpar")

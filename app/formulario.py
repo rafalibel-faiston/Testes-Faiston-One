@@ -26,6 +26,15 @@ ETAPAS = [
     "Fechei a RAT pelo app",
 ]
 
+# como a etapa é chamada num gráfico, onde não cabe a frase inteira (a frase
+# completa continua no formulário e no tooltip)
+ETAPAS_CURTAS = {
+    "Recebi o chamado no app": "Chamado",
+    "Acompanhei o rastreio da peça": "Rastreio da peça",
+    "Confirmei o recebimento do equipamento": "Recebimento",
+    "Fechei a RAT pelo app": "RAT pelo app",
+}
+
 # Cada pergunta aberta vira uma observação no card do técnico com o tipo
 # correspondente ("comentario" entra como nota geral, sem marcação).
 PERGUNTAS = [

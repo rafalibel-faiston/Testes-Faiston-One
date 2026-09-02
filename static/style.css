@@ -1762,6 +1762,102 @@ body.inline-connecting * { cursor:crosshair !important; }
   border-style:solid; border-color:var(--f-blue); color:var(--f-blue); background:rgba(0,84,236,.06);
 }
 
+/* ---------- painel do piloto ----------
+   Cada bloco mostra UMA métrica (quantos técnicos) em categorias diferentes, então
+   cada gráfico usa uma cor só — cor por categoria aqui seria arco-íris sem
+   significado. A exceção é a distribuição de notas, que usa a escala de status
+   (ruim/ok/bom) e vem sempre com o rótulo escrito ao lado, nunca só a cor. */
+.piloto {
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  box-shadow:var(--shadow-1); margin-bottom:18px; overflow:hidden;
+}
+.piloto-head {
+  display:flex; align-items:center; justify-content:space-between; gap:14px;
+  padding:14px 18px; border-bottom:1px solid var(--line);
+}
+.piloto-head h3 { font-family:'Roboto Slab',serif; font-size:15px; font-weight:700; color:var(--text); }
+.piloto-head p { font-size:12.5px; color:var(--text-2); margin-top:2px; }
+.pv-ok { color:var(--ok); }
+.piloto-toggle {
+  flex-shrink:0; border:1px solid var(--line-2); background:var(--surface-2); color:var(--text-3);
+  border-radius:8px; padding:5px 12px; font-family:'Roboto',sans-serif; font-size:11.5px;
+  font-weight:600; cursor:pointer;
+}
+.piloto-toggle:hover { color:var(--f-blue); border-color:var(--f-blue); }
+.piloto-corpo[hidden] { display:none; }
+
+.pb-grid { display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--line); }
+.pb-bloco { background:var(--surface); padding:15px 18px; }
+.pb-largo { grid-column:1 / -1; }
+.pb-bloco h4 { font-size:12.5px; font-weight:700; color:var(--text); }
+.pb-sub { font-size:11px; color:var(--text-3); margin:2px 0 12px; }
+.pb-vazio { font-size:12px; color:var(--text-3); padding:6px 0; }
+
+/* barra fina, ponta arredondada, trilho recessivo — o valor fica ao lado em vez
+   de flutuar sobre a barra */
+.pb-linha { display:flex; align-items:center; gap:10px; margin-bottom:7px; }
+.pb-rotulo {
+  flex:0 0 128px; font-size:11.5px; color:var(--text-2); text-align:right;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.pb-trilho { flex:1; height:9px; border-radius:5px; background:var(--surface-2); overflow:hidden; }
+.pb-barra { display:block; height:100%; border-radius:5px; transition:width .3s var(--ease); }
+.pb-barra.b-azul { background:var(--f-blue); }
+.pb-barra.b-verde { background:var(--ok); }
+.pb-barra.b-ambar { background:var(--warn); }
+.pb-barra.b-vermelho { background:var(--bad); }
+.pb-barra.b-roxo { background:var(--f-purple); }
+.pb-valor {
+  flex:0 0 30px; font-family:'Roboto Mono',monospace; font-size:11.5px;
+  font-weight:600; color:var(--text-2);
+}
+
+.pb-item {
+  display:flex; align-items:center; gap:10px; padding:7px 0;
+  border-bottom:1px solid var(--line); font-size:12.5px;
+}
+.pb-item:last-child { border-bottom:none; }
+.pb-ref {
+  flex-shrink:0; font-family:'Roboto Mono',monospace; font-size:11px; font-weight:600;
+  padding:2px 8px; border-radius:999px;
+}
+.pb-ref.t-bug { background:var(--bad-bg); color:var(--bad); }
+.pb-ref.t-melhoria { background:rgba(0,84,236,.08); color:var(--f-blue); }
+.pb-item-titulo { flex:1; min-width:0; color:var(--text-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pb-item-n { flex-shrink:0; font-size:11px; font-weight:600; color:var(--text-3); }
+.pb-dias {
+  flex-shrink:0; min-width:34px; text-align:center; padding:2px 7px; border-radius:999px;
+  background:var(--warn-bg); color:var(--warn);
+  font-family:'Roboto Mono',monospace; font-size:11px; font-weight:600;
+}
+.pb-cobrar {
+  flex-shrink:0; border:1px solid var(--line-2); background:var(--surface); color:var(--f-blue);
+  border-radius:7px; padding:3px 10px; font-family:'Roboto',sans-serif; font-size:11px;
+  font-weight:600; cursor:pointer; transition:all .15s var(--ease);
+}
+.pb-cobrar:hover { border-color:var(--f-blue); background:rgba(0,84,236,.07); }
+
+/* critérios: estado nunca é só cor — vem com ícone e o número atual/meta */
+.pc-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.pc-item {
+  display:flex; align-items:center; gap:10px; padding:9px 12px;
+  border-radius:var(--radius-sm); border:1px solid var(--line); background:var(--surface-2);
+  font-size:12.5px;
+}
+.pc-item.ok { border-color:var(--ok-ln); background:var(--ok-bg); }
+.pc-item.falta { border-color:var(--warn-ln); background:var(--warn-bg); }
+.pc-icone { flex-shrink:0; font-weight:700; }
+.pc-item.ok .pc-icone { color:var(--ok); }
+.pc-item.falta .pc-icone { color:var(--warn); }
+.pc-nome { flex:1; color:var(--text-2); }
+.pc-valor { flex-shrink:0; font-family:'Roboto Mono',monospace; font-weight:600; color:var(--text); }
+.pc-meta { color:var(--text-3); font-weight:400; }
+
+@media (max-width: 860px) {
+  .pb-grid, .pc-grid { grid-template-columns:1fr; }
+  .pb-rotulo { flex-basis:104px; }
+}
+
 /* ---------- zerar a base ---------- */
 /* botão discreto de propósito: fica ao lado dos outros sem convidar o clique,
    e só ganha cara de perigo quando a pessoa passa o mouse */
