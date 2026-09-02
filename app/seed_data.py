@@ -419,6 +419,12 @@ def migrate_schema(engine):
             stmts.append("ALTER TABLE tecnicos ADD COLUMN respondido_em "
                          + ("TIMESTAMP WITH TIME ZONE" if pg else "TIMESTAMP"))
 
+    # relato do técnico que virou item do backlog da Gestão de Ativos
+    if "tecnico_observacoes" in existing_tables:
+        obs_tec_cols = {c["name"] for c in insp.get_columns("tecnico_observacoes")}
+        if "ajuste_id" not in obs_tec_cols:
+            stmts.append("ALTER TABLE tecnico_observacoes ADD COLUMN ajuste_id INTEGER")
+
     if "agenda_eventos" in existing_tables:
         ag_cols = {c["name"] for c in insp.get_columns("agenda_eventos")}
         if "tipo" not in ag_cols:

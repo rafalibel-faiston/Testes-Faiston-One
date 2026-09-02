@@ -408,9 +408,21 @@ class TecnicoObservacao(Base):
     autor = Column(String, nullable=True)     # quem registrou a nota (geralmente quem entrevistou o técnico)
     texto = Column(Text, nullable=False)
     tipo = Column(String, nullable=True)      # positivo / melhoria / problema / None
+    # quando o relato vira item do backlog da Gestão de Ativos: sem isso, dez
+    # técnicos reclamando da mesma coisa continuam sendo dez textos soltos em vez
+    # de uma linha priorizada que a LP consegue trabalhar
+    ajuste_id = Column(Integer, ForeignKey("ativo_ajustes.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     tecnico = relationship("Tecnico", back_populates="observacoes")
+    ajuste = relationship("AtivoAjuste")
+
+    @property
+    def ajuste_ref(self):
+        """Como o ajuste gerado aparece no card: "v2 #07"."""
+        if not self.ajuste:
+            return None
+        return f"{self.ajuste.versao} #{self.ajuste.numero:02d}"
 
 
 class Observation(Base):

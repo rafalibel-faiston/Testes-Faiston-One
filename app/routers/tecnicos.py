@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from .. import formulario, models, schemas
 from ..database import get_db
+from . import ativos
 
 router = APIRouter(tags=["tecnicos"])
 # páginas abertas no navegador (sem o prefixo /api) — o formulário que o técnico
@@ -275,6 +276,58 @@ def add_observacao(tecnico_id: int, payload: schemas.TecnicoObservacaoCreate, db
     return tecnico
 
 
+@router.post("/tecnicos/observacoes/{observacao_id}/virar-ajuste", response_model=schemas.TecnicoOut)
+def virar_ajuste(observacao_id: int, payload: schemas.VirarAjuste, db: Session = Depends(get_db)):
+    """Transforma o relato de um técnico em item do backlog da Gestão de Ativos.
+
+    É a ponte que faltava entre o piloto e o time de dev: o que o técnico contou
+    vira um item no formato que a LP já trabalha ("como está hoje / como deve
+    ser"), e a observação guarda qual ajuste ela gerou — assim dá pra ver, no card
+    dele, que aquele ponto já foi levado, e não levantar duas vezes a mesma coisa.
+    """
+    obs = db.query(models.TecnicoObservacao).filter(models.TecnicoObservacao.id == observacao_id).first()
+    if not obs:
+        raise HTTPException(status_code=404, detail="Observação não encontrada")
+    if obs.ajuste_id:
+        raise HTTPException(status_code=400, detail="Esse relato já virou um ajuste.")
+    tecnico = _get_tecnico_or_404(db, obs.tecnico_id)
+
+    titulo = (payload.titulo or "").strip()
+    if not titulo:
+        raise HTTPException(status_code=400, detail="Título vazio.")
+    # relato de problema é bug; o resto entra como melhoria
+    tipo = (payload.tipo or "").strip() or ("Bug" if obs.tipo == "problema" else "Melhoria")
+    if tipo not in ativos.TIPOS:
+        raise HTTPException(status_code=400, detail="Tipo inválido — use Bug ou Melhoria.")
+    prioridade = (payload.prioridade or "Média").strip()
+    if prioridade not in ativos.PRIORIDADES:
+        prioridade = "Média"
+    versao = ativos._norm_versao(payload.versao) if payload.versao else _versao_ativa(db)
+
+    quando = obs.created_at.strftime("%d/%m/%Y") if obs.created_at else "durante o teste"
+    origem = f"Relatado por {tecnico.nome} no teste do Track One ({quando})."
+
+    ajuste = models.AtivoAjuste(
+        versao=versao,
+        numero=ativos._next_numero(db, versao),
+        titulo=titulo,
+        tipo=tipo,
+        area=(payload.area or "Track One (app do técnico)").strip() or None,
+        prioridade=prioridade,
+        atual=(payload.atual if payload.atual is not None else obs.texto),
+        esperado=payload.esperado or "",
+        observacao=(payload.observacao if payload.observacao is not None else origem),
+        status="levantado",
+        autor=(payload.autor or "").strip() or None,
+    )
+    db.add(ajuste)
+    db.flush()          # precisa do id do ajuste pra amarrar na observação
+    obs.ajuste_id = ajuste.id
+    db.commit()
+    db.refresh(tecnico)
+    return tecnico
+
+
 @router.delete("/tecnicos/observacoes/{observacao_id}", response_model=schemas.TecnicoOut)
 def delete_observacao(observacao_id: int, db: Session = Depends(get_db)):
     obs = db.query(models.TecnicoObservacao).filter(models.TecnicoObservacao.id == observacao_id).first()
@@ -304,6 +357,21 @@ def pagina_formulario(token: str, db: Session = Depends(get_db)):
         formulario.montar_html(tecnico.nome, tecnico.token, ja_respondeu),
         headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
     )
+
+
+def _versao_ativa(db: Session) -> str:
+    """A leva mais recente do backlog da Gestão de Ativos — é pra onde vai o item
+    criado a partir de um relato, pra ele cair junto do que o time está tratando
+    agora, e não numa rodada antiga já fechada."""
+    versoes = [v for (v,) in db.query(models.AtivoAjuste.versao).distinct().all() if v]
+    if not versoes:
+        return "v2"
+
+    def rank(v: str) -> int:
+        digitos = "".join(c for c in v if c.isdigit())
+        return int(digitos) if digitos else 0
+
+    return max(versoes, key=rank)
 
 
 def _tecnico_por_token(db: Session, token: str) -> Optional[models.Tecnico]:

@@ -404,7 +404,23 @@ class TecnicoObservacaoOut(BaseModel):
     autor: Optional[str] = None
     texto: str
     tipo: Optional[str] = None   # positivo / melhoria / problema / None
+    ajuste_id: Optional[int] = None    # item da Gestão de Ativos que este relato gerou
+    ajuste_ref: Optional[str] = None   # como ele é chamado na reunião: "v2 #07"
     created_at: Optional[datetime] = None
+
+
+class VirarAjuste(BaseModel):
+    """Transforma o relato de um técnico em item do backlog da Gestão de Ativos.
+    `atual` já vem do texto dele; o resto é o que a Faiston preenche ao revisar."""
+    titulo: str
+    tipo: Optional[str] = None        # Bug / Melhoria — sem isso, deduz do tipo do relato
+    versao: Optional[str] = None
+    area: Optional[str] = "Track One (app do técnico)"
+    prioridade: Optional[str] = "Média"
+    atual: Optional[str] = None       # ausente = usa o texto do técnico
+    esperado: Optional[str] = ""
+    observacao: Optional[str] = None  # ausente = registra quem relatou e quando
+    autor: Optional[str] = None
 
 
 class TecnicoObservacaoCreate(BaseModel):

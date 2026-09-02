@@ -3773,15 +3773,35 @@
   const ajusteModal = $("#ajuste-modal");
   const ajusteForm = $("#ajuste-form");
 
-  function openAjusteModal(id) {
+  // Quando o modal é aberto a partir do relato de um técnico, guarda de qual
+  // observação ele veio: ao salvar, o item nasce pela rota que amarra os dois,
+  // e não pela criação normal de ajuste.
+  let ajusteOrigemObs = null;
+
+  function openAjusteModal(id, prefill) {
     editingAjusteId = id || null;
+    ajusteOrigemObs = (prefill && prefill.observacaoId) || null;
     ajusteForm.reset();
     const a = id ? AJUSTES.find((x) => x.id === id) : null;
-    $("#ajuste-modal-title").textContent = id ? "Editar ajuste" : "Novo ajuste";
+    $("#ajuste-modal-title").textContent = id
+      ? "Editar ajuste"
+      : (ajusteOrigemObs ? "Levar relato pro backlog" : "Novo ajuste");
     $("#ajuste-modal-code").textContent = a
       ? `${esc(a.versao)} · item ${String(a.numero || 0).padStart(2, "0")}`
       : `${esc(ajusteVersao || "v2")} · novo item`;
     $("#ajuste-delete").hidden = !id;
+    if (!id && prefill) {
+      ajusteForm.versao.value = ajusteVersao || "v2";
+      ajusteForm.titulo.value = prefill.titulo || "";
+      ajusteForm.tipo.value = prefill.tipo || "Melhoria";
+      ajusteForm.area.value = prefill.area || "";
+      ajusteForm.atual.value = prefill.atual || "";
+      ajusteForm.observacao.value = prefill.observacao || "";
+      ajusteModal.hidden = false;
+      // o "como deve ser" é a única coisa que a Faiston precisa escrever aqui
+      ajusteForm.esperado.focus();
+      return;
+    }
     if (a) {
       ajusteForm.titulo.value = a.titulo;
       ajusteForm.tipo.value = a.tipo;
@@ -3800,7 +3820,7 @@
     }
     ajusteModal.hidden = false;
   }
-  function closeAjusteModal() { ajusteModal.hidden = true; editingAjusteId = null; }
+  function closeAjusteModal() { ajusteModal.hidden = true; editingAjusteId = null; ajusteOrigemObs = null; }
 
   $("#btn-add-ajuste").addEventListener("click", () => openAjusteModal(null));
   $("#btn-add-ajuste-vazio").addEventListener("click", () => openAjusteModal(null));
@@ -3834,6 +3854,19 @@
       prazo: fd.get("prazo") || "",
     };
     try {
+      if (ajusteOrigemObs) {
+        // veio do relato de um técnico: nasce já amarrado à observação de origem
+        const obsId = ajusteOrigemObs;
+        substituiTecnicoLocal(await api(`/api/tecnicos/observacoes/${obsId}/virar-ajuste`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, autor: testerName() || null }),
+        }));
+        closeAjusteModal();
+        renderTecnicos();
+        await loadAjustes();
+        toast("Relato virou ajuste no backlog.");
+        return;
+      }
       if (editingAjusteId) {
         await api(`/api/ativos/ajustes/${editingAjusteId}`, {
           method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -4020,19 +4053,31 @@ Pode ser sincero, é justamente pra ajustar o que estiver ruim antes de liberar 
 
   function tecnicoStepper(t) {
     // o funil vira uma trilha clicável: o que já passou fica marcado, o atual
-    // destacado e o resto apagado — um clique move, sem abrir lista nenhuma
+    // destacado e o resto apagado — um clique move, sem abrir lista nenhuma.
+    // "Sem retorno" saiu daqui pro menu: é exceção, não etapa do caminho.
     const atual = TECNICO_STATUS_ORDEM.indexOf(t.status);
     const passos = TECNICO_STATUS_ORDEM.filter((k) => k !== "sem_retorno").map((k, i) => {
       const estado = i < atual ? " feito" : (k === t.status ? " atual" : "");
       return `<button type="button" class="tecnico-passo${estado}" data-status="${k}"
         title="Marcar como ${esc(TECNICO_STATUS_META[k].label)}">${esc(TECNICO_STATUS_META[k].label)}</button>`;
     }).join("");
-    const semRetorno = t.status === "sem_retorno";
-    return `<div class="tecnico-stepper">
-      ${passos}
-      <button type="button" class="tecnico-passo perdido${semRetorno ? " atual" : ""}" data-status="sem_retorno"
-        title="Não respondeu / desistiu">Sem retorno</button>
-    </div>`;
+    if (t.status === "sem_retorno") {
+      return `<div class="tecnico-stepper parado">
+        ${passos}
+        <span class="tecnico-sem-retorno" title="Não respondeu / desistiu">sem retorno</span>
+      </div>`;
+    }
+    return `<div class="tecnico-stepper">${passos}</div>`;
+  }
+
+  // a ação que faz sentido agora, pelo ponto em que o técnico está no funil —
+  // em vez de três botões iguais competindo em todo card
+  function tecnicoAcaoPrincipal(t) {
+    if (t.status === "a_contatar" || t.status === "sem_retorno") {
+      return { tipo: "convite", label: "Chamar pra instalar" };
+    }
+    if (t.status === "concluido") return { tipo: "feedback", label: "Pedir novo retorno" };
+    return { tipo: "feedback", label: "Pedir feedback" };
   }
 
   function tecnicoEtapas(t) {
@@ -4049,13 +4094,23 @@ Pode ser sincero, é justamente pra ajustar o que estiver ruim antes de liberar 
     const todas = (t.observacoes || []).slice().reverse();
     const expandido = tecnicoExpandido.has(t.id);
     const visiveis = expandido ? todas : todas.slice(0, 3);
-    const obsHtml = visiveis.map((o) => `
-      <div class="tecnico-obs-item">
-        ${tecnicoObsBadge(o)}
+    const obsHtml = visiveis.map((o) => {
+      const meta = TECNICO_OBS_META[o.tipo || ""] || TECNICO_OBS_META[""];
+      // problema e melhoria são os que viram trabalho pra LP — os únicos que
+      // ganham o atalho pro backlog; elogio e nota geral não têm o que virar
+      const podeVirar = (o.tipo === "problema" || o.tipo === "melhoria") && !o.ajuste_id;
+      return `
+      <div class="tecnico-obs-item ${meta.cls}">
         <p>${esc(o.texto)}</p>
-        <span class="tecnico-obs-meta">${esc(o.autor || "—")} · ${fmtWhen(o.created_at)}</span>
-        <button type="button" class="del" data-del-obs="${o.id}" title="Remover">✕</button>
-      </div>`).join("");
+        <div class="tecnico-obs-rodape">
+          <span class="tecnico-obs-tag ${meta.cls}">${esc(meta.label)}</span>
+          <span class="tecnico-obs-meta">${esc(o.autor || "—")} · ${fmtWhen(o.created_at)}</span>
+          ${o.ajuste_ref ? `<span class="tecnico-obs-virou" title="Já virou item do backlog">→ ajuste ${esc(o.ajuste_ref)}</span>` : ""}
+          ${podeVirar ? `<button type="button" class="tecnico-obs-acao" data-virar="${o.id}">levar pro backlog</button>` : ""}
+          <button type="button" class="tecnico-obs-acao del" data-del-obs="${o.id}" title="Remover">remover</button>
+        </div>
+      </div>`;
+    }).join("");
     const verMais = todas.length > 3
       ? `<button type="button" class="tecnico-ver-mais">${expandido ? "ver menos" : `ver todas (${todas.length})`}</button>`
       : "";
@@ -4066,35 +4121,43 @@ Pode ser sincero, é justamente pra ajustar o que estiver ruim antes de liberar 
       `<button type="button" class="tecnico-obs-chip ${tp.cls}${tp.key === tipoEscolhido ? " on" : ""}"
         data-tipo="${tp.key}">${esc(tp.label)}</button>`).join("");
 
+    const acao = tecnicoAcaoPrincipal(t);
+    const resumoFeedback = todas.length
+      ? `${todas.length} anotaç${todas.length === 1 ? "ão" : "ões"}`
+      : "sem feedback ainda";
+
     return `<article class="ajuste-item tecnico-item ${st.cls}" data-id="${t.id}">
-      <header class="ajuste-item-head">
-        <div class="ajuste-item-copy">
+      <header class="tecnico-head">
+        <div class="tecnico-head-copy">
           <h3>${esc(t.nome)}</h3>
-          <div class="ajuste-tags">
-            <span class="ajuste-tag ${t.papel === "lider" ? "t-lider" : "t-tecnico"}">${t.papel === "lider" ? "Líder de equipe" : "Técnico"}</span>
-            ${t.regional ? `<span class="ajuste-tag t-area">${esc(t.regional)}</span>` : ""}
-            ${t.lider_nome ? `<span class="ajuste-tag t-resp">responde a ${esc(t.lider_nome)}</span>` : ""}
-            ${t.respondido_em ? `<span class="ajuste-tag t-respondeu">respondeu ${fmtWhen(t.respondido_em)}</span>` : ""}
+          <div class="tecnico-sub">
+            <span>${t.papel === "lider" ? "Líder de equipe" : "Técnico"}</span>
+            ${t.regional ? `<span>${esc(t.regional)}</span>` : ""}
+            ${t.lider_nome ? `<span>responde a ${esc(t.lider_nome)}</span>` : ""}
+            <span class="tecnico-tel">${esc(formatTelefone(t.telefone))}</span>
           </div>
         </div>
         ${tecnicoEstrelas(t.nota)}
-        <button type="button" class="ajuste-edit" aria-label="Editar técnico" title="Editar">✎</button>
+        <button type="button" class="btn-ghost tecnico-acao-btn" data-tipo="${acao.tipo}">${esc(acao.label)}</button>
+        <div class="tecnico-menu-wrap">
+          <button type="button" class="tecnico-menu-btn" aria-label="Mais ações" title="Mais ações">⋯</button>
+          <div class="tecnico-menu" hidden>
+            <button type="button" data-acao="convite">Mensagem de convite</button>
+            <button type="button" data-acao="feedback">Pedir feedback</button>
+            <button type="button" data-acao="link">Copiar link do formulário</button>
+            <button type="button" data-acao="sem_retorno">Marcar sem retorno</button>
+            <button type="button" data-acao="editar">Editar cadastro</button>
+          </div>
+        </div>
       </header>
 
       ${tecnicoStepper(t)}
       ${tecnicoEtapas(t)}
 
-      <div class="tecnico-actions">
-        <button type="button" class="btn-ghost tecnico-msg-btn" data-tipo="convite">Convite</button>
-        <button type="button" class="btn-ghost tecnico-msg-btn" data-tipo="feedback">Pedir feedback</button>
-        <button type="button" class="btn-ghost tecnico-link-btn">Copiar link do formulário</button>
-        <span class="tecnico-tel">${esc(formatTelefone(t.telefone))}</span>
-      </div>
-
       <div class="tecnico-obs-bloco">
         <div class="tecnico-obs-head">
-          <span class="tecnico-obs-contagem">${todas.length ? `${todas.length} anotaç${todas.length === 1 ? "ão" : "ões"}` : "Sem feedback ainda"}</span>
-          <button type="button" class="tecnico-anotar-btn">${anotando ? "Cancelar" : "+ Anotar"}</button>
+          <span class="tecnico-obs-contagem">${resumoFeedback}</span>
+          <button type="button" class="tecnico-anotar-btn">${anotando ? "cancelar" : "+ anotar"}</button>
         </div>
         <div class="tecnico-obs-add"${anotando ? "" : " hidden"}>
           <div class="tecnico-obs-chips">${chips}</div>
@@ -4119,15 +4182,33 @@ Pode ser sincero, é justamente pra ajustar o que estiver ruim antes de liberar 
 
     $$(".tecnico-item", lista).forEach((card) => {
       const id = Number(card.dataset.id);
-      $(".ajuste-edit", card).addEventListener("click", () => openTecnicoModal(id));
-      $(".ajuste-item-copy h3", card).addEventListener("click", () => openTecnicoModal(id));
+      $(".tecnico-head-copy h3", card).addEventListener("click", () => openTecnicoModal(id));
       $$(".tecnico-passo", card).forEach((p) => p.addEventListener("click", () => {
         const t = TECNICOS.find((x) => x.id === id);
         if (t && t.status === p.dataset.status) return;   // clicar no atual não faz nada
         setTecnicoStatus(id, p.dataset.status);
       }));
-      $$(".tecnico-msg-btn", card).forEach((b) => b.addEventListener("click", () => abrirMensagemTecnico(id, b.dataset.tipo)));
-      $(".tecnico-link-btn", card).addEventListener("click", () => copiarLinkFormulario(id));
+      $(".tecnico-acao-btn", card).addEventListener("click", (e) =>
+        abrirMensagemTecnico(id, e.currentTarget.dataset.tipo));
+
+      // menu de ações — o que não é o passo óbvio agora fica guardado aqui
+      const menu = $(".tecnico-menu", card);
+      $(".tecnico-menu-btn", card).addEventListener("click", (e) => {
+        e.stopPropagation();
+        const abrindo = menu.hidden;
+        $$(".tecnico-menu", lista).forEach((m) => { m.hidden = true; });
+        menu.hidden = !abrindo;
+      });
+      $$("button", menu).forEach((b) => b.addEventListener("click", () => {
+        menu.hidden = true;
+        const acao = b.dataset.acao;
+        if (acao === "convite" || acao === "feedback") abrirMensagemTecnico(id, acao);
+        else if (acao === "link") copiarLinkFormulario(id);
+        else if (acao === "sem_retorno") setTecnicoStatus(id, "sem_retorno");
+        else if (acao === "editar") openTecnicoModal(id);
+      }));
+
+      $$("[data-virar]", card).forEach((b) => b.addEventListener("click", () => levarParaBacklog(Number(b.dataset.virar))));
       $(".tecnico-anotar-btn", card).addEventListener("click", () => {
         if (tecnicoAnotando.has(id)) tecnicoAnotando.delete(id);
         else tecnicoAnotando.set(id, "");
@@ -4223,6 +4304,29 @@ Pode ser sincero, é justamente pra ajustar o que estiver ruim antes de liberar 
       renderTecnicos();
       toast("Observação registrada.");
     } catch (e) { toast("Erro ao registrar: " + e.message, true); }
+  }
+
+  // relato do técnico -> item do backlog da Gestão de Ativos. Abre o modal de
+  // ajuste já preenchido com o que ele contou; o item só nasce quando salvar.
+  function levarParaBacklog(obsId) {
+    let obs = null, dono = null;
+    for (const t of TECNICOS) {
+      const achada = (t.observacoes || []).find((o) => o.id === obsId);
+      if (achada) { obs = achada; dono = t; break; }
+    }
+    if (!obs) return;
+    const quando = obs.created_at ? fmtWhen(obs.created_at) : "durante o teste";
+    openAjusteModal(null, {
+      observacaoId: obsId,
+      // título é um rascunho a partir do relato — a pessoa ajusta antes de salvar
+      titulo: obs.texto.length > 70 ? obs.texto.slice(0, 69).trim() + "…" : obs.texto,
+      tipo: obs.tipo === "problema" ? "Bug" : "Melhoria",
+      area: "Track One (app do técnico)",
+      atual: obs.texto,
+      observacao: `Relatado por ${dono.nome} no teste do Track One (${quando}).`,
+    });
+    // sem trocar de aba: o modal abre por cima, e ao salvar o card do técnico já
+    // mostra qual ajuste o relato virou — quem quiser ver o item vai na aba depois
   }
 
   async function delTecnicoObs(obsId) {
@@ -4370,6 +4474,11 @@ Pode ser sincero, é justamente pra ajustar o que estiver ruim antes de liberar 
   $("#tecnico-import-close").addEventListener("click", () => { $("#tecnico-import-modal").hidden = true; });
   $("#tecnico-import-modal").addEventListener("click", (e) => {
     if (e.target.id === "tecnico-import-modal") $("#tecnico-import-modal").hidden = true;
+  });
+
+  // clique fora fecha qualquer menu de ações aberto
+  document.addEventListener("click", () => {
+    $$(".tecnico-menu").forEach((m) => { m.hidden = true; });
   });
 
   $("#btn-add-tecnico").addEventListener("click", () => openTecnicoModal(null));

@@ -353,6 +353,21 @@ No card, três botões cobrem a conversa inteira do piloto:
   formulário dentro.
 - **Copiar link do formulário** — só o link, pra colar onde quiser.
 
+### Do relato do técnico pro backlog da LP
+
+Feedback que fica só no card do técnico não vira correção. Todo relato de
+**Problema** ou **Melhoria** tem, no rodapé, um **levar pro backlog**: ele abre o
+formulário de ajuste da *Gestão de Ativos* já preenchido — o texto do técnico
+entra como *como está hoje*, problema vira **Bug** e melhoria vira **Melhoria**, a
+área já vem como *Track One (app do técnico)* e a observação registra quem relatou
+e quando. Só falta escrever *como deve ser* e salvar.
+
+O item nasce na leva mais recente do backlog (a mesma que o time está tratando), e
+a observação passa a mostrar **→ ajuste v2 #07**, então dá pra ver no card que
+aquele ponto já foi levado — e a API recusa levar o mesmo relato duas vezes. Daí
+em diante ele segue o fluxo normal da aba *Gestão de Ativos* (prioridade, situação,
+retorno da LP na reunião) e entra na pauta de `/relatorio` junto do resto.
+
 ### Subir a base de uma vez (.xlsx)
 
 **Importar planilha** sobe a base inteira de técnicos de uma vez; **Baixar modelo
@@ -418,6 +433,8 @@ app já usa entre a lista de status do Python e a do JS).
 - `GET  /api/tecnicos/modelo` — planilha modelo da importação
 - `POST /api/tecnicos/limpar` — zera a base (body `{"confirmar": "APAGAR"}`; sem
   a palavra exata devolve 400 e não apaga nada)
+- `POST /api/tecnicos/observacoes/{id}/virar-ajuste` — transforma o relato em item
+  da Gestão de Ativos e amarra os dois (recusa se aquele relato já virou ajuste)
 - `POST /api/tecnicos/importar` — sobe a base (multipart, campo `file`); devolve
   `criados`, `atualizados`, `rejeitados`, o `resumo` por motivo e a lista `erros`
   com linha/nome/telefone/motivo de cada rejeitada
