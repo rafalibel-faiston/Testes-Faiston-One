@@ -1034,6 +1034,8 @@
     pontosOverlay.hidden = false;
     pontosFab.setAttribute("aria-expanded", "true");
     pontosFab.classList.add("is-open");
+    const flowSelect = $("#notes-add-flow");
+    if (flowSelect) flowSelect.value = currentFlow;   // ponto novo entra no fluxo que está aberto
   }
   function closePontosPanel() {
     pontosPanel.hidden = true;
