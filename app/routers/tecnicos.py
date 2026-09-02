@@ -17,6 +17,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, StreamingResponse
 from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session, joinedload
@@ -133,6 +134,13 @@ def _mensagem_para(tecnico: models.Tecnico, tipo: str = "convite", base_url: str
         return TEMPLATE_FEEDBACK.format(nome=primeiro_nome, link=link)
     template = TEMPLATE_LIDER if tecnico.papel == "lider" else TEMPLATE_TECNICO
     return template.format(nome=primeiro_nome)
+
+
+def _versao_da_fase(tecnico: models.Tecnico) -> Optional[str]:
+    """A build que a fase do técnico está testando agora. Gravada em cada relato
+    no momento em que ele entra: se a LP subir uma versão nova no meio do piloto,
+    o que já foi relatado continua apontando pra build em que aconteceu."""
+    return tecnico.fase.versao_app if tecnico.fase else None
 
 
 def _get_tecnico_or_404(db: Session, tecnico_id: int) -> models.Tecnico:
@@ -256,6 +264,7 @@ def criar_fase(payload: schemas.PilotoFaseCreate, db: Session = Depends(get_db))
         descricao=payload.descricao or "",
         status="planejada",
         ordem=maior + 1,
+        versao_app=(payload.versao_app or "").strip() or None,
         meta_concluidos=payload.meta_concluidos,
         meta_nota=payload.meta_nota,
         meta_etapa=payload.meta_etapa,
@@ -290,6 +299,8 @@ def atualizar_fase(fase_id: int, payload: schemas.PilotoFaseUpdate, db: Session 
             fase.liberada_em = agora
     if payload.ordem is not None:
         fase.ordem = payload.ordem
+    if payload.versao_app is not None:
+        fase.versao_app = payload.versao_app.strip() or None
     for campo in ("meta_concluidos", "meta_nota", "meta_etapa"):
         valor = getattr(payload, campo)
         if valor is not None:
@@ -739,6 +750,8 @@ def add_observacao(tecnico_id: int, payload: schemas.TecnicoObservacaoCreate, db
         autor=(payload.autor or "").strip() or None,
         texto=texto,
         tipo=tipo,
+        chamado=(payload.chamado or "").strip() or None,
+        versao_app=(payload.versao_app or "").strip() or _versao_da_fase(tecnico),
     ))
     db.commit()
     db.refresh(tecnico)
@@ -873,10 +886,13 @@ def responder_formulario(token: str, payload: schemas.FormularioResposta, db: Se
     if not nota and not etapas and not any(texto for _, texto in respostas):
         raise HTTPException(status_code=400, detail="Responda pelo menos um campo.")
 
+    chamado = (payload.chamado or "").strip() or None
+    versao = _versao_da_fase(tecnico)
     for tipo, texto in respostas:
         if texto:
             db.add(models.TecnicoObservacao(
                 tecnico_id=tecnico.id, autor=tecnico.nome, texto=texto, tipo=tipo,
+                chamado=chamado, versao_app=versao,
             ))
     if nota:
         tecnico.nota = nota
@@ -902,6 +918,102 @@ COLUNAS_IMPORTACAO = {
     "regional": {"regional", "cidade", "regiao", "praca"},
     "lider_nome": {"lider", "lider_nome", "lider direto", "responde a", "supervisor"},
 }
+
+
+@router.get("/tecnicos/exportar")
+def exportar_piloto(fase_id: Optional[int] = None, db: Session = Depends(get_db)):
+    """O piloto como planilha — pra levar pra reunião sem depender do link.
+
+    Três abas: os técnicos com o andamento de cada um, o feedback linha a linha
+    (com chamado, versão e o ajuste que gerou) e o resumo com os critérios.
+    """
+    fase = None
+    if fase_id:
+        fase = db.query(models.PilotoFase).filter(models.PilotoFase.id == fase_id).first()
+        if not fase:
+            raise HTTPException(status_code=404, detail="Fase não encontrada")
+
+    q = db.query(models.Tecnico).options(
+        joinedload(models.Tecnico.observacoes).joinedload(models.TecnicoObservacao.ajuste)
+    )
+    if fase_id:
+        q = q.filter(models.Tecnico.fase_id == fase_id)
+    tecnicos = q.order_by(models.Tecnico.nome).all()
+    painel = painel_piloto(fase_id=fase_id, db=db)
+
+    wb = Workbook()
+    cabecalho_fill = PatternFill(start_color="1F2937", end_color="1F2937", fill_type="solid")
+
+    def escreve_cabecalho(ws, colunas, larguras):
+        ws.append(colunas)
+        for i in range(1, len(colunas) + 1):
+            c = ws.cell(row=1, column=i)
+            c.font = Font(bold=True, color="FFFFFF")
+            c.fill = cabecalho_fill
+        for i, w in enumerate(larguras, start=1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+        ws.freeze_panes = "A2"
+
+    ws = wb.active
+    ws.title = "Técnicos"
+    escreve_cabecalho(
+        ws,
+        ["Nome", "Telefone", "Papel", "Regional", "Líder", "Situação", "Nota",
+         "Etapas testadas", "Respondeu em", "Anotações"],
+        [28, 18, 10, 18, 20, 16, 7, 46, 18, 11],
+    )
+    for t in tecnicos:
+        ws.append([
+            t.nome, t.telefone,
+            "Líder" if t.papel == "lider" else "Técnico",
+            t.regional or "", t.lider_nome or "",
+            STATUS_LABELS.get(t.status, t.status),
+            t.nota or "",
+            (t.etapas_testadas or "").replace("|", " · "),
+            t.respondido_em.astimezone(BRT).strftime("%d/%m/%Y %H:%M") if t.respondido_em else "",
+            len(t.observacoes),
+        ])
+
+    ws2 = wb.create_sheet("Feedback")
+    escreve_cabecalho(
+        ws2,
+        ["Técnico", "Tipo", "Relato", "Chamado", "Versão", "Virou ajuste", "Quando"],
+        [26, 12, 70, 12, 10, 14, 18],
+    )
+    TIPO_LABEL = {"positivo": "Achou bom", "melhoria": "Melhoria", "problema": "Problema"}
+    for t in tecnicos:
+        for o in t.observacoes:
+            ws2.append([
+                t.nome, TIPO_LABEL.get(o.tipo, "Nota geral"), o.texto,
+                o.chamado or "", o.versao_app or "", o.ajuste_ref or "",
+                o.created_at.astimezone(BRT).strftime("%d/%m/%Y %H:%M") if o.created_at else "",
+            ])
+    for linha in ws2.iter_rows(min_row=2):
+        linha[2].alignment = Alignment(wrap_text=True, vertical="top")
+
+    ws3 = wb.create_sheet("Resumo")
+    escreve_cabecalho(ws3, ["Indicador", "Atual", "Meta", "Situação"], [46, 12, 12, 16])
+    ws3.append(["Técnicos na fase", painel["total"], "", ""])
+    ws3.append(["Responderam o formulário", painel["responderam"], "", ""])
+    ws3.append(["Nota média", painel["notas"]["media"] or "—", "", ""])
+    ws3.append([])
+    for c in painel["criterios"]:
+        ws3.append([c["nome"], c["atual"], c["meta"], "OK" if c["ok"] else "Falta"])
+    ws3.append([])
+    ws3.append(["Cobertura do fluxo", "", "", ""])
+    for c in painel["cobertura"]:
+        ws3.append([f"  {c['etapa']}", c["total"], "", "OK" if c["ok"] else "Abaixo"])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    apelido = "".join(ch for ch in (fase.nome if fase else "piloto") if ch.isalnum() or ch in " -_").strip()
+    nome_arquivo = f"TrackOne_{apelido or 'piloto'}_{datetime.now(BRT).strftime('%Y-%m-%d')}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
+    )
 
 
 @router.get("/tecnicos/modelo")

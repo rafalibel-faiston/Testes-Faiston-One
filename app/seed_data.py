@@ -422,11 +422,20 @@ def migrate_schema(engine):
         if "fase_id" not in tec_cols:
             stmts.append("ALTER TABLE tecnicos ADD COLUMN fase_id INTEGER")
 
-    # relato do técnico que virou item do backlog da Gestão de Ativos
+    # relato do técnico: vínculo com o backlog, build testada e chamado de origem
     if "tecnico_observacoes" in existing_tables:
         obs_tec_cols = {c["name"] for c in insp.get_columns("tecnico_observacoes")}
         if "ajuste_id" not in obs_tec_cols:
             stmts.append("ALTER TABLE tecnico_observacoes ADD COLUMN ajuste_id INTEGER")
+        if "versao_app" not in obs_tec_cols:
+            stmts.append("ALTER TABLE tecnico_observacoes ADD COLUMN versao_app VARCHAR")
+        if "chamado" not in obs_tec_cols:
+            stmts.append("ALTER TABLE tecnico_observacoes ADD COLUMN chamado VARCHAR")
+
+    if "piloto_fases" in existing_tables:
+        fase_cols = {c["name"] for c in insp.get_columns("piloto_fases")}
+        if "versao_app" not in fase_cols:
+            stmts.append("ALTER TABLE piloto_fases ADD COLUMN versao_app VARCHAR")
 
     if "agenda_eventos" in existing_tables:
         ag_cols = {c["name"] for c in insp.get_columns("agenda_eventos")}

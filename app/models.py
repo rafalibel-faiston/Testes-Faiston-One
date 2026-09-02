@@ -361,6 +361,11 @@ class PilotoFase(Base):
     # planejada -> em_andamento -> concluida -> liberada (o app saiu do piloto ali)
     status = Column(String, nullable=False, default="planejada", server_default="planejada")
     ordem = Column(Integer, nullable=False, default=0, server_default="0")
+    # build do app que esta fase está testando. Sem isso, feedback vira ruído no
+    # meio do piloto: ninguém sabe se o problema relatado já foi corrigido numa
+    # versão mais nova. Cada relato guarda a versão vigente no momento em que
+    # entrou, então trocar a versão aqui não reescreve o passado.
+    versao_app = Column(String, nullable=True)
     # a régua desta fase; vazio usa o padrão do painel
     meta_concluidos = Column(Integer, nullable=True)
     meta_nota = Column(Float, nullable=True)
@@ -445,6 +450,11 @@ class TecnicoObservacao(Base):
     # técnicos reclamando da mesma coisa continuam sendo dez textos soltos em vez
     # de uma linha priorizada que a LP consegue trabalhar
     ajuste_id = Column(Integer, ForeignKey("ativo_ajustes.id", ondelete="SET NULL"), nullable=True)
+    # em qual build o técnico viu isso, e em qual atendimento — o chamado é o que
+    # permite ir no Dispatcher/NEXO investigar o caso concreto em vez de discutir
+    # o relato no abstrato
+    versao_app = Column(String, nullable=True)
+    chamado = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     tecnico = relationship("Tecnico", back_populates="observacoes")

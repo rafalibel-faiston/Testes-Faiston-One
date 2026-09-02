@@ -416,6 +416,7 @@
           Importar planilha
           <input type="file" id="tecnico-import-input" accept=".xlsx,.xlsm" hidden>
         </label>
+        <a class="btn-ghost" id="btn-exportar-piloto" href="/api/tecnicos/exportar" download>Exportar (.xlsx)</a>
         <button type="button" class="btn-ghost" id="btn-nova-fase">Nova fase</button>
         <button type="button" class="btn-ghost tecnico-limpar-btn" id="btn-limpar-base">Limpar base</button>
         <button type="button" class="add-btn" id="btn-add-tecnico">
@@ -987,9 +988,15 @@
       <label class="fld fld-wide">Nome da fase <b>*</b>
         <input name="nome" placeholder="ex.: Fase 1 — SP capital" required>
       </label>
-      <label class="fld fld-wide">Descrição
-        <textarea name="descricao" rows="2" placeholder="o que essa leva cobre (opcional)"></textarea>
-      </label>
+      <div class="form-grid">
+        <label class="fld fld-wide">Descrição
+          <textarea name="descricao" rows="2" placeholder="o que essa leva cobre (opcional)"></textarea>
+        </label>
+        <label class="fld">Versão do app
+          <input name="versao_app" placeholder="ex.: 1.2.0" autocomplete="off">
+          <span class="fld-hint">A build que essa fase está testando. Cada relato guarda a versão do momento — se a LP subir uma nova, o que já foi relatado continua apontando pra build certa.</span>
+        </label>
+      </div>
       <p class="notes-hint">Metas desta fase — o painel usa elas pra dizer se já dá pra liberar.
       Deixe em branco pra usar o padrão (10 concluídos, nota 4, cada etapa com 5 técnicos).</p>
       <div class="form-grid">

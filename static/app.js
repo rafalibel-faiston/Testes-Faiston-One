@@ -4025,13 +4025,16 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
     const abas = FASES.map((f) => `
       <button type="button" class="fase-aba${f.id === FASE_ATUAL ? " active" : ""} st-${f.status}" data-fase="${f.id}">
         <span class="fase-nome">${esc(f.nome)}</span>
-        <span class="fase-sub">${f.total_tecnicos} técnico(s) · ${FASE_STATUS_LABEL[f.status] || f.status}</span>
+        <span class="fase-sub">${f.total_tecnicos} técnico(s) · ${FASE_STATUS_LABEL[f.status] || f.status}${f.versao_app ? ` · ${esc(f.versao_app)}` : ""}</span>
       </button>`).join("");
     nav.innerHTML = abas + `
       <button type="button" class="fase-aba fase-base${FASE_ATUAL === null ? " active" : ""}" data-fase="">
         <span class="fase-nome">Base completa</span>
         <span class="fase-sub">quem ainda não entrou em fase</span>
       </button>`;
+    // exportar segue a fase aberta: quem está numa fase quer a planilha dela
+    const exportar = $("#btn-exportar-piloto");
+    if (exportar) exportar.href = FASE_ATUAL ? `/api/tecnicos/exportar?fase_id=${FASE_ATUAL}` : "/api/tecnicos/exportar";
     $$(".fase-aba", nav).forEach((b) => b.addEventListener("click", () => {
       FASE_ATUAL = b.dataset.fase ? Number(b.dataset.fase) : null;
       localStorage.setItem(FASE_KEY, FASE_ATUAL || "");
@@ -4219,6 +4222,7 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
     if (f) {
       faseForm.nome.value = f.nome;
       faseForm.descricao.value = f.descricao || "";
+      faseForm.versao_app.value = f.versao_app || "";
       faseForm.meta_concluidos.value = f.meta_concluidos || "";
       faseForm.meta_nota.value = f.meta_nota || "";
       faseForm.meta_etapa.value = f.meta_etapa || "";
@@ -4240,6 +4244,7 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
     const payload = {
       nome: (fd.get("nome") || "").trim(),
       descricao: fd.get("descricao") || "",
+      versao_app: (fd.get("versao_app") || "").trim(),
       meta_concluidos: num(fd.get("meta_concluidos")),
       meta_nota: num(fd.get("meta_nota")),
       meta_etapa: num(fd.get("meta_etapa")),
@@ -4545,6 +4550,8 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
         <div class="tecnico-obs-rodape">
           <span class="tecnico-obs-tag ${meta.cls}">${esc(meta.label)}</span>
           <span class="tecnico-obs-meta">${esc(o.autor || "—")} · ${fmtWhen(o.created_at)}</span>
+          ${o.chamado ? `<span class="tecnico-obs-chamado" title="Chamado em que aconteceu">#${esc(o.chamado)}</span>` : ""}
+          ${o.versao_app ? `<span class="tecnico-obs-versao" title="Versão do app testada">${esc(o.versao_app)}</span>` : ""}
           ${o.ajuste_ref ? `<span class="tecnico-obs-virou" title="Já virou item do backlog">→ ajuste ${esc(o.ajuste_ref)}</span>` : ""}
           ${podeVirar ? `<button type="button" class="tecnico-obs-acao" data-virar="${o.id}">levar pro backlog</button>` : ""}
           <button type="button" class="tecnico-obs-acao del" data-del-obs="${o.id}" title="Remover">remover</button>

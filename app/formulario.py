@@ -94,12 +94,15 @@ header.topo p { font-size: 13.5px; margin: 0; opacity: .9; }
 }
 .campo .ajuda { display: block; font-size: 13px; color: #7a839c; margin-bottom: 10px; }
 
-textarea {
-  width: 100%; min-height: 88px; padding: 12px; border-radius: 12px;
+textarea, input[type="text"] {
+  width: 100%; padding: 12px; border-radius: 12px;
   border: 1px solid #d5dae9; background: #fbfcfe; color: #151720;
-  font-family: inherit; font-size: 15px; line-height: 1.5; resize: vertical;
+  font-family: inherit; font-size: 15px; line-height: 1.5;
 }
-textarea:focus { outline: none; border-color: #0054ec; background: #fff; box-shadow: 0 0 0 3px rgba(0,84,236,.12); }
+textarea { min-height: 88px; resize: vertical; }
+textarea:focus, input[type="text"]:focus {
+  outline: none; border-color: #0054ec; background: #fff; box-shadow: 0 0 0 3px rgba(0,84,236,.12);
+}
 
 /* nota: botões grandes em vez de lista suspensa — dá pra responder com o polegar */
 .notas { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
@@ -231,6 +234,12 @@ def montar_html(nome: str, token: str, ja_respondeu: str = "") -> str:
       <div class="etapas">{etapas_html}</div>
     </div>
 
+    <div class="campo">
+      <label class="titulo" for="q-chamado">Qual foi o chamado?</label>
+      <span class="ajuda">o número do atendimento em que você usou o app (opcional, mas ajuda muito a gente a investigar)</span>
+      <input type="text" id="q-chamado" name="chamado" inputmode="numeric" placeholder="ex.: 221207" autocomplete="off">
+    </div>
+
     {perguntas_html}
 
     <button type="submit" class="enviar" id="enviar">Enviar respostas</button>
@@ -274,6 +283,7 @@ def montar_html(nome: str, token: str, ja_respondeu: str = "") -> str:
       melhoria: (fd.get("melhoria") || "").trim(),
       problema: (fd.get("problema") || "").trim(),
       comentario: (fd.get("comentario") || "").trim(),
+      chamado: (fd.get("chamado") || "").trim(),
     }};
     var vazio = !payload.nota && !payload.etapas.length && !payload.positivo
       && !payload.melhoria && !payload.problema && !payload.comentario;

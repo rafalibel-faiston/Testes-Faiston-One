@@ -1,0 +1,7 @@
+# dependências só dos testes — não vão pro deploy (o Railway usa requirements.txt)
+-r requirements.txt
+pytest==8.3.4
+httpx==0.28.1
+# roda os testes em ordem aleatória: vazamento de estado entre testes aparece
+# na hora, em vez de só quando alguém renomeia um arquivo
+pytest-randomly==3.16.0

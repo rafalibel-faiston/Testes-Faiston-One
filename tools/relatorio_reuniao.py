@@ -40,7 +40,12 @@ ENDPOINTS = {
     "notas": "/api/notas",
     "ativos_ajustes": "/api/ativos/ajustes",
     "situacoes": "/api/situacoes",
+    "piloto": "/api/piloto/pauta",
 }
+
+# quais seções vêm como objeto (o resto é lista) — usado pro fallback quando o
+# arquivo/endpoint não existe
+SECOES_OBJETO = {"summary", "piloto"}
 
 
 def fetch(base_url: str, path: str, timeout: int = 60):
@@ -57,7 +62,7 @@ def carregar(base_url: str | None, json_dir: str | None) -> dict:
             arquivo = Path(json_dir) / f"{nome}.json"
             if not arquivo.exists():
                 print(f"aviso: {arquivo} não encontrado — seção fica vazia", file=sys.stderr)
-                dados[nome] = {} if nome == "summary" else []
+                dados[nome] = {} if nome in SECOES_OBJETO else []
                 continue
             dados[nome] = json.loads(arquivo.read_text(encoding="utf-8"))
         else:

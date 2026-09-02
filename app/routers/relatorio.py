@@ -24,6 +24,57 @@ def _dump(schema, itens) -> List[dict]:
     return [schema.model_validate(i).model_dump(mode="json") for i in itens]
 
 
+def _coletar_piloto(db: Session) -> dict:
+    """O piloto do Track One pra pauta: onde cada fase parou e o que os técnicos
+    relataram e ainda não virou item de backlog.
+
+    A reunião com a LP é uma só — um problema que trava a liberação do app dos
+    técnicos precisa da mesma conversa que um estágio reprovado do Dispatcher.
+    """
+    from .tecnicos import painel_piloto
+
+    fases = db.query(models.PilotoFase).order_by(
+        models.PilotoFase.ordem, models.PilotoFase.id
+    ).all()
+    resumo_fases = []
+    for f in fases:
+        painel = painel_piloto(fase_id=f.id, db=db)
+        resumo_fases.append({
+            "nome": f.nome,
+            "status": f.status,
+            "versao_app": f.versao_app,
+            "total_tecnicos": painel["total"],
+            "responderam": painel["responderam"],
+            "nota_media": painel["notas"]["media"],
+            "criterios": painel["criterios"],
+        })
+
+    # o que ninguém está tratando ainda: relato de problema/melhoria sem ajuste
+    soltos = (
+        db.query(models.TecnicoObservacao)
+        .join(models.Tecnico)
+        .filter(
+            models.TecnicoObservacao.ajuste_id.is_(None),
+            models.TecnicoObservacao.tipo.in_(["problema", "melhoria"]),
+        )
+        .order_by(models.TecnicoObservacao.tipo, models.TecnicoObservacao.id.desc())
+        .all()
+    )
+    return {
+        "fases": resumo_fases,
+        "relatos_sem_ajuste": [
+            {
+                "texto": o.texto,
+                "tipo": o.tipo,
+                "tecnico": o.tecnico.nome if o.tecnico else None,
+                "chamado": o.chamado,
+                "versao_app": o.versao_app,
+            }
+            for o in soltos
+        ],
+    }
+
+
 def _coletar(db: Session, fluxo: Optional[str]) -> dict:
     """Monta os dados da pauta.
 
@@ -88,12 +139,20 @@ def _coletar(db: Session, fluxo: Optional[str]) -> dict:
         "notas": _dump(schemas.MeetingNoteOut, notas),
         "situacoes": _dump(schemas.SituacaoOut, situacoes),
         "ativos_ajustes": _dump(schemas.AtivoAjusteOut, ajustes),
+        "piloto": _coletar_piloto(db),
         "summary": {
             "total": total,
             "counts": counts,
             "pct_executado": round((executado / total) * 100, 1) if total else 0.0,
         },
     }
+
+
+@router.get("/api/piloto/pauta")
+def pauta_piloto(db: Session = Depends(get_db)):
+    """Os dados do piloto no formato da pauta — usado pelo script que gera a
+    reunião como arquivo (`tools/relatorio_reuniao.py`), que lê tudo pela API."""
+    return _coletar_piloto(db)
 
 
 @router.get("/relatorio", response_class=HTMLResponse)

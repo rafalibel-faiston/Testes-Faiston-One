@@ -143,7 +143,11 @@ Faiston, com tudo que está em aberto, na ordem em que interessa discutir:
    que está reprovado já apareceu no item 2.
 4. **Ajustes da Gestão de Ativos** — os que ainda não foram validados, no
    formato *hoje é assim / deveria ser assim*, agrupados por leva.
-5. **Testes ainda não executados** — a fila, resumida por estágio.
+5. **Track One — piloto com os técnicos** — em que pé está cada fase (situação,
+   versão testada, quantos responderam, nota e o que falta pros critérios) e os
+   relatos de problema/melhoria que **ainda não viraram item de backlog** — que
+   são justamente os que ninguém está tratando.
+6. **Testes ainda não executados** — a fila, resumida por estágio.
 
 A pauta cobre **os três fluxos de uma vez**: a reunião é uma só, e um estágio
 reprovado no Fluxo B precisa da mesma conversa que um do Fluxo C. Quando há
@@ -327,6 +331,12 @@ Cada técnico tem:
 - **Nota e etapas testadas**: quando ele responde o formulário (abaixo), o card
   mostra a nota de 1 a 5 e quais etapas do fluxo ele conseguiu exercitar — é o que
   diz se o teste cobriu o atendimento inteiro ou só um pedaço dele.
+- **Versão e chamado em cada relato**: a fase diz qual build está sendo testada, e
+  cada relato guarda a versão vigente no momento em que entrou — se a LP subir uma
+  versão nova no meio, o que já foi relatado continua apontando pra build em que
+  aconteceu, em vez de virar ruído ("isso já não foi corrigido?"). O formulário
+  também pergunta o número do chamado, que é o que permite ir no Dispatcher
+  investigar o atendimento concreto em vez de discutir o relato no abstrato.
 
 ### Formulário de feedback (o técnico responde, cai direto aqui)
 
@@ -492,6 +502,10 @@ app já usa entre a lista de status do Python e a do JS).
 - `GET  /formulario/{token}` — a página que o técnico abre no celular (sem `/api`)
 - `POST /api/formulario/{token}` — recebe as respostas dele
 - `GET  /api/tecnicos/modelo` — planilha modelo da importação
+- `GET  /api/tecnicos/exportar` — o piloto em .xlsx (aba de técnicos, de feedback
+  com chamado/versão/ajuste, e de resumo com os critérios); `?fase_id=` exporta
+  só uma fase
+- `GET  /api/piloto/pauta` — os dados do piloto no formato da pauta da reunião
 - `POST /api/tecnicos/limpar` — zera a base (body `{"confirmar": "APAGAR"}`; sem
   a palavra exata devolve 400 e não apaga nada)
 - `POST /api/tecnicos/observacoes/{id}/virar-ajuste` — transforma o relato em item
@@ -509,6 +523,26 @@ app já usa entre a lista de status do Python e a do JS).
 Também dá pra pedir isso direto no Claude via MCP: `listar_tecnicos`, `criar_tecnico`,
 `gerar_mensagem_tecnico`, `atualizar_status_tecnico`, `adicionar_observacao_tecnico`
 (ver "Conectar no Claude/Cowork via MCP" acima).
+
+## Testes
+
+```bash
+pip install -r requirements-dev.txt
+python3 -m pytest tests/ -q
+```
+
+Cobrem o módulo de QA dos técnicos, que é onde mais dói uma regressão silenciosa:
+importação (planilha de outro sistema, motivos de rejeição, reimportar atualizando
+sem duplicar nem apagar progresso de QA), formulário (resposta virando feedback
+classificado, campo em branco, responder duas vezes, versão da build gravada por
+relato), fases (puxar a regional inteira, não roubar técnico de outra fase,
+excluir devolvendo pra base, metas próprias), ponte com o backlog (tipo deduzido,
+não virar dois itens, vários relatos no mesmo ajuste), limpeza da base (só com a
+palavra exata) e as saídas — planilha e a seção do piloto na pauta.
+
+Os testes rodam contra o app de verdade, num SQLite descartável, e em **ordem
+aleatória** (`pytest-randomly`): teste que depende do que outro deixou pra trás
+falha na hora, em vez de só quando alguém renomeia um arquivo.
 
 ## Ticket filho — pendente
 

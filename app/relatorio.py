@@ -402,6 +402,80 @@ def secao_ajustes(ajustes: list, editavel: bool = False) -> str:
     return blocos
 
 
+def secao_piloto(piloto: dict) -> str:
+    """O andamento do piloto do Track One — o app dos técnicos.
+
+    A reunião é uma só, então o que trava a liberação do app precisa estar na
+    mesma pauta dos ajustes e dos casos de teste. Aqui vai o que a outra ponta
+    precisa saber: em que pé está cada fase, o que os técnicos relataram e,
+    principalmente, o que ainda não virou item de backlog — porque isso é o que
+    ninguém está tratando ainda.
+    """
+    if not piloto:
+        return ""
+    fases = piloto.get("fases") or []
+    soltos = piloto.get("relatos_sem_ajuste") or []
+    if not fases and not soltos:
+        return ""
+
+    FASE_LABEL = {
+        "planejada": ("Planejada", "b-neutral"),
+        "em_andamento": ("Em andamento", "b-info"),
+        "concluida": ("Concluída", "b-warn"),
+        "liberada": ("Liberada", "b-ok"),
+    }
+    linhas = ""
+    for f in fases:
+        rotulo, cor = FASE_LABEL.get(f.get("status"), (f.get("status"), "b-neutral"))
+        criterios = f.get("criterios") or []
+        faltando = [c for c in criterios if not c.get("ok")]
+        detalhe = (
+            "critérios batidos — pronta pra liberar"
+            if criterios and not faltando
+            else "; ".join(f'{c["nome"]}: {c["atual"]}/{c["meta"]}' for c in faltando[:3])
+        ) or "sem técnicos ainda"
+        extras = badge(rotulo, cor)
+        if f.get("versao_app"):
+            extras += " " + badge(f'versão {f["versao_app"]}', "b-neutral")
+        linhas += f"""
+        <li>
+          <div class="item-head">
+            <span class="titulo">{e(f.get("nome"))}</span>
+            {extras}
+            <span class="item-meta">{e(f.get("total_tecnicos"))} técnico(s) · {e(f.get("responderam"))} responderam · nota {e(f.get("nota_media") or "—")}</span>
+          </div>
+          <div class="item-corpo">
+            <div class="item-meta">{e(detalhe)}</div>
+          </div>
+        </li>"""
+
+    blocos = ""
+    if linhas:
+        blocos += f'<div class="card" style="margin-bottom:20px"><ul class="itens">{linhas}</ul></div>'
+
+    if soltos:
+        itens = ""
+        for r in soltos[:12]:
+            marca = badge("Problema", "b-alert") if r.get("tipo") == "problema" else badge("Melhoria", "b-info")
+            meta = " · ".join(x for x in [
+                r.get("tecnico"),
+                f'chamado {r["chamado"]}' if r.get("chamado") else "",
+                f'versão {r["versao_app"]}' if r.get("versao_app") else "",
+            ] if x)
+            itens += f"""
+            <li>
+              <div class="item-head">{marca}<span class="titulo">{e(r.get("texto"))}</span></div>
+              <div class="item-corpo"><div class="item-meta">{e(meta)}</div></div>
+            </li>"""
+        sobra = len(soltos) - len(soltos[:12])
+        blocos += f"""
+        <div class="callout" style="margin-bottom:14px"><b>Relatado pelos técnicos e ainda sem item no backlog</b> —
+        {len(soltos)} ponto(s) que ninguém está tratando até virarem ajuste.</div>
+        <div class="card"><ul class="itens">{itens}</ul>
+        {f'<p class="muted" style="margin-top:10px">e mais {sobra} relato(s).</p>' if sobra > 0 else ""}</div>"""
+    return blocos
+
+
 def secao_nao_executados(casos: list) -> str:
     pendentes = [c for c in casos if c.get("status") == "Não testado"]
     if not pendentes:
@@ -510,6 +584,8 @@ def montar_html(dados: dict, fonte: str, editavel: bool = False) -> str:
     ajustes = dados.get("ativos_ajustes") or []
     situacoes = dados.get("situacoes") or []
     summary = dados.get("summary") or {}
+    piloto = dados.get("piloto") or {}
+    piloto_soltos = piloto.get("relatos_sem_ajuste") or []
 
     pontos_abertos = [n for n in notas if not n.get("resolvido")]
     fluxos = sorted({f for f in ({c.get("fluxo") for c in casos}
@@ -556,6 +632,7 @@ def montar_html(dados: dict, fonte: str, editavel: bool = False) -> str:
             ("problemas", f"Reprovados / bloqueados ({len(reprovados)})"),
             ("situacoes", f"Situações ({situacoes_pendentes})"),
             ("ajustes", f"Ajustes ({len(ajustes_abertos)})"),
+            ("piloto", f"Track One ({len(piloto_soltos)})"),
             ("pendentes", f"Por executar ({len(casos_pendentes)})"),
         ]
     )
@@ -573,7 +650,9 @@ def montar_html(dados: dict, fonte: str, editavel: bool = False) -> str:
             secao_situacoes(situacoes, multi_fluxo), "situacoes"),
         sec("04", "Ajustes da Gestão de Ativos", "hoje é assim / deveria ser assim — pendentes de validação",
             secao_ajustes(ajustes, editavel), "ajustes"),
-        sec("05", "Testes ainda não executados", "fila de execução, agrupada por estágio",
+        sec("05", "Track One — piloto com os técnicos", "como está cada fase e o que os técnicos relataram",
+            secao_piloto(piloto), "piloto"),
+        sec("06", "Testes ainda não executados", "fila de execução, agrupada por estágio",
             secao_nao_executados(casos), "pendentes"),
     ])
 

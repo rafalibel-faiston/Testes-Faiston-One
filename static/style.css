@@ -2122,6 +2122,11 @@ body.inline-connecting * { cursor:crosshair !important; }
 .tecnico-obs-item p { font-size:12.5px; line-height:1.55; color:var(--text-2); margin:0; }
 .tecnico-obs-rodape { display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-top:4px; }
 .tecnico-obs-meta { font-size:10.5px; color:var(--text-3); }
+.tecnico-obs-chamado, .tecnico-obs-versao {
+  font-family:'Roboto Mono',monospace; font-size:10px; font-weight:600;
+  padding:2px 7px; border-radius:999px; background:var(--surface-2);
+  border:1px solid var(--line-2); color:var(--text-3);
+}
 .tecnico-obs-virou {
   font-size:10.5px; font-weight:600; color:var(--f-purple);
   background:rgba(150,10,156,.07); border-radius:999px; padding:2px 8px;

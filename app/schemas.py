@@ -406,6 +406,8 @@ class TecnicoObservacaoOut(BaseModel):
     tipo: Optional[str] = None   # positivo / melhoria / problema / None
     ajuste_id: Optional[int] = None    # item da Gestão de Ativos que este relato gerou
     ajuste_ref: Optional[str] = None   # como ele é chamado na reunião: "v2 #07"
+    versao_app: Optional[str] = None   # build em que o técnico viu isso
+    chamado: Optional[str] = None      # atendimento em que aconteceu
     created_at: Optional[datetime] = None
 
 
@@ -427,6 +429,9 @@ class TecnicoObservacaoCreate(BaseModel):
     texto: str
     autor: Optional[str] = None
     tipo: Optional[str] = None
+    chamado: Optional[str] = None
+    # ausente = herda a versão que a fase do técnico está testando
+    versao_app: Optional[str] = None
 
 
 class TecnicoOut(BaseModel):
@@ -486,6 +491,7 @@ class PilotoFaseOut(BaseModel):
     descricao: Optional[str] = ""
     status: str = "planejada"
     ordem: int = 0
+    versao_app: Optional[str] = None    # build que esta fase está testando
     meta_concluidos: Optional[int] = None
     meta_nota: Optional[float] = None
     meta_etapa: Optional[int] = None
@@ -501,6 +507,7 @@ class PilotoFaseOut(BaseModel):
 class PilotoFaseCreate(BaseModel):
     nome: str
     descricao: Optional[str] = ""
+    versao_app: Optional[str] = None
     meta_concluidos: Optional[int] = None
     meta_nota: Optional[float] = None
     meta_etapa: Optional[int] = None
@@ -512,6 +519,7 @@ class PilotoFaseUpdate(BaseModel):
     descricao: Optional[str] = None
     status: Optional[str] = None
     ordem: Optional[int] = None
+    versao_app: Optional[str] = None
     meta_concluidos: Optional[int] = None
     meta_nota: Optional[float] = None
     meta_etapa: Optional[int] = None
@@ -570,6 +578,7 @@ class FormularioResposta(BaseModel):
     melhoria: Optional[str] = ""          # o que precisa melhorar
     problema: Optional[str] = ""          # erro/travamento encontrado
     comentario: Optional[str] = ""        # campo livre — vira nota geral
+    chamado: Optional[str] = ""           # atendimento em que ele usou o app
 
 
 class AtivoAjustePrintOut(BaseModel):
