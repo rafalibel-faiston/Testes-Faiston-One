@@ -1,5 +1,6 @@
 from sqlalchemy import (
-    Column, Integer, String, Text, LargeBinary, DateTime, ForeignKey, Boolean, UniqueConstraint, case,
+    Column, Integer, Float, String, Text, LargeBinary, DateTime, ForeignKey, Boolean,
+    UniqueConstraint, case,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func, expression
@@ -344,6 +345,35 @@ AJUSTE_PRIORIDADE_ORDEM = case(
 )
 
 
+class PilotoFase(Base):
+    """Uma leva do piloto do Track One — normalmente uma região por vez.
+
+    O app não é liberado pra todo mundo de uma vez: entra uma fase (ex.: "Fase 1
+    — SP capital"), ela é acompanhada até bater os critérios, e só então a
+    próxima abre. Por isso as metas moram aqui e não numa configuração global:
+    uma fase de 12 técnicos numa capital não tem a mesma régua de uma de 60 no
+    interior. Técnico sem fase fica na base geral, esperando ser chamado."""
+    __tablename__ = "piloto_fases"
+
+    id = Column(Integer, primary_key=True)
+    nome = Column(String, nullable=False)               # "Fase 1 — SP capital"
+    descricao = Column(Text, nullable=True, default="")
+    # planejada -> em_andamento -> concluida -> liberada (o app saiu do piloto ali)
+    status = Column(String, nullable=False, default="planejada", server_default="planejada")
+    ordem = Column(Integer, nullable=False, default=0, server_default="0")
+    # a régua desta fase; vazio usa o padrão do painel
+    meta_concluidos = Column(Integer, nullable=True)
+    meta_nota = Column(Float, nullable=True)
+    meta_etapa = Column(Integer, nullable=True)
+    iniciada_em = Column(DateTime(timezone=True), nullable=True)
+    liberada_em = Column(DateTime(timezone=True), nullable=True)
+    autor = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+    tecnicos = relationship("Tecnico", back_populates="fase")
+
+
 def novo_token_tecnico() -> str:
     """Chave do link do formulário de feedback. Curta o bastante pra caber numa
     mensagem de WhatsApp e aleatória o bastante pra ninguém cair no formulário
@@ -375,6 +405,8 @@ class Tecnico(Base):
     lider_nome = Column(String, nullable=True)    # a quem o técnico responde (quando papel=tecnico)
     status = Column(String, nullable=False, default="a_contatar", server_default="a_contatar")
     autor = Column(String, nullable=True)         # quem cadastrou/está conduzindo o teste
+    # em qual leva do piloto ele entrou; NULL = ainda na base geral, sem ser chamado
+    fase_id = Column(Integer, ForeignKey("piloto_fases.id", ondelete="SET NULL"), nullable=True, index=True)
     # chave do link do formulário de feedback (/formulario/{token}) que o técnico
     # abre no celular depois do atendimento — é o que dispensa entrevistar um a um
     token = Column(String, unique=True, index=True, nullable=True)
@@ -393,6 +425,7 @@ class Tecnico(Base):
         "TecnicoObservacao", back_populates="tecnico", cascade="all, delete-orphan",
         order_by="TecnicoObservacao.id",
     )
+    fase = relationship("PilotoFase", back_populates="tecnicos")
 
 
 class TecnicoObservacao(Base):

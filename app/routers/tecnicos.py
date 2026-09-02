@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import HTMLResponse, StreamingResponse
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
+from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session, joinedload
 
 from .. import formulario, models, schemas
@@ -141,15 +142,30 @@ def _get_tecnico_or_404(db: Session, tecnico_id: int) -> models.Tecnico:
     return tecnico
 
 
+FASE_STATUSES = ["planejada", "em_andamento", "concluida", "liberada"]
+
+
 @router.get("/tecnicos", response_model=List[schemas.TecnicoOut])
 def list_tecnicos(
     status: Optional[str] = None,
     papel: Optional[str] = None,
     regional: Optional[str] = None,
     busca: Optional[str] = None,
+    fase_id: Optional[int] = None,
+    limite: int = 300,
     db: Session = Depends(get_db),
 ):
-    q = db.query(models.Tecnico).options(joinedload(models.Tecnico.observacoes))
+    """Lista completa (com observações) — é o que alimenta os cards.
+
+    Sempre limitada: a base tem milhares de cadastros e a tela trabalha uma fase
+    por vez. Pra varrer a base inteira, use /tecnicos/base, que é leve e paginada.
+    """
+    q = (
+        db.query(models.Tecnico)
+        .options(joinedload(models.Tecnico.observacoes).joinedload(models.TecnicoObservacao.ajuste))
+    )
+    if fase_id is not None:
+        q = q.filter(models.Tecnico.fase_id == (fase_id if fase_id > 0 else None))
     if status:
         q = q.filter(models.Tecnico.status == status)
     if papel:
@@ -159,7 +175,195 @@ def list_tecnicos(
     if busca:
         termo = f"%{busca.strip()}%"
         q = q.filter(models.Tecnico.nome.ilike(termo))
-    return q.order_by(models.Tecnico.nome).all()
+    return q.order_by(models.Tecnico.nome).limit(max(1, min(limite, 1000))).all()
+
+
+@router.get("/tecnicos/base", response_model=schemas.BaseTecnicosOut)
+def base_tecnicos(
+    busca: Optional[str] = None,
+    regional: Optional[str] = None,
+    papel: Optional[str] = None,
+    sem_fase: bool = False,
+    limite: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+):
+    """A base inteira em formato leve e paginado — sem observações, sem token.
+
+    É o que a tela usa pra escolher quem entra numa fase: com quatro mil
+    cadastros, mandar a lista completa era mais de um mega de JSON por abertura.
+    """
+    q = db.query(models.Tecnico)
+    if sem_fase:
+        q = q.filter(models.Tecnico.fase_id.is_(None))
+    if regional:
+        q = q.filter(models.Tecnico.regional == regional)
+    if papel:
+        q = q.filter(models.Tecnico.papel == papel)
+    if busca:
+        q = q.filter(models.Tecnico.nome.ilike(f"%{busca.strip()}%"))
+    total = q.count()
+    itens = (
+        q.order_by(models.Tecnico.nome)
+        .offset(max(0, offset))
+        .limit(max(1, min(limite, 200)))
+        .all()
+    )
+    return {"total": total, "itens": itens}
+
+
+@router.get("/tecnicos/regionais")
+def listar_regionais(db: Session = Depends(get_db)):
+    """As regionais que existem na base, com quantos técnicos cada uma tem — é
+    por aqui que se monta uma fase por região sem digitar o nome na mão."""
+    linhas = (
+        db.query(models.Tecnico.regional, sa_func.count(models.Tecnico.id))
+        .filter(models.Tecnico.regional.isnot(None), models.Tecnico.regional != "")
+        .group_by(models.Tecnico.regional)
+        .order_by(sa_func.count(models.Tecnico.id).desc())
+        .all()
+    )
+    return [{"regional": r, "total": n} for r, n in linhas]
+
+
+@router.get("/piloto/fases", response_model=List[schemas.PilotoFaseOut])
+def listar_fases(db: Session = Depends(get_db)):
+    fases = db.query(models.PilotoFase).order_by(
+        models.PilotoFase.ordem, models.PilotoFase.id
+    ).all()
+    contagem = dict(
+        db.query(models.Tecnico.fase_id, sa_func.count(models.Tecnico.id))
+        .filter(models.Tecnico.fase_id.isnot(None))
+        .group_by(models.Tecnico.fase_id)
+        .all()
+    )
+    saida = []
+    for f in fases:
+        dados = schemas.PilotoFaseOut.model_validate(f)
+        dados.total_tecnicos = contagem.get(f.id, 0)
+        saida.append(dados)
+    return saida
+
+
+@router.post("/piloto/fases", response_model=schemas.PilotoFaseOut, status_code=201)
+def criar_fase(payload: schemas.PilotoFaseCreate, db: Session = Depends(get_db)):
+    nome = (payload.nome or "").strip()
+    if not nome:
+        raise HTTPException(status_code=400, detail="Nome da fase vazio.")
+    maior = db.query(sa_func.max(models.PilotoFase.ordem)).scalar() or 0
+    fase = models.PilotoFase(
+        nome=nome,
+        descricao=payload.descricao or "",
+        status="planejada",
+        ordem=maior + 1,
+        meta_concluidos=payload.meta_concluidos,
+        meta_nota=payload.meta_nota,
+        meta_etapa=payload.meta_etapa,
+        autor=(payload.autor or "").strip() or None,
+    )
+    db.add(fase)
+    db.commit()
+    db.refresh(fase)
+    return fase
+
+
+@router.patch("/piloto/fases/{fase_id}", response_model=schemas.PilotoFaseOut)
+def atualizar_fase(fase_id: int, payload: schemas.PilotoFaseUpdate, db: Session = Depends(get_db)):
+    fase = db.query(models.PilotoFase).filter(models.PilotoFase.id == fase_id).first()
+    if not fase:
+        raise HTTPException(status_code=404, detail="Fase não encontrada")
+    if payload.nome is not None:
+        nome = payload.nome.strip()
+        if not nome:
+            raise HTTPException(status_code=400, detail="Nome da fase vazio.")
+        fase.nome = nome
+    if payload.descricao is not None:
+        fase.descricao = payload.descricao
+    if payload.status is not None:
+        if payload.status not in FASE_STATUSES:
+            raise HTTPException(status_code=400, detail="Situação de fase inválida.")
+        fase.status = payload.status
+        agora = datetime.now(timezone.utc)
+        if payload.status == "em_andamento" and fase.iniciada_em is None:
+            fase.iniciada_em = agora
+        if payload.status == "liberada" and fase.liberada_em is None:
+            fase.liberada_em = agora
+    if payload.ordem is not None:
+        fase.ordem = payload.ordem
+    for campo in ("meta_concluidos", "meta_nota", "meta_etapa"):
+        valor = getattr(payload, campo)
+        if valor is not None:
+            setattr(fase, campo, valor or None)
+    db.commit()
+    db.refresh(fase)
+    return fase
+
+
+@router.delete("/piloto/fases/{fase_id}")
+def excluir_fase(fase_id: int, db: Session = Depends(get_db)):
+    """Remove a fase. Os técnicos não são apagados — voltam pra base geral."""
+    fase = db.query(models.PilotoFase).filter(models.PilotoFase.id == fase_id).first()
+    if not fase:
+        raise HTTPException(status_code=404, detail="Fase não encontrada")
+    soltos = (
+        db.query(models.Tecnico).filter(models.Tecnico.fase_id == fase_id)
+        .update({"fase_id": None}, synchronize_session=False)
+    )
+    db.delete(fase)
+    db.commit()
+    return {"deleted": fase_id, "tecnicos_soltos": soltos}
+
+
+@router.post("/piloto/fases/{fase_id}/tecnicos")
+def adicionar_na_fase(fase_id: int, payload: schemas.AdicionarNaFase, db: Session = Depends(get_db)):
+    """Coloca técnicos na fase: por lista de ids ou por filtro da base.
+
+    O filtro é o que faz "toda a regional de Campinas" entrar de uma vez. Quem já
+    está em outra fase fica de fora por padrão — mover alguém de fase tem que ser
+    escolha explícita, senão uma seleção ampla esvazia a fase do vizinho.
+    """
+    fase = db.query(models.PilotoFase).filter(models.PilotoFase.id == fase_id).first()
+    if not fase:
+        raise HTTPException(status_code=404, detail="Fase não encontrada")
+
+    q = db.query(models.Tecnico)
+    if payload.tecnico_ids:
+        q = q.filter(models.Tecnico.id.in_(payload.tecnico_ids))
+    else:
+        if payload.regional:
+            q = q.filter(models.Tecnico.regional == payload.regional)
+        if payload.papel:
+            q = q.filter(models.Tecnico.papel == payload.papel)
+        if payload.busca:
+            q = q.filter(models.Tecnico.nome.ilike(f"%{payload.busca.strip()}%"))
+        if not (payload.regional or payload.papel or payload.busca):
+            raise HTTPException(status_code=400, detail="Escolha técnicos ou informe um filtro.")
+    if not payload.incluir_de_outras_fases:
+        q = q.filter((models.Tecnico.fase_id.is_(None)) | (models.Tecnico.fase_id == fase_id))
+
+    alvos = q.all()
+    movidos = 0
+    for t in alvos:
+        if t.fase_id != fase_id:
+            t.fase_id = fase_id
+            movidos += 1
+    # colocar gente na fase é o que a tira do papel
+    if movidos and fase.status == "planejada":
+        fase.status = "em_andamento"
+        fase.iniciada_em = fase.iniciada_em or datetime.now(timezone.utc)
+    db.commit()
+    total = db.query(models.Tecnico).filter(models.Tecnico.fase_id == fase_id).count()
+    return {"adicionados": movidos, "na_fase": total}
+
+
+@router.delete("/piloto/fases/{fase_id}/tecnicos/{tecnico_id}")
+def tirar_da_fase(fase_id: int, tecnico_id: int, db: Session = Depends(get_db)):
+    tecnico = _get_tecnico_or_404(db, tecnico_id)
+    if tecnico.fase_id != fase_id:
+        raise HTTPException(status_code=400, detail="Esse técnico não está nessa fase.")
+    tecnico.fase_id = None
+    db.commit()
+    return {"tecnico_id": tecnico_id, "fase_id": None}
 
 
 @router.get("/tecnicos/resumo")
@@ -221,6 +425,7 @@ def _termos_mais_citados(observacoes, limite: int = 8):
 
 @router.get("/tecnicos/piloto")
 def painel_piloto(
+    fase_id: Optional[int] = None,
     meta_concluidos: int = 10,
     meta_nota: float = 4.0,
     meta_etapa: int = 5,
@@ -234,7 +439,23 @@ def painel_piloto(
     mais aparecem nos relatos e os ajustes que já saíram do piloto — e fecha com
     os critérios de liberação batidos contra as metas.
     """
-    tecnicos = db.query(models.Tecnico).options(joinedload(models.Tecnico.observacoes)).all()
+    # o piloto anda por fase, então a régua também é por fase: uma fase de 12
+    # técnicos numa capital não tem a mesma meta de uma de 60 no interior
+    fase = None
+    if fase_id:
+        fase = db.query(models.PilotoFase).filter(models.PilotoFase.id == fase_id).first()
+        if not fase:
+            raise HTTPException(status_code=404, detail="Fase não encontrada")
+        meta_concluidos = fase.meta_concluidos or meta_concluidos
+        meta_nota = fase.meta_nota or meta_nota
+        meta_etapa = fase.meta_etapa or meta_etapa
+
+    q = db.query(models.Tecnico).options(
+        joinedload(models.Tecnico.observacoes).joinedload(models.TecnicoObservacao.ajuste)
+    )
+    if fase_id:
+        q = q.filter(models.Tecnico.fase_id == fase_id)
+    tecnicos = q.all()
     total = len(tecnicos)
     por_status = {s: 0 for s in STATUSES}
     for t in tecnicos:
@@ -357,6 +578,11 @@ def painel_piloto(
     ]
 
     return {
+        "fase": (
+            {"id": fase.id, "nome": fase.nome, "status": fase.status,
+             "liberada_em": fase.liberada_em.isoformat() if fase.liberada_em else None}
+            if fase else None
+        ),
         "total": total,
         "responderam": len(responderam),
         "funil": funil,

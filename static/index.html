@@ -416,6 +416,7 @@
           Importar planilha
           <input type="file" id="tecnico-import-input" accept=".xlsx,.xlsm" hidden>
         </label>
+        <button type="button" class="btn-ghost" id="btn-nova-fase">Nova fase</button>
         <button type="button" class="btn-ghost tecnico-limpar-btn" id="btn-limpar-base">Limpar base</button>
         <button type="button" class="add-btn" id="btn-add-tecnico">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -424,7 +425,25 @@
       </div>
     </section>
 
+    <nav class="fases-nav" id="fases-nav" aria-label="Selecionar fase do piloto"></nav>
+
     <div class="ajustes-stats" id="tecnicos-stats"></div>
+
+    <section class="base-sel" id="base-sel" hidden>
+      <div class="base-sel-head">
+        <div>
+          <h3>Base completa</h3>
+          <p id="base-sel-sub">—</p>
+        </div>
+        <div class="base-sel-acoes">
+          <select id="base-regional"><option value="">Todas as regionais</option></select>
+          <input type="search" id="base-busca" placeholder="Buscar por nome…" autocomplete="off">
+          <button type="button" class="btn-primary" id="base-add" disabled>Adicionar à fase</button>
+        </div>
+      </div>
+      <div class="base-lista" id="base-lista"></div>
+      <div class="base-paginacao" id="base-paginacao"></div>
+    </section>
 
     <section class="piloto" id="piloto-painel" hidden>
       <header class="piloto-head">
@@ -432,7 +451,10 @@
           <h3>Painel do piloto</h3>
           <p id="piloto-veredito">—</p>
         </div>
-        <button type="button" class="piloto-toggle" id="piloto-toggle">ocultar</button>
+        <div class="piloto-head-acoes">
+          <span id="piloto-acoes"></span>
+          <button type="button" class="piloto-toggle" id="piloto-toggle">ocultar</button>
+        </div>
       </header>
       <div class="piloto-corpo" id="piloto-corpo"></div>
     </section>
@@ -950,6 +972,41 @@
         <button type="button" class="btn-ghost" id="tecnico-delete" hidden>Excluir</button>
         <button type="button" class="btn-ghost" id="tecnico-cancel">Cancelar</button>
         <button type="submit" class="btn-primary" id="tecnico-save">Salvar técnico</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal" id="fase-modal" hidden aria-modal="true" role="dialog">
+  <div class="modal-card limpar-card">
+    <div class="modal-head">
+      <h3 id="fase-modal-title">Nova fase do piloto</h3>
+      <button type="button" class="modal-close" id="fase-close" aria-label="Fechar">✕</button>
+    </div>
+    <form id="fase-form" class="modal-body">
+      <label class="fld fld-wide">Nome da fase <b>*</b>
+        <input name="nome" placeholder="ex.: Fase 1 — SP capital" required>
+      </label>
+      <label class="fld fld-wide">Descrição
+        <textarea name="descricao" rows="2" placeholder="o que essa leva cobre (opcional)"></textarea>
+      </label>
+      <p class="notes-hint">Metas desta fase — o painel usa elas pra dizer se já dá pra liberar.
+      Deixe em branco pra usar o padrão (10 concluídos, nota 4, cada etapa com 5 técnicos).</p>
+      <div class="form-grid">
+        <label class="fld">Testes concluídos
+          <input type="number" name="meta_concluidos" min="1" placeholder="10">
+        </label>
+        <label class="fld">Nota média mínima
+          <input type="number" name="meta_nota" min="1" max="5" step="0.1" placeholder="4">
+        </label>
+        <label class="fld">Técnicos por etapa
+          <input type="number" name="meta_etapa" min="1" placeholder="5">
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="fase-excluir" hidden>Excluir fase</button>
+        <button type="button" class="btn-ghost" id="fase-cancel">Cancelar</button>
+        <button type="submit" class="btn-primary">Salvar fase</button>
       </div>
     </form>
   </div>

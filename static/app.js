@@ -3911,6 +3911,9 @@
   };
   const TECNICO_STATUS_ORDEM = Object.keys(TECNICO_STATUS_META);
   const tecnicoFiltros = { status: "", papel: "", busca: "" };
+  // quantos cards ficam no DOM de uma vez (o resto entra no "mostrar mais")
+  const PAGINA_CARDS = 40;
+  let tecnicosVisiveis = PAGINA_CARDS;
 
   // mesmos textos combinados com o Rafa — espelham app/routers/tecnicos.py
   // (TEMPLATE_TECNICO / TEMPLATE_LIDER). Mudou o texto lá, muda aqui também.
@@ -3992,9 +3995,71 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
     return d ? "+" + d : "";
   }
 
+  // ---------------- fases do piloto ----------------
+  // O app não é liberado pra todo mundo de uma vez: entra uma região por vez.
+  // A tela trabalha uma fase por vez também — é o que a mantém rápida com
+  // milhares de cadastros na base, já que só os da fase viram card.
+  let FASES = [];
+  let FASE_ATUAL = null;          // id da fase; null = modo "base completa"
+  const FASE_KEY = "fluxoc_fase_tecnicos";
+
+  async function loadFases() {
+    try { FASES = await api("/api/piloto/fases"); }
+    catch (e) { FASES = []; }
+    const salva = Number(localStorage.getItem(FASE_KEY) || 0);
+    if (FASE_ATUAL === null && salva && FASES.some((f) => f.id === salva)) {
+      FASE_ATUAL = salva;
+    } else if (FASE_ATUAL === null && FASES.length) {
+      // abre na fase que está rodando; se nenhuma, na primeira
+      FASE_ATUAL = (FASES.find((f) => f.status === "em_andamento") || FASES[0]).id;
+    }
+    renderFasesNav();
+  }
+
+  function renderFasesNav() {
+    const nav = $("#fases-nav");
+    const FASE_STATUS_LABEL = {
+      planejada: "planejada", em_andamento: "em andamento",
+      concluida: "concluída", liberada: "liberada",
+    };
+    const abas = FASES.map((f) => `
+      <button type="button" class="fase-aba${f.id === FASE_ATUAL ? " active" : ""} st-${f.status}" data-fase="${f.id}">
+        <span class="fase-nome">${esc(f.nome)}</span>
+        <span class="fase-sub">${f.total_tecnicos} técnico(s) · ${FASE_STATUS_LABEL[f.status] || f.status}</span>
+      </button>`).join("");
+    nav.innerHTML = abas + `
+      <button type="button" class="fase-aba fase-base${FASE_ATUAL === null ? " active" : ""}" data-fase="">
+        <span class="fase-nome">Base completa</span>
+        <span class="fase-sub">quem ainda não entrou em fase</span>
+      </button>`;
+    $$(".fase-aba", nav).forEach((b) => b.addEventListener("click", () => {
+      FASE_ATUAL = b.dataset.fase ? Number(b.dataset.fase) : null;
+      localStorage.setItem(FASE_KEY, FASE_ATUAL || "");
+      renderFasesNav();
+      loadTecnicos();
+    }));
+  }
+
   async function loadTecnicos() {
+    await loadFases();
+    const modoBase = FASE_ATUAL === null;
+    $("#base-sel").hidden = !modoBase;
+    $("#tecnicos-list").hidden = modoBase;
+    $("#tecnicos-empty").hidden = true;
+
+    if (modoBase) {
+      TECNICOS = [];
+      renderTecnicoStats();
+      $("#piloto-painel").hidden = true;
+      await loadBase();
+      return;
+    }
     try {
-      TECNICOS = await api("/api/tecnicos");
+      TECNICOS = await api(`/api/tecnicos?fase_id=${FASE_ATUAL}`);
+      const fase = FASES.find((f) => f.id === FASE_ATUAL);
+      if (fase && fase.total_tecnicos > TECNICOS.length) {
+        toast(`Fase grande: mostrando ${TECNICOS.length} dos ${fase.total_tecnicos}. Use a busca pra achar alguém.`);
+      }
     } catch (e) {
       TECNICOS = [];
       toast("Erro ao carregar técnicos: " + e.message, true);
@@ -4002,6 +4067,111 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
     renderTecnicos();
     loadPiloto();
   }
+
+  // ---------------- base completa (lista leve, paginada) ----------------
+  // Com quatro mil cadastros, mandar a lista inteira com observações era mais de
+  // um mega por abertura e milhares de cards no DOM. Aqui só vem o necessário
+  // pra escolher quem entra na fase, de 50 em 50.
+  let BASE_PAGINA = 0;
+  let BASE_TOTAL = 0;
+  const BASE_POR_PAGINA = 50;
+  const baseSelecao = new Set();
+  let baseFiltro = { busca: "", regional: "" };
+  let baseBuscaTimer = null;
+
+  async function loadRegionais() {
+    const sel = $("#base-regional");
+    if (sel.dataset.carregado) return;
+    try {
+      const regionais = await api("/api/tecnicos/regionais");
+      sel.innerHTML = `<option value="">Todas as regionais</option>` + regionais
+        .map((r) => `<option value="${esc(r.regional)}">${esc(r.regional)} (${r.total})</option>`).join("");
+      sel.dataset.carregado = "1";
+    } catch (e) { /* sem regionais, o filtro fica só com "todas" */ }
+  }
+
+  async function loadBase() {
+    await loadRegionais();
+    const params = new URLSearchParams({
+      sem_fase: "1", limite: BASE_POR_PAGINA, offset: BASE_PAGINA * BASE_POR_PAGINA,
+    });
+    if (baseFiltro.busca) params.set("busca", baseFiltro.busca);
+    if (baseFiltro.regional) params.set("regional", baseFiltro.regional);
+    let dados;
+    try { dados = await api(`/api/tecnicos/base?${params}`); }
+    catch (e) { toast("Erro ao carregar a base: " + e.message, true); return; }
+    BASE_TOTAL = dados.total;
+    renderBase(dados.itens);
+  }
+
+  function renderBase(itens) {
+    const destino = FASES.find((f) => f.id === Number(localStorage.getItem(FASE_KEY))) || null;
+    $("#base-sel-sub").textContent = BASE_TOTAL
+      ? `${BASE_TOTAL} técnico(s) fora de fase · selecione quem entra na próxima leva`
+      : "Todo mundo da base já está em alguma fase.";
+
+    $("#base-lista").innerHTML = itens.length ? itens.map((t) => `
+      <label class="base-linha">
+        <input type="checkbox" data-sel="${t.id}"${baseSelecao.has(t.id) ? " checked" : ""}>
+        <span class="base-nome">${esc(t.nome)}</span>
+        <span class="base-reg">${esc(t.regional || "—")}</span>
+        <span class="base-tel">${esc(formatTelefone(t.telefone))}</span>
+      </label>`).join("") : `<p class="pb-vazio">Nenhum técnico com esse filtro.</p>`;
+
+    $$("[data-sel]", $("#base-lista")).forEach((c) => c.addEventListener("change", () => {
+      const id = Number(c.dataset.sel);
+      if (c.checked) baseSelecao.add(id); else baseSelecao.delete(id);
+      atualizaBotaoAdicionar();
+    }));
+
+    const paginas = Math.ceil(BASE_TOTAL / BASE_POR_PAGINA) || 1;
+    $("#base-paginacao").innerHTML = `
+      <button type="button" class="btn-ghost" id="base-prev"${BASE_PAGINA === 0 ? " disabled" : ""}>anterior</button>
+      <span>página ${BASE_PAGINA + 1} de ${paginas}</span>
+      <button type="button" class="btn-ghost" id="base-next"${BASE_PAGINA + 1 >= paginas ? " disabled" : ""}>próxima</button>
+      ${baseFiltro.regional ? `<button type="button" class="btn-ghost base-todos" id="base-add-regional">adicionar a regional inteira à fase</button>` : ""}`;
+    $("#base-prev").addEventListener("click", () => { BASE_PAGINA--; loadBase(); });
+    $("#base-next").addEventListener("click", () => { BASE_PAGINA++; loadBase(); });
+    const addReg = $("#base-add-regional");
+    if (addReg) addReg.addEventListener("click", () => adicionarNaFase({ regional: baseFiltro.regional }));
+    atualizaBotaoAdicionar();
+  }
+
+  function atualizaBotaoAdicionar() {
+    const btn = $("#base-add");
+    btn.disabled = !baseSelecao.size || !FASES.length;
+    btn.textContent = baseSelecao.size
+      ? `Adicionar ${baseSelecao.size} à fase`
+      : "Adicionar à fase";
+  }
+
+  async function adicionarNaFase(payload) {
+    if (!FASES.length) { toast("Crie uma fase antes de escolher quem entra.", true); return; }
+    // a fase de destino é a que está rodando; se não houver, a última criada
+    const destino = FASES.find((f) => f.status === "em_andamento") || FASES[FASES.length - 1];
+    if (!confirm(`Adicionar à "${destino.nome}"?`)) return;
+    try {
+      const res = await api(`/api/piloto/fases/${destino.id}/tecnicos`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      baseSelecao.clear();
+      toast(`${res.adicionados} técnico(s) na fase (${res.na_fase} no total).`);
+      await loadBase();
+      await loadFases();
+    } catch (e) { toast("Erro ao adicionar: " + e.message, true); }
+  }
+
+  $("#base-add").addEventListener("click", () => adicionarNaFase({ tecnico_ids: [...baseSelecao] }));
+  $("#base-regional").addEventListener("change", (e) => {
+    baseFiltro.regional = e.target.value; BASE_PAGINA = 0; loadBase();
+  });
+  $("#base-busca").addEventListener("input", (e) => {
+    clearTimeout(baseBuscaTimer);
+    baseBuscaTimer = setTimeout(() => {
+      baseFiltro.busca = e.target.value.trim(); BASE_PAGINA = 0; loadBase();
+    }, 300);
+  });
 
   // ---------------- painel do piloto ----------------
   // Responde a pergunta que a diretoria faz: "já dá pra liberar pra todo mundo?".
@@ -4027,20 +4197,118 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
 
   async function loadPiloto() {
     const painel = $("#piloto-painel");
-    if (!TECNICOS.length) { painel.hidden = true; return; }
+    if (!TECNICOS.length || FASE_ATUAL === null) { painel.hidden = true; return; }
     let d;
-    try { d = await api("/api/tecnicos/piloto"); }
+    try { d = await api(`/api/tecnicos/piloto?fase_id=${FASE_ATUAL}`); }
     catch (e) { painel.hidden = true; return; }
     painel.hidden = false;
     renderPiloto(d);
   }
 
+  // ---------------- criar / editar fase ----------------
+  let editandoFase = null;
+  const faseModal = $("#fase-modal");
+  const faseForm = $("#fase-form");
+
+  function abrirFaseModal(id) {
+    editandoFase = id || null;
+    faseForm.reset();
+    const f = id ? FASES.find((x) => x.id === id) : null;
+    $("#fase-modal-title").textContent = f ? "Editar fase" : "Nova fase do piloto";
+    $("#fase-excluir").hidden = !f;
+    if (f) {
+      faseForm.nome.value = f.nome;
+      faseForm.descricao.value = f.descricao || "";
+      faseForm.meta_concluidos.value = f.meta_concluidos || "";
+      faseForm.meta_nota.value = f.meta_nota || "";
+      faseForm.meta_etapa.value = f.meta_etapa || "";
+    }
+    faseModal.hidden = false;
+    faseForm.nome.focus();
+  }
+  function fecharFaseModal() { faseModal.hidden = true; editandoFase = null; }
+
+  $("#btn-nova-fase").addEventListener("click", () => abrirFaseModal(null));
+  $("#fase-cancel").addEventListener("click", fecharFaseModal);
+  $("#fase-close").addEventListener("click", fecharFaseModal);
+  faseModal.addEventListener("click", (e) => { if (e.target.id === "fase-modal") fecharFaseModal(); });
+
+  faseForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(faseForm);
+    const num = (v) => (String(v || "").trim() ? Number(v) : null);
+    const payload = {
+      nome: (fd.get("nome") || "").trim(),
+      descricao: fd.get("descricao") || "",
+      meta_concluidos: num(fd.get("meta_concluidos")),
+      meta_nota: num(fd.get("meta_nota")),
+      meta_etapa: num(fd.get("meta_etapa")),
+    };
+    if (!payload.nome) return;
+    try {
+      if (editandoFase) {
+        await api(`/api/piloto/fases/${editandoFase}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        const criada = await api("/api/piloto/fases", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, autor: testerName() || null }),
+        });
+        FASE_ATUAL = criada.id;
+        localStorage.setItem(FASE_KEY, criada.id);
+      }
+      fecharFaseModal();
+      await loadTecnicos();
+      toast("Fase salva.");
+    } catch (err) { toast("Erro ao salvar fase: " + err.message, true); }
+  });
+
+  $("#fase-excluir").addEventListener("click", async () => {
+    if (!editandoFase) return;
+    if (!confirm("Excluir esta fase? Os técnicos voltam pra base, sem perder nada.")) return;
+    try {
+      const res = await api(`/api/piloto/fases/${editandoFase}`, { method: "DELETE" });
+      fecharFaseModal();
+      FASE_ATUAL = null;
+      localStorage.setItem(FASE_KEY, "");
+      await loadTecnicos();
+      toast(`Fase excluída — ${res.tecnicos_soltos} técnico(s) voltaram pra base.`);
+    } catch (e) { toast("Erro ao excluir: " + e.message, true); }
+  });
+
+  async function mudarStatusFase(id, status) {
+    try {
+      await api(`/api/piloto/fases/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      await loadTecnicos();
+      toast(status === "liberada" ? "Fase marcada como liberada." : "Fase atualizada.");
+    } catch (e) { toast("Erro ao atualizar fase: " + e.message, true); }
+  }
+
   function renderPiloto(d) {
     const veredito = $("#piloto-veredito");
     const faltando = d.criterios.filter((c) => !c.ok);
-    veredito.innerHTML = d.liberado
-      ? `<b class="pv-ok">Critérios batidos</b> — dá pra levar a liberação geral pra decisão.`
-      : `Falta${faltando.length === 1 ? "" : "m"} <b>${faltando.length}</b> critério${faltando.length === 1 ? "" : "s"} pra liberar geral.`;
+    const nomeFase = d.fase ? d.fase.nome : "piloto";
+    if (d.fase && d.fase.status === "liberada") {
+      veredito.innerHTML = `<b class="pv-ok">${esc(nomeFase)} liberada</b> — pode abrir a próxima região.`;
+    } else if (d.liberado) {
+      veredito.innerHTML = `<b class="pv-ok">Critérios batidos</b> — ${esc(nomeFase)} pronta pra liberar.`;
+    } else {
+      veredito.innerHTML = `Falta${faltando.length === 1 ? "" : "m"} <b>${faltando.length}</b> critério${faltando.length === 1 ? "" : "s"} pra liberar ${esc(nomeFase)}.`;
+    }
+    // o botão de liberar só aparece quando a régua da fase fechou — liberar
+    // região com critério em aberto é decisão que precisa ser consciente, não
+    // um clique disponível o tempo todo
+    const acoes = $("#piloto-acoes");
+    acoes.innerHTML = d.fase && d.fase.status !== "liberada" && d.liberado
+      ? `<button type="button" class="btn-primary" id="piloto-liberar">Marcar ${esc(d.fase.nome)} como liberada</button>`
+      : "";
+    const btn = $("#piloto-liberar");
+    if (btn) btn.addEventListener("click", () => mudarStatusFase(d.fase.id, "liberada"));
 
     const maxFunil = d.funil.length ? d.funil[0].total : 0;
     const funil = d.funil.map((f) =>
@@ -4157,6 +4425,7 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
   }
 
   function renderTecnicos() {
+    tecnicosVisiveis = PAGINA_CARDS;   // recarregou a lista: volta pro primeiro pedaço
     renderTecnicoStats();
     renderTecnicoStatusChips();
     renderTecnicoList();
@@ -4164,7 +4433,10 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
   }
 
   function renderTecnicoStats() {
-    const total = TECNICOS.length;
+    // o total é o da fase, não o do que foi carregado: a lista vem limitada e
+    // mostrar "300" numa fase de 663 seria número errado na cara do usuário
+    const fase = FASES.find((f) => f.id === FASE_ATUAL);
+    const total = fase ? fase.total_tecnicos : TECNICOS.length;
     const emTeste = TECNICOS.filter((t) => t.status === "em_teste").length;
     const responderam = TECNICOS.filter((t) => t.respondido_em).length;
     const problemas = TECNICOS.reduce((n, t) => n + t.observacoes.filter((o) => o.tipo === "problema").length, 0);
@@ -4340,13 +4612,25 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
 
   function renderTecnicoList() {
     const lista = $("#tecnicos-list");
-    const itens = tecnicosFiltrados();
+    const todos = tecnicosFiltrados();
     const semNada = !TECNICOS.length;
     $("#tecnicos-empty").hidden = !semNada;
     if (semNada) { lista.innerHTML = ""; return; }
+    // desenhar tudo custa caro: uma fase com centenas de técnicos vira milhares de
+    // nós no DOM e a aba trava. Mostra um pedaço e cresce sob demanda.
+    const itens = todos.slice(0, tecnicosVisiveis);
+    const restam = todos.length - itens.length;
     lista.innerHTML = itens.length
       ? itens.map(tecnicoCard).join("")
+        + (restam > 0
+            ? `<button type="button" class="tecnicos-mais" id="tecnicos-mais">mostrar mais ${Math.min(restam, PAGINA_CARDS)} (de ${restam} restantes)</button>`
+            : "")
       : '<div class="ajustes-nofilter">Nenhum técnico com esses filtros.</div>';
+    const btnMais = $("#tecnicos-mais");
+    if (btnMais) btnMais.addEventListener("click", () => {
+      tecnicosVisiveis += PAGINA_CARDS;
+      renderTecnicoList();
+    });
 
     $$(".tecnico-item", lista).forEach((card) => {
       const id = Number(card.dataset.id);

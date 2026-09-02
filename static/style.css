@@ -1762,6 +1762,68 @@ body.inline-connecting * { cursor:crosshair !important; }
   border-style:solid; border-color:var(--f-blue); color:var(--f-blue); background:rgba(0,84,236,.06);
 }
 
+/* ---------- fases do piloto ----------
+   O app entra região por região, então a tela trabalha uma fase por vez: é o que
+   mantém a aba rápida com milhares de cadastros na base (só os da fase viram
+   card) e o que faz o critério de liberação ser por leva, não global. */
+.fases-nav { display:flex; gap:8px; flex-wrap:wrap; margin:16px 0 14px; }
+.fase-aba {
+  display:flex; flex-direction:column; gap:2px; align-items:flex-start; cursor:pointer;
+  padding:9px 15px; border-radius:var(--radius); border:1px solid var(--line);
+  background:var(--surface); color:var(--text-2); font-family:'Roboto',sans-serif;
+  transition:transform .18s var(--ease), box-shadow .18s var(--ease), border-color .18s var(--ease);
+}
+.fase-aba:hover { transform:translateY(-2px); box-shadow:var(--shadow-1); border-color:var(--line-2); }
+.fase-nome { font-family:'Roboto Slab',serif; font-size:13.5px; font-weight:700; color:var(--text); }
+.fase-sub { font-size:10.5px; color:var(--text-3); }
+.fase-aba.active { border-color:transparent; background:var(--grad-primary); box-shadow:0 10px 24px -14px rgba(0,84,236,.7); }
+.fase-aba.active .fase-nome, .fase-aba.active .fase-sub { color:#fff; }
+/* fase liberada é destino cumprido: verde, mesmo quando não é a aba aberta */
+.fase-aba.st-liberada { border-color:var(--ok-ln); background:var(--ok-bg); }
+.fase-aba.st-liberada.active { background:linear-gradient(120deg,#0d9d6c,#34d399); border-color:transparent; }
+.fase-base { border-style:dashed; }
+
+/* ---------- base completa (escolher quem entra na fase) ---------- */
+.base-sel {
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  box-shadow:var(--shadow-1); margin-bottom:18px; overflow:hidden;
+}
+.base-sel[hidden] { display:none; }
+.base-sel-head {
+  display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
+  padding:14px 18px; border-bottom:1px solid var(--line);
+}
+.base-sel-head h3 { font-family:'Roboto Slab',serif; font-size:15px; font-weight:700; color:var(--text); }
+.base-sel-head p { font-size:12px; color:var(--text-3); margin-top:2px; }
+.base-sel-acoes { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.base-sel-acoes select, .base-sel-acoes input {
+  height:34px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid var(--line-2);
+  background:var(--surface-2); color:var(--text); font-family:'Roboto',sans-serif; font-size:12.5px;
+}
+.base-sel-acoes .btn-primary { height:34px; padding:0 15px; font-size:12.5px; }
+
+.base-lista { max-height:420px; overflow-y:auto; }
+.base-linha {
+  display:flex; align-items:center; gap:12px; padding:8px 18px; cursor:pointer;
+  border-bottom:1px solid var(--line); font-size:12.5px;
+}
+.base-linha:hover { background:var(--surface-2); }
+.base-linha input { width:16px; height:16px; accent-color:var(--f-blue); flex-shrink:0; margin:0; }
+.base-nome { flex:1; min-width:0; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.base-reg { flex:0 0 150px; color:var(--text-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.base-tel { flex:0 0 150px; font-family:'Roboto Mono',monospace; font-size:11px; color:var(--text-3); }
+.base-paginacao {
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  padding:11px 18px; font-size:12px; color:var(--text-3);
+}
+.base-paginacao .btn-ghost { padding:5px 12px; font-size:11.5px; }
+.base-paginacao .btn-ghost:disabled { opacity:.45; cursor:not-allowed; }
+.base-todos { margin-left:auto; color:var(--f-blue) !important; border-color:rgba(0,84,236,.28) !important; }
+
+@media (max-width: 760px) {
+  .base-reg, .base-tel { display:none; }
+}
+
 /* ---------- painel do piloto ----------
    Cada bloco mostra UMA métrica (quantos técnicos) em categorias diferentes, então
    cada gráfico usa uma cor só — cor por categoria aqui seria arco-íris sem
@@ -1778,6 +1840,8 @@ body.inline-connecting * { cursor:crosshair !important; }
 .piloto-head h3 { font-family:'Roboto Slab',serif; font-size:15px; font-weight:700; color:var(--text); }
 .piloto-head p { font-size:12.5px; color:var(--text-2); margin-top:2px; }
 .pv-ok { color:var(--ok); }
+.piloto-head-acoes { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+.piloto-head-acoes .btn-primary { padding:8px 14px; font-size:12.5px; }
 .piloto-toggle {
   flex-shrink:0; border:1px solid var(--line-2); background:var(--surface-2); color:var(--text-3);
   border-radius:8px; padding:5px 12px; font-family:'Roboto',sans-serif; font-size:11.5px;
@@ -1898,6 +1962,13 @@ body.inline-connecting * { cursor:crosshair !important; }
 .tecnicos-head-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; flex-shrink:0; }
 .tecnicos-head-actions .btn-ghost { display:inline-flex; align-items:center; text-decoration:none; }
 .tecnico-import-btn { cursor:pointer; }
+.tecnicos-mais {
+  width:100%; padding:11px; border-radius:var(--radius); cursor:pointer;
+  border:1px dashed var(--line-2); background:var(--surface); color:var(--f-blue);
+  font-family:'Roboto',sans-serif; font-size:12.5px; font-weight:600;
+  transition:all .15s var(--ease);
+}
+.tecnicos-mais:hover { border-color:var(--f-blue); background:rgba(0,84,236,.05); }
 .tecnicos-busca {
   height:36px; padding:0 12px; border-radius:var(--radius-sm); border:1px solid var(--line-2);
   background:var(--surface-2); color:var(--text); font-family:'Roboto',sans-serif; font-size:13px;

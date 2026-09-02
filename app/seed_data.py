@@ -418,6 +418,9 @@ def migrate_schema(engine):
         if "respondido_em" not in tec_cols:
             stmts.append("ALTER TABLE tecnicos ADD COLUMN respondido_em "
                          + ("TIMESTAMP WITH TIME ZONE" if pg else "TIMESTAMP"))
+        # em qual leva do piloto o técnico entrou (NULL = ainda na base geral)
+        if "fase_id" not in tec_cols:
+            stmts.append("ALTER TABLE tecnicos ADD COLUMN fase_id INTEGER")
 
     # relato do técnico que virou item do backlog da Gestão de Ativos
     if "tecnico_observacoes" in existing_tables:

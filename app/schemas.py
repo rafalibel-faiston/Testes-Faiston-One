@@ -440,6 +440,7 @@ class TecnicoOut(BaseModel):
     lider_nome: Optional[str] = None
     status: str = "a_contatar"
     autor: Optional[str] = None
+    fase_id: Optional[int] = None          # leva do piloto em que ele entrou
     token: Optional[str] = None            # chave do link /formulario/{token}
     nota: Optional[int] = None             # nota geral que ele deu no app (1 a 5)
     etapas_testadas: Optional[str] = None  # etapas exercitadas, separadas por "|"
@@ -475,6 +476,76 @@ class TecnicoMensagemOut(BaseModel):
     telefone: str
     mensagem: str
     wa_link: str
+
+
+class PilotoFaseOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    nome: str
+    descricao: Optional[str] = ""
+    status: str = "planejada"
+    ordem: int = 0
+    meta_concluidos: Optional[int] = None
+    meta_nota: Optional[float] = None
+    meta_etapa: Optional[int] = None
+    iniciada_em: Optional[datetime] = None
+    liberada_em: Optional[datetime] = None
+    autor: Optional[str] = None
+    created_at: Optional[datetime] = None
+    # contagem preenchida pelo router. Não pode se chamar "tecnicos": o modelo tem
+    # um relationship com esse nome e o Pydantic leria a lista no lugar do número.
+    total_tecnicos: int = 0
+
+
+class PilotoFaseCreate(BaseModel):
+    nome: str
+    descricao: Optional[str] = ""
+    meta_concluidos: Optional[int] = None
+    meta_nota: Optional[float] = None
+    meta_etapa: Optional[int] = None
+    autor: Optional[str] = None
+
+
+class PilotoFaseUpdate(BaseModel):
+    nome: Optional[str] = None
+    descricao: Optional[str] = None
+    status: Optional[str] = None
+    ordem: Optional[int] = None
+    meta_concluidos: Optional[int] = None
+    meta_nota: Optional[float] = None
+    meta_etapa: Optional[int] = None
+
+
+class AdicionarNaFase(BaseModel):
+    """Quem entra na fase: uma lista de ids escolhidos a dedo, ou tudo que bate
+    num filtro da base (é assim que "toda a regional de Campinas" entra de uma vez
+    sem clicar em cinquenta nomes)."""
+    tecnico_ids: List[int] = []
+    regional: Optional[str] = None
+    busca: Optional[str] = None
+    papel: Optional[str] = None
+    # por padrão não rouba técnico que já está em outra fase
+    incluir_de_outras_fases: bool = False
+
+
+class TecnicoResumoOut(BaseModel):
+    """Versão leve pra listar a base inteira sem arrastar observações junto —
+    com milhares de cadastros, a lista completa era megabytes de JSON."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    nome: str
+    telefone: str
+    papel: str = "tecnico"
+    regional: Optional[str] = None
+    status: str = "a_contatar"
+    fase_id: Optional[int] = None
+
+
+class BaseTecnicosOut(BaseModel):
+    total: int
+    itens: List[TecnicoResumoOut] = []
 
 
 class VincularAjuste(BaseModel):

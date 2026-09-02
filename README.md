@@ -353,6 +353,27 @@ No card, três botões cobrem a conversa inteira do piloto:
   formulário dentro.
 - **Copiar link do formulário** — só o link, pra colar onde quiser.
 
+### Fases — o piloto anda uma região por vez
+
+O app não é liberado pra todo mundo de uma vez: entra uma leva, ela é acompanhada
+até bater os critérios, e só então a próxima abre. Por isso a aba trabalha **uma
+fase por vez**, e cada fase tem **suas próprias metas** — uma fase de 12 técnicos
+numa capital não tem a mesma régua de uma de 60 no interior.
+
+O fluxo é: **Nova fase** (ex.: *Fase 1 — SP capital*) → aba **Base completa** →
+filtra por regional ou busca pelo nome → marca quem entra (ou usa *adicionar a
+regional inteira à fase*) → a fase sai de "planejada" e vira "em andamento"
+sozinha. O painel e os critérios passam a ser daquela fase, e quando a régua
+fecha aparece o botão **marcar como liberada** — aí é só abrir a próxima região.
+Técnico que ainda não foi chamado fica na base geral; excluir uma fase não apaga
+ninguém, só devolve o pessoal pra base.
+
+Isso também é o que mantém a tela rápida. Antes, a aba baixava e desenhava a base
+inteira: com 4 mil cadastros eram **1,5 MB de JSON, 4 mil cards e 12,7 segundos**
+até a tela responder. Agora ela carrega só a fase aberta e desenha 40 cards por
+vez (o resto entra no *mostrar mais*): **1,4 segundo**. A base completa é servida
+em página de 50, sem observações — é só o necessário pra escolher quem entra.
+
 ### Painel do piloto — "já dá pra liberar geral?"
 
 No topo da aba, o painel responde a pergunta que a diretoria faz, com os números
@@ -448,7 +469,18 @@ app já usa entre a lista de status do Python e a do JS).
 
 ### API
 
-- `GET  /api/tecnicos` — lista (filtros opcionais: `status`, `papel`, `regional`, `busca`)
+- `GET  /api/tecnicos` — lista completa com observações (filtros: `status`, `papel`,
+  `regional`, `busca`, `fase_id`); sempre limitada (`limite`, padrão 300)
+- `GET  /api/tecnicos/base` — a base em formato leve e paginado (`busca`,
+  `regional`, `papel`, `sem_fase`, `limite`, `offset`) — é o que a tela usa pra
+  escolher quem entra numa fase sem baixar tudo
+- `GET  /api/tecnicos/regionais` — as regionais existentes, com quantos em cada
+- `GET  /api/piloto/fases` · `POST` · `PATCH /{id}` · `DELETE /{id}` — as fases do
+  piloto (excluir devolve os técnicos pra base, não apaga ninguém)
+- `POST /api/piloto/fases/{id}/tecnicos` — põe gente na fase por lista de ids ou
+  por filtro (`regional`/`busca`/`papel`); quem já está em outra fase só entra com
+  `incluir_de_outras_fases`
+- `DELETE /api/piloto/fases/{id}/tecnicos/{tecnico_id}` — tira um da fase
 - `GET  /api/tecnicos/resumo` — contagem por status + total de feedback por tipo
 - `POST /api/tecnicos` — cadastra (telefone sem DDI de 10/11 dígitos ganha o 55 na frente sozinho)
 - `PATCH /api/tecnicos/{id}` — edita dados ou muda o status (grava a data automaticamente)
