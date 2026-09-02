@@ -88,6 +88,39 @@ def test_painel_usa_as_metas_da_fase(client, tecnico):
     assert painel["notas"]["media"] == 5.0
 
 
+def test_reaproveitar_tecnico_em_outra_fase_zera_o_progresso_mas_nao_o_relato(client, tecnico):
+    """Não precisa reimportar planilha pra reaproveitar alguém numa fase nova —
+    só selecionar de novo. Mas o progresso da fase anterior não pode vazar pra
+    cá: senão o painel da fase 2 mostra ele como já testado sem ter feito nada."""
+    fase1 = client.post("/api/piloto/fases", json={"nome": "Fase 1"}).json()
+    fase2 = client.post("/api/piloto/fases", json={"nome": "Fase 2"}).json()
+
+    client.post(f"/api/piloto/fases/{fase1['id']}/tecnicos", json={"tecnico_ids": [tecnico["id"]]})
+    client.post(f"/api/formulario/{tecnico['token']}", json={
+        "nota": 5, "etapas": ["Recebi o chamado no app"], "positivo": "funcionou",
+    })
+    testado = client.get("/api/tecnicos").json()[0]
+    assert testado["status"] == "concluido"
+    assert testado["nota"] == 5
+
+    # move pra fase 2 puxando pelo filtro — não precisou reimportar nada
+    resp = client.post(f"/api/piloto/fases/{fase2['id']}/tecnicos", json={
+        "regional": "São Paulo", "incluir_de_outras_fases": True,
+    })
+    assert resp.json()["adicionados"] == 1
+
+    reaproveitado = client.get("/api/tecnicos").json()[0]
+    assert reaproveitado["fase_id"] == fase2["id"]
+    assert reaproveitado["status"] == "a_contatar"
+    assert reaproveitado["nota"] is None
+    assert reaproveitado["etapas_testadas"] is None
+    # o token antigo (já mandado por WhatsApp na fase 1) não serve mais
+    assert reaproveitado["token"] != tecnico["token"]
+    assert client.get(f"/formulario/{tecnico['token']}").status_code == 404
+    # o relato que ele já deu na fase 1 continua no histórico, não some
+    assert len(reaproveitado["observacoes"]) == 1
+
+
 # --------------------------------------------------------------- backlog
 
 

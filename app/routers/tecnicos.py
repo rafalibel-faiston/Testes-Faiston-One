@@ -332,6 +332,11 @@ def adicionar_na_fase(fase_id: int, payload: schemas.AdicionarNaFase, db: Sessio
     O filtro é o que faz "toda a regional de Campinas" entrar de uma vez. Quem já
     está em outra fase fica de fora por padrão — mover alguém de fase tem que ser
     escolha explícita, senão uma seleção ampla esvazia a fase do vizinho.
+
+    O técnico não precisa ser reimportado pra isso — a base já tem todo mundo desde
+    a primeira planilha, aqui só se escolhe quem testa nessa leva. Reaproveitar o
+    mesmo técnico numa fase seguinte reseta o progresso de QA dele (status, nota,
+    etapas testadas, link do formulário): é teste novo, não continuação do anterior.
     """
     fase = db.query(models.PilotoFase).filter(models.PilotoFase.id == fase_id).first()
     if not fase:
@@ -356,7 +361,25 @@ def adicionar_na_fase(fase_id: int, payload: schemas.AdicionarNaFase, db: Sessio
     movidos = 0
     for t in alvos:
         if t.fase_id != fase_id:
+            # só é "reaproveitar" quando ele já vinha de outra fase de fato —
+            # a primeira entrada (vindo da base geral, fase_id None) não tem
+            # progresso nenhum pra resetar, e não pode invalidar o token que
+            # já foi mandado pro técnico pelo WhatsApp.
+            veio_de_outra_fase = t.fase_id is not None
             t.fase_id = fase_id
+            if veio_de_outra_fase:
+                # teste novo, não continuação do anterior: o progresso de QA
+                # (status, nota, etapas, link do formulário) da fase de onde
+                # ele veio não pode vazar pra cá. O relato já registrado em
+                # tecnico_observacoes fica intocado — é histórico, não se apaga.
+                t.status = "a_contatar"
+                t.nota = None
+                t.etapas_testadas = None
+                t.convidado_em = None
+                t.instalado_em = None
+                t.concluido_em = None
+                t.respondido_em = None
+                t.token = models.novo_token_tecnico()
             movidos += 1
     # colocar gente na fase é o que a tira do papel
     if movidos and fase.status == "planejada":

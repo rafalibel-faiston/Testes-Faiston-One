@@ -4096,8 +4096,11 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
   async function loadBase() {
     await loadRegionais();
     const params = new URLSearchParams({
-      sem_fase: "1", limite: BASE_POR_PAGINA, offset: BASE_PAGINA * BASE_POR_PAGINA,
+      limite: BASE_POR_PAGINA, offset: BASE_PAGINA * BASE_POR_PAGINA,
     });
+    // por padrão só mostra quem ainda não foi chamado — quem já testou outra
+    // fase só aparece se o operador pedir explicitamente pra reaproveitar
+    if (!$("#base-reaproveitar").checked) params.set("sem_fase", "1");
     if (baseFiltro.busca) params.set("busca", baseFiltro.busca);
     if (baseFiltro.regional) params.set("regional", baseFiltro.regional);
     let dados;
@@ -4108,18 +4111,24 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
   }
 
   function renderBase(itens) {
-    const destino = FASES.find((f) => f.id === Number(localStorage.getItem(FASE_KEY))) || null;
+    const reaproveitando = $("#base-reaproveitar").checked;
     $("#base-sel-sub").textContent = BASE_TOTAL
-      ? `${BASE_TOTAL} técnico(s) fora de fase · selecione quem entra na próxima leva`
-      : "Todo mundo da base já está em alguma fase.";
+      ? reaproveitando
+        ? `${BASE_TOTAL} técnico(s) na base · quem já está marcado "em outra fase" será resetado pra testar do zero`
+        : `${BASE_TOTAL} técnico(s) fora de fase · selecione quem entra na próxima leva`
+      : reaproveitando ? "Base vazia." : "Todo mundo da base já está em alguma fase.";
 
-    $("#base-lista").innerHTML = itens.length ? itens.map((t) => `
+    $("#base-lista").innerHTML = itens.length ? itens.map((t) => {
+      const fase = t.fase_id ? FASES.find((f) => f.id === t.fase_id) : null;
+      return `
       <label class="base-linha">
         <input type="checkbox" data-sel="${t.id}"${baseSelecao.has(t.id) ? " checked" : ""}>
         <span class="base-nome">${esc(t.nome)}</span>
         <span class="base-reg">${esc(t.regional || "—")}</span>
         <span class="base-tel">${esc(formatTelefone(t.telefone))}</span>
-      </label>`).join("") : `<p class="pb-vazio">Nenhum técnico com esse filtro.</p>`;
+        ${fase ? `<span class="base-fase-atual" title="Já testou nessa fase — reaproveitar reseta o progresso">em ${esc(fase.nome)}</span>` : ""}
+      </label>`;
+    }).join("") : `<p class="pb-vazio">Nenhum técnico com esse filtro.</p>`;
 
     $$("[data-sel]", $("#base-lista")).forEach((c) => c.addEventListener("change", () => {
       const id = Number(c.dataset.sel);
@@ -4136,7 +4145,9 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
     $("#base-prev").addEventListener("click", () => { BASE_PAGINA--; loadBase(); });
     $("#base-next").addEventListener("click", () => { BASE_PAGINA++; loadBase(); });
     const addReg = $("#base-add-regional");
-    if (addReg) addReg.addEventListener("click", () => adicionarNaFase({ regional: baseFiltro.regional }));
+    if (addReg) addReg.addEventListener("click", () => adicionarNaFase({
+      regional: baseFiltro.regional, incluir_de_outras_fases: reaproveitando,
+    }));
     atualizaBotaoAdicionar();
   }
 
@@ -4152,7 +4163,10 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
     if (!FASES.length) { toast("Crie uma fase antes de escolher quem entra.", true); return; }
     // a fase de destino é a que está rodando; se não houver, a última criada
     const destino = FASES.find((f) => f.status === "em_andamento") || FASES[FASES.length - 1];
-    if (!confirm(`Adicionar à "${destino.nome}"?`)) return;
+    const aviso = payload.incluir_de_outras_fases
+      ? `Adicionar à "${destino.nome}"? Quem já testou outra fase tem o progresso resetado (status, nota, link do formulário) — o relato antigo continua guardado.`
+      : `Adicionar à "${destino.nome}"?`;
+    if (!confirm(aviso)) return;
     try {
       const res = await api(`/api/piloto/fases/${destino.id}/tecnicos`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -4165,7 +4179,10 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
     } catch (e) { toast("Erro ao adicionar: " + e.message, true); }
   }
 
-  $("#base-add").addEventListener("click", () => adicionarNaFase({ tecnico_ids: [...baseSelecao] }));
+  $("#base-add").addEventListener("click", () => adicionarNaFase({
+    tecnico_ids: [...baseSelecao], incluir_de_outras_fases: $("#base-reaproveitar").checked,
+  }));
+  $("#base-reaproveitar").addEventListener("change", () => { BASE_PAGINA = 0; loadBase(); });
   $("#base-regional").addEventListener("change", (e) => {
     baseFiltro.regional = e.target.value; BASE_PAGINA = 0; loadBase();
   });

@@ -1796,11 +1796,15 @@ body.inline-connecting * { cursor:crosshair !important; }
 .base-sel-head h3 { font-family:'Roboto Slab',serif; font-size:15px; font-weight:700; color:var(--text); }
 .base-sel-head p { font-size:12px; color:var(--text-3); margin-top:2px; }
 .base-sel-acoes { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.base-sel-acoes select, .base-sel-acoes input {
+.base-sel-acoes select, .base-sel-acoes input[type="search"] {
   height:34px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid var(--line-2);
   background:var(--surface-2); color:var(--text); font-family:'Roboto',sans-serif; font-size:12.5px;
 }
 .base-sel-acoes .btn-primary { height:34px; padding:0 15px; font-size:12.5px; }
+.base-reaproveitar {
+  display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-3); cursor:pointer;
+}
+.base-reaproveitar input { width:15px; height:15px; accent-color:var(--f-blue); margin:0; }
 
 .base-lista { max-height:420px; overflow-y:auto; }
 .base-linha {
@@ -1812,6 +1816,10 @@ body.inline-connecting * { cursor:crosshair !important; }
 .base-nome { flex:1; min-width:0; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .base-reg { flex:0 0 150px; color:var(--text-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .base-tel { flex:0 0 150px; font-family:'Roboto Mono',monospace; font-size:11px; color:var(--text-3); }
+.base-fase-atual {
+  flex:0 0 auto; font-size:10.5px; padding:2px 8px; border-radius:999px;
+  background:rgba(0,84,236,.1); color:var(--f-blue); white-space:nowrap;
+}
 .base-paginacao {
   display:flex; align-items:center; gap:10px; flex-wrap:wrap;
   padding:11px 18px; font-size:12px; color:var(--text-3);
