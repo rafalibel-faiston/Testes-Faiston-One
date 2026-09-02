@@ -4001,17 +4001,24 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
   // milhares de cadastros na base, já que só os da fase viram card.
   let FASES = [];
   let FASE_ATUAL = null;          // id da fase; null = modo "base completa"
+  let FASE_INICIALIZADA = false;  // já restaurou a fase salva/padrão uma vez?
   const FASE_KEY = "fluxoc_fase_tecnicos";
 
   async function loadFases() {
     try { FASES = await api("/api/piloto/fases"); }
     catch (e) { FASES = []; }
-    const salva = Number(localStorage.getItem(FASE_KEY) || 0);
-    if (FASE_ATUAL === null && salva && FASES.some((f) => f.id === salva)) {
-      FASE_ATUAL = salva;
-    } else if (FASE_ATUAL === null && FASES.length) {
-      // abre na fase que está rodando; se nenhuma, na primeira
-      FASE_ATUAL = (FASES.find((f) => f.status === "em_andamento") || FASES[0]).id;
+    // essa restauração só pode rodar na primeira carga: se rodasse toda vez,
+    // clicar em "Base completa" (que também deixa FASE_ATUAL null) seria
+    // desfeito no ato, voltando sempre pra fase em andamento.
+    if (!FASE_INICIALIZADA) {
+      FASE_INICIALIZADA = true;
+      const salva = Number(localStorage.getItem(FASE_KEY) || 0);
+      if (salva && FASES.some((f) => f.id === salva)) {
+        FASE_ATUAL = salva;
+      } else if (FASES.length) {
+        // abre na fase que está rodando; se nenhuma, na primeira
+        FASE_ATUAL = (FASES.find((f) => f.status === "em_andamento") || FASES[0]).id;
+      }
     }
     renderFasesNav();
   }
