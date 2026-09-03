@@ -541,8 +541,8 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
   background:var(--grad-primary); -webkit-background-clip:text; background-clip:text; color:transparent;
 }
 /* fluxos ainda não iniciados: ar de "reservado" */
-.flow-tab[data-flow="A"] .flow-tab-sub, .flow-tab[data-flow="B"] .flow-tab-sub { color:var(--text-3); }
-.flow-tab[data-flow="A"]:not(.active), .flow-tab[data-flow="B"]:not(.active) { opacity:.78; }
+.flow-tab[data-flow="A"] .flow-tab-sub { color:var(--text-3); }
+.flow-tab[data-flow="A"]:not(.active) { opacity:.78; }
 
 /* placeholder de fluxo não iniciado */
 .flow-panel[hidden] { display:none; }
