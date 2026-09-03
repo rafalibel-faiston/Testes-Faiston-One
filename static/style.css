@@ -1611,18 +1611,6 @@ body.inline-connecting * { cursor:crosshair !important; }
 .ajustes-stats .stat { cursor:default; }
 .ajustes-stats .stat:hover { transform:none; box-shadow:none; border-color:var(--line); }
 
-/* ---------- funil de técnicos: cartão compacto, sempre visível ----------
-   uma cor só (a mesma do painel do piloto), afunilando de cima pra baixo
-   conforme os técnicos avançam — dá a proporção de bater o olho sem a
-   poluição de várias cores brigando entre si. Reaproveita .pb-linha/.pb-barra
-   do painel do piloto (mesmo componente, só que fora do "mostrar"). */
-.tec-funil {
-  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
-  padding:14px 18px 8px; margin-bottom:16px; box-shadow:var(--shadow-1);
-}
-.tec-funil[hidden] { display:none; }
-.tec-funil-sub { font-size:11px; color:var(--text-3); margin:0 0 11px; }
-
 .ajustes-filters {
   display:flex; flex-direction:column; gap:9px;
   background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);

@@ -4103,7 +4103,6 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
     if (modoBase) {
       TECNICOS = [];
       renderTecnicoStats();
-      renderTecnicoFunil();
       $("#piloto-painel").hidden = true;
       await loadBase();
       return;
@@ -4500,39 +4499,9 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
   function renderTecnicos() {
     tecnicosVisiveis = PAGINA_CARDS;   // recarregou a lista: volta pro primeiro pedaço
     renderTecnicoStats();
-    renderTecnicoFunil();
     renderTecnicoStatusChips();
     renderTecnicoList();
     atualizaContadorTecnicos();
-  }
-
-  // funil de adoção condensado, sempre visível: uma cor só (a mesma do painel do
-  // piloto), afunilando de cima pra baixo conforme os técnicos avançam — dá a
-  // proporção de bater o olho sem a poluição de seis cores brigando entre si.
-  // "sem retorno" sai do funil (não é etapa, é quem caiu fora) e vira só uma nota.
-  // Some no modo "Base completa" (não tem funil).
-  function renderTecnicoFunil() {
-    const box = $("#tecnicos-funil");
-    const total = TECNICOS.length;
-    if (!box) return;
-    if (FASE_ATUAL === null || !total) { box.hidden = true; return; }
-    box.hidden = false;
-    const caminho = TECNICO_STATUS_ORDEM.filter((k) => k !== "sem_retorno");
-    const porStatus = {};
-    TECNICOS.forEach((t) => { porStatus[t.status] = (porStatus[t.status] || 0) + 1; });
-    const semRetorno = porStatus.sem_retorno || 0;
-    // cada etapa conta quem chegou nela OU passou dela, igual ao painel do piloto —
-    // mostra onde o funil está travando, não só onde cada um parou agora
-    const etapas = caminho.map((key, i) => ({
-      label: TECNICO_STATUS_META[key].label,
-      alcancou: caminho.slice(i).reduce((n, k) => n + (porStatus[k] || 0), 0),
-    }));
-    const maxFunil = etapas.length ? etapas[0].alcancou : 0;
-    const linhas = etapas.map((e) => barra(e.alcancou, maxFunil, "b-azul", e.label,
-      `${e.label}: ${e.alcancou} de ${total} (${total ? Math.round((e.alcancou / total) * 100) : 0}%)`)).join("");
-    box.innerHTML = `
-      <p class="tec-funil-sub">quantos chegaram em cada etapa, de ${total} cadastrado(s)${semRetorno ? ` · ${semRetorno} sem retorno` : ""}</p>
-      ${linhas}`;
   }
 
   function renderTecnicoStats() {
