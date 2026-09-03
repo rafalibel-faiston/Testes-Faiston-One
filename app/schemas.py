@@ -502,6 +502,7 @@ class PilotoFaseOut(BaseModel):
     # contagem preenchida pelo router. Não pode se chamar "tecnicos": o modelo tem
     # um relationship com esse nome e o Pydantic leria a lista no lugar do número.
     total_tecnicos: int = 0
+    concluidos: int = 0   # quantos já terminaram o funil — dá a barra de progresso da fase
 
 
 class PilotoFaseCreate(BaseModel):

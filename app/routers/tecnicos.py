@@ -245,10 +245,17 @@ def listar_fases(db: Session = Depends(get_db)):
         .group_by(models.Tecnico.fase_id)
         .all()
     )
+    concluidos_por_fase = dict(
+        db.query(models.Tecnico.fase_id, sa_func.count(models.Tecnico.id))
+        .filter(models.Tecnico.fase_id.isnot(None), models.Tecnico.status == "concluido")
+        .group_by(models.Tecnico.fase_id)
+        .all()
+    )
     saida = []
     for f in fases:
         dados = schemas.PilotoFaseOut.model_validate(f)
         dados.total_tecnicos = contagem.get(f.id, 0)
+        dados.concluidos = concluidos_por_fase.get(f.id, 0)
         saida.append(dados)
     return saida
 

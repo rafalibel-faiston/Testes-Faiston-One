@@ -1611,6 +1611,34 @@ body.inline-connecting * { cursor:crosshair !important; }
 .ajustes-stats .stat { cursor:default; }
 .ajustes-stats .stat:hover { transform:none; box-shadow:none; border-color:var(--line); }
 
+/* ---------- funil de técnicos: uma barra só, segmentada por etapa ----------
+   é a proporção de bater o olho que os números soltos acima não dão — quanto
+   está parado em cada ponto do funil, tudo junto numa régua só. Mesmas cores
+   do risco lateral de cada card (.tecnico-item.st-*), só que na horizontal. */
+.tec-funil { margin:-4px 0 16px; }
+.tec-funil[hidden] { display:none; }
+.tec-funil-trilho {
+  display:flex; width:100%; height:10px; border-radius:999px; overflow:hidden;
+  background:var(--surface-3); box-shadow:inset 0 0 0 1px var(--line);
+}
+.tec-funil-seg { display:block; height:100%; min-width:3px; transition:width .2s var(--ease); }
+.tec-funil-seg.st-a-contatar   { background:var(--na); }
+.tec-funil-seg.st-convidado    { background:linear-gradient(90deg,#d97706,#fbbf24); }
+.tec-funil-seg.st-instalado    { background:var(--grad-primary); }
+.tec-funil-seg.st-em-teste     { background:var(--grad-warm); }
+.tec-funil-seg.st-concluido    { background:linear-gradient(90deg,#0d9d6c,#34d399); }
+.tec-funil-seg.st-sem-retorno  { background:var(--bad); }
+.tec-funil-legenda { display:flex; flex-wrap:wrap; gap:5px 16px; margin-top:9px; }
+.tec-funil-item { font-size:11.5px; color:var(--text-2); display:inline-flex; align-items:center; gap:6px; }
+.tec-funil-item b { color:var(--text); font-weight:700; }
+.tec-funil-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.tec-funil-dot.st-a-contatar   { background:var(--na); }
+.tec-funil-dot.st-convidado    { background:linear-gradient(180deg,#d97706,#fbbf24); }
+.tec-funil-dot.st-instalado    { background:var(--grad-primary); }
+.tec-funil-dot.st-em-teste     { background:var(--grad-warm); }
+.tec-funil-dot.st-concluido    { background:linear-gradient(180deg,#0d9d6c,#34d399); }
+.tec-funil-dot.st-sem-retorno  { background:var(--bad); }
+
 .ajustes-filters {
   display:flex; flex-direction:column; gap:9px;
   background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
@@ -1769,13 +1797,22 @@ body.inline-connecting * { cursor:crosshair !important; }
 .fases-nav { display:flex; gap:8px; flex-wrap:wrap; margin:16px 0 14px; }
 .fase-aba {
   position:relative; display:flex; flex-direction:column; gap:2px; align-items:flex-start; cursor:pointer;
-  padding:9px 30px 9px 15px; border-radius:var(--radius); border:1px solid var(--line);
+  min-width:190px; padding:9px 30px 9px 15px; border-radius:var(--radius); border:1px solid var(--line);
   background:var(--surface); color:var(--text-2); font-family:'Roboto',sans-serif;
   transition:transform .18s var(--ease), box-shadow .18s var(--ease), border-color .18s var(--ease);
 }
 .fase-aba:hover { transform:translateY(-2px); box-shadow:var(--shadow-1); border-color:var(--line-2); }
 .fase-nome { font-family:'Roboto Slab',serif; font-size:13.5px; font-weight:700; color:var(--text); }
 .fase-sub { font-size:10.5px; color:var(--text-3); }
+/* progresso da fase: fração já concluída no funil, pra bater o olho na aba
+   e ver quão perto de fechar cada região está — sem abrir o painel do piloto */
+.fase-progress {
+  display:block; width:100%; height:4px; margin-top:6px; border-radius:999px;
+  background:rgba(24,26,50,.08); overflow:hidden;
+}
+.fase-progress i { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,#0d9d6c,#34d399); transition:width .2s var(--ease); }
+.fase-aba.active .fase-progress { background:rgba(255,255,255,.28); }
+.fase-aba.active .fase-progress i { background:#fff; }
 .fase-aba.active { border-color:transparent; background:var(--grad-primary); box-shadow:0 10px 24px -14px rgba(0,84,236,.7); }
 .fase-aba.active .fase-nome, .fase-aba.active .fase-sub { color:#fff; }
 .fase-editar {

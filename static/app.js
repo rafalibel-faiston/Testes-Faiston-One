@@ -4057,14 +4057,22 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
       planejada: "planejada", em_andamento: "em andamento",
       concluida: "concluída", liberada: "liberada",
     };
-    const abas = FASES.map((f) => `
+    const abas = FASES.map((f) => {
+      // barrinha de progresso da fase: quanto do total já terminou o funil —
+      // dá pra bater o olho na aba e ver quão perto cada fase está de fechar
+      const pct = f.total_tecnicos ? Math.round((f.concluidos / f.total_tecnicos) * 100) : 0;
+      return `
       <button type="button" class="fase-aba${f.id === FASE_ATUAL ? " active" : ""} st-${f.status}" data-fase="${f.id}">
         <span class="fase-nome">${esc(f.nome)}</span>
         <span class="fase-sub">${f.total_tecnicos} técnico(s) · ${FASE_STATUS_LABEL[f.status] || f.status}${f.versao_app ? ` · ${esc(f.versao_app)}` : ""}</span>
+        <span class="fase-progress" title="${f.concluidos} de ${f.total_tecnicos} concluíram o teste (${pct}%)">
+          <i style="width:${f.total_tecnicos ? Math.max(pct, f.concluidos ? 3 : 0) : 0}%"></i>
+        </span>
         <span class="fase-editar" data-editar-fase="${f.id}" title="Editar ou excluir esta fase">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
         </span>
-      </button>`).join("");
+      </button>`;
+    }).join("");
     nav.innerHTML = abas + `
       <button type="button" class="fase-aba fase-base${FASE_ATUAL === null ? " active" : ""}" data-fase="">
         <span class="fase-nome">Base completa</span>
@@ -4095,6 +4103,7 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
     if (modoBase) {
       TECNICOS = [];
       renderTecnicoStats();
+      renderTecnicoFunil();
       $("#piloto-painel").hidden = true;
       await loadBase();
       return;
@@ -4491,9 +4500,35 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
   function renderTecnicos() {
     tecnicosVisiveis = PAGINA_CARDS;   // recarregou a lista: volta pro primeiro pedaço
     renderTecnicoStats();
+    renderTecnicoFunil();
     renderTecnicoStatusChips();
     renderTecnicoList();
     atualizaContadorTecnicos();
+  }
+
+  // barra única, segmentada por etapa do funil — a proporção de bater o olho que
+  // os cards de número (acima) não dão: quanto tem parado em cada ponto, não só
+  // quanto tem "em teste" isolado. Some no modo "Base completa" (não tem funil).
+  function renderTecnicoFunil() {
+    const box = $("#tecnicos-funil");
+    const total = TECNICOS.length;
+    if (!box) return;
+    if (FASE_ATUAL === null || !total) { box.hidden = true; return; }
+    box.hidden = false;
+    const segs = TECNICO_STATUS_ORDEM.map((key) => {
+      const n = TECNICOS.filter((t) => t.status === key).length;
+      return { key, n, pct: (n / total) * 100, cls: TECNICO_STATUS_META[key].cls };
+    }).filter((s) => s.n > 0);
+    box.innerHTML = `
+      <div class="tec-funil-trilho">
+        ${segs.map((s) => `<span class="tec-funil-seg ${s.cls}" style="width:${s.pct}%"
+          title="${esc(TECNICO_STATUS_META[s.key].label)}: ${s.n} de ${total} (${Math.round(s.pct)}%)"></span>`).join("")}
+      </div>
+      <div class="tec-funil-legenda">
+        ${segs.map((s) => `<span class="tec-funil-item">
+          <i class="tec-funil-dot ${s.cls}"></i>${esc(TECNICO_STATUS_META[s.key].label)} <b>${s.n}</b>
+        </span>`).join("")}
+      </div>`;
   }
 
   function renderTecnicoStats() {
