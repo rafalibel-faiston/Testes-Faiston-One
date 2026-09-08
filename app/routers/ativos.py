@@ -14,7 +14,7 @@ from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session, joinedload
 
 from .. import models, schemas
-from ..activity import log as log_activity, normaliza_prazo
+from ..activity import log as log_activity, normaliza_cor, normaliza_prazo, snippet
 from ..database import get_db
 from ..relatorio import AJUSTE_LABEL
 
@@ -60,7 +60,10 @@ def list_ajustes(
     status: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    q = db.query(models.AtivoAjuste).options(joinedload(models.AtivoAjuste.prints))
+    q = db.query(models.AtivoAjuste).options(
+        joinedload(models.AtivoAjuste.prints),
+        joinedload(models.AtivoAjuste.observations).joinedload(models.AtivoAjusteObservation.revisions),
+    )
     if versao:
         q = q.filter(models.AtivoAjuste.versao == _norm_versao(versao))
     if tipo:
@@ -188,9 +191,95 @@ def delete_ajuste(ajuste_id: int, db: Session = Depends(get_db)):
 
 
 def _get_ajuste_or_404(db: Session, ajuste_id: int) -> models.AtivoAjuste:
-    ajuste = db.query(models.AtivoAjuste).filter(models.AtivoAjuste.id == ajuste_id).first()
+    ajuste = (
+        db.query(models.AtivoAjuste)
+        .options(
+            joinedload(models.AtivoAjuste.prints),
+            joinedload(models.AtivoAjuste.observations).joinedload(models.AtivoAjusteObservation.revisions),
+        )
+        .filter(models.AtivoAjuste.id == ajuste_id)
+        .first()
+    )
     if not ajuste:
         raise HTTPException(status_code=404, detail="Ajuste não encontrado")
+    return ajuste
+
+
+@router.post("/ativos/ajustes/{ajuste_id}/observacoes", response_model=schemas.AtivoAjusteOut)
+def add_ajuste_observation(ajuste_id: int, payload: schemas.ObservationCreate, db: Session = Depends(get_db)):
+    """Adiciona uma nova nota ao histórico do ajuste — nunca sobrescreve as anteriores,
+    cada uma guarda o autor de quem escreveu. Mesma ideia das notas do Dispatcher."""
+    ajuste = _get_ajuste_or_404(db, ajuste_id)
+    texto = (payload.texto or "").strip()
+    if not texto:
+        raise HTTPException(status_code=400, detail="Nota vazia.")
+    db.add(models.AtivoAjusteObservation(
+        ajuste_id=ajuste.id, autor=payload.autor, texto=texto, cor=normaliza_cor(payload.cor),
+    ))
+    log_activity(db, FLUXO_ATIVOS, "ajuste-obs",
+                 f'Nota em ajuste #{ajuste.numero} ({ajuste.versao}): "{snippet(texto)}"',
+                 autor=payload.autor, case_code=f"AJT-{ajuste.id}")
+    db.commit()
+    db.refresh(ajuste)
+    return ajuste
+
+
+@router.patch("/ativos/observacoes/{observation_id}", response_model=schemas.AtivoAjusteOut)
+def update_ajuste_observation(observation_id: int, payload: schemas.ObservationUpdate, db: Session = Depends(get_db)):
+    """Atualiza o texto de uma nota guardando a versão anterior na trilha —
+    a nota evolui sem apagar o que já foi dito."""
+    obs = (
+        db.query(models.AtivoAjusteObservation)
+        .filter(models.AtivoAjusteObservation.id == observation_id)
+        .first()
+    )
+    if not obs:
+        raise HTTPException(status_code=404, detail="Nota não encontrada")
+    texto = (payload.texto or "").strip()
+    if not texto:
+        raise HTTPException(status_code=400, detail="Nota vazia.")
+    ajuste = _get_ajuste_or_404(db, obs.ajuste_id)
+    # cor ausente no payload = não mexe na cor atual (só o texto está sendo salvo)
+    cor = normaliza_cor(payload.cor) if payload.cor is not None else obs.cor
+    if texto == obs.texto and cor == obs.cor:
+        return ajuste
+    if texto != obs.texto:
+        db.add(models.AtivoAjusteObservationRevision(
+            observation_id=obs.id, texto=obs.texto, cor=obs.cor,
+            autor=obs.autor, editado_por=payload.autor,
+        ))
+        obs.texto = texto
+        obs.editado_por = payload.autor
+        obs.editado_em = sa_func.now()
+        log_activity(db, FLUXO_ATIVOS, "ajuste-obs",
+                     f'Nota atualizada em ajuste #{ajuste.numero} ({ajuste.versao}): "{snippet(texto)}"',
+                     autor=payload.autor, case_code=f"AJT-{ajuste.id}")
+    elif cor != obs.cor:
+        marca = cor or "sem cor"
+        log_activity(db, FLUXO_ATIVOS, "ajuste-obs",
+                     f'Nota do ajuste #{ajuste.numero} ({ajuste.versao}) marcada como {marca}: "{snippet(texto)}"',
+                     case_code=f"AJT-{ajuste.id}")
+    obs.cor = cor
+    db.commit()
+    db.refresh(ajuste)
+    return ajuste
+
+
+@router.delete("/ativos/observacoes/{observation_id}", response_model=schemas.AtivoAjusteOut)
+def delete_ajuste_observation(observation_id: int, db: Session = Depends(get_db)):
+    obs = (
+        db.query(models.AtivoAjusteObservation)
+        .filter(models.AtivoAjusteObservation.id == observation_id)
+        .first()
+    )
+    if not obs:
+        raise HTTPException(status_code=404, detail="Nota não encontrada")
+    ajuste = _get_ajuste_or_404(db, obs.ajuste_id)
+    db.delete(obs)
+    log_activity(db, FLUXO_ATIVOS, "ajuste-obs",
+                 f'Nota removida do ajuste #{ajuste.numero} ({ajuste.versao})', case_code=f"AJT-{ajuste.id}")
+    db.commit()
+    db.refresh(ajuste)
     return ajuste
 
 

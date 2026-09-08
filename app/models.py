@@ -315,6 +315,10 @@ class AtivoAjuste(Base):
         "AtivoAjustePrint", back_populates="ajuste", cascade="all, delete-orphan",
         order_by="AtivoAjustePrint.id",
     )
+    observations = relationship(
+        "AtivoAjusteObservation", back_populates="ajuste", cascade="all, delete-orphan",
+        order_by="AtivoAjusteObservation.id",
+    )
 
 
 class AtivoAjustePrint(Base):
@@ -332,6 +336,48 @@ class AtivoAjustePrint(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     ajuste = relationship("AtivoAjuste", back_populates="prints")
+
+
+class AtivoAjusteObservation(Base):
+    """Uma nota do histórico de um ajuste — mesma ideia do Observation do caso de
+    teste: cada uma com seu próprio autor, formando uma trilha de notas em vez do
+    campo único `observacao` (que só guarda um texto por vez, sempre sobrescrito)."""
+    __tablename__ = "ativo_ajuste_observations"
+
+    id = Column(Integer, primary_key=True)
+    ajuste_id = Column(Integer, ForeignKey("ativo_ajustes.id", ondelete="CASCADE"), nullable=False, index=True)
+    autor = Column(String, nullable=True)
+    texto = Column(Text, nullable=False)
+    # marcação de cor da nota: "verde" (deu certo, resolvido) ou "vermelho"
+    # (problema, pendência). None é a nota normal, sem cor.
+    cor = Column(String, nullable=True)
+    editado_por = Column(String, nullable=True)
+    editado_em = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    ajuste = relationship("AtivoAjuste", back_populates="observations")
+    revisions = relationship(
+        "AtivoAjusteObservationRevision", back_populates="observation",
+        cascade="all, delete-orphan", order_by="AtivoAjusteObservationRevision.id",
+    )
+
+
+class AtivoAjusteObservationRevision(Base):
+    """Versão anterior do texto de uma nota do ajuste — mesma trilha do
+    ObservationRevision do caso de teste: editar nunca apaga o que já foi dito."""
+    __tablename__ = "ativo_ajuste_observation_revisions"
+
+    id = Column(Integer, primary_key=True)
+    observation_id = Column(
+        Integer, ForeignKey("ativo_ajuste_observations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    texto = Column(Text, nullable=False)
+    cor = Column(String, nullable=True)
+    autor = Column(String, nullable=True)
+    editado_por = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    observation = relationship("AtivoAjusteObservation", back_populates="revisions")
 
 
 # Ordem em que o time ataca os ajustes: Alta primeiro, o que ainda não foi

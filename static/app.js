@@ -3723,6 +3723,14 @@
       </div>
       ${a.observacao ? `<div class="ajuste-obs"><b>Obs.</b> ${esc(a.observacao)}</div>` : ""}
       ${retornoLinha(a)}
+      <div class="ajuste-notas obs-row">
+        <div class="obs-list">${obsList(a.observations)}</div>
+        <div class="obs-add">
+          <textarea class="obs-input" rows="1" placeholder="Adicionar nota..."></textarea>
+          <button type="button" class="obs-add-btn">Adicionar</button>
+        </div>
+        ${corPickerHtml("", "obs-cores-add")}
+      </div>
       <div class="ajuste-shots">
         <div class="ajuste-shots-grid">${(a.prints || []).map(ajustePrintThumb).join("")}</div>
         <label class="ajuste-upload" title="Colar com Ctrl+V ou escolher um arquivo">
@@ -3766,6 +3774,37 @@
       $(".ajuste-status", card).addEventListener("change", (e) => setAjusteStatus(id, e.target.value));
       // clicar no card o elege como destino do Ctrl+V
       card.addEventListener("click", () => marcarAlvoDeColagem(id));
+
+      const notaInput = $(".obs-input", card);
+      const notaBtn = $(".obs-add-btn", card);
+      const notaCor = wireCorPicker($(".obs-cores-add", card));
+      const submitNota = async () => {
+        const texto = notaInput.value.trim();
+        if (!texto) return;
+        notaBtn.disabled = true;
+        try {
+          substituiAjusteLocal(await api(`/api/ativos/ajustes/${id}/observacoes`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ texto, cor: notaCor.get(), autor: testerName() || undefined }),
+          }));
+          renderAjustes();
+          toast("Nota adicionada.");
+        } catch (e) {
+          toast("Erro ao salvar nota: " + e.message, true);
+        } finally {
+          notaBtn.disabled = false;
+        }
+      };
+      notaBtn.addEventListener("click", submitNota);
+      notaInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitNota(); }
+      });
+
+      wireObsItems(card, (obsId) => `/api/ativos/observacoes/${obsId}`, (updated) => {
+        substituiAjusteLocal(updated);
+        renderAjustes();
+      });
 
       const zone = $(".ajuste-upload", card);
       $(".ajuste-shot-input", card).addEventListener("change", (e) => {

@@ -592,6 +592,31 @@ class AtivoAjustePrintOut(BaseModel):
     created_at: Optional[datetime] = None
 
 
+class AtivoAjusteObservationRevisionOut(BaseModel):
+    """Uma versão anterior do texto de uma nota do ajuste — a trilha das atualizações."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    texto: str
+    cor: Optional[str] = None
+    autor: Optional[str] = None
+    editado_por: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
+class AtivoAjusteObservationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    autor: Optional[str] = None
+    texto: str
+    cor: Optional[str] = None   # "verde", "vermelho" ou None (sem marcação)
+    editado_por: Optional[str] = None
+    editado_em: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    revisions: List[AtivoAjusteObservationRevisionOut] = []
+
+
 class AtivoAjusteOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -614,6 +639,7 @@ class AtivoAjusteOut(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     prints: List[AtivoAjustePrintOut] = []
+    observations: List[AtivoAjusteObservationOut] = []
 
 
 class AtivoAjusteCreate(BaseModel):
