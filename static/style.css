@@ -951,6 +951,7 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 .diagrams-head-copy h2 { font-size:19px; font-weight:700; color:var(--text); margin-bottom:5px; }
 .diagrams-head-copy p { font-size:13px; color:var(--text-2); line-height:1.6; max-width:640px; }
 .diagrams-head .add-btn { flex-shrink:0; }
+.diagrams-head-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; flex-shrink:0; }
 
 #diagrams { display:flex; flex-direction:column; gap:18px; }
 .diagram {

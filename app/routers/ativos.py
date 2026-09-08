@@ -14,8 +14,9 @@ from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session, joinedload
 
 from .. import models, schemas
-from ..activity import normaliza_prazo
+from ..activity import log as log_activity, normaliza_prazo
 from ..database import get_db
+from ..relatorio import AJUSTE_LABEL
 
 router = APIRouter(tags=["ativos"])
 
@@ -27,6 +28,10 @@ STATUSES = {"levantado", "analise", "desenvolvimento", "entregue", "validado", "
 # mesmos limites dos prints dos casos de teste
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 ALLOWED_CONTENT_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"}
+
+# "fluxo" da trilha de Novidades pros ajustes — a Gestão de Ativos não tem fluxo
+# A/B/C, mas reaproveita a mesma trilha (activity_log/team_views) com essa chave fixa.
+FLUXO_ATIVOS = "ATIVOS"
 
 
 def _norm_versao(valor: Optional[str], padrao: str = "v2") -> str:
@@ -98,6 +103,9 @@ def create_ajuste(payload: schemas.AtivoAjusteCreate, db: Session = Depends(get_
         autor=(payload.autor or "").strip() or None,
     )
     db.add(ajuste)
+    db.flush()  # garante ajuste.id pra amarrar o evento da trilha de Novidades
+    log_activity(db, FLUXO_ATIVOS, "ajuste", f'Ajuste #{ajuste.numero} criado em {ajuste.versao}: "{titulo}"',
+                 autor=ajuste.autor, case_code=f"AJT-{ajuste.id}")
     db.commit()
     db.refresh(ajuste)
     return ajuste
@@ -108,6 +116,7 @@ def update_ajuste(ajuste_id: int, payload: schemas.AtivoAjusteUpdate, db: Sessio
     ajuste = db.query(models.AtivoAjuste).filter(models.AtivoAjuste.id == ajuste_id).first()
     if not ajuste:
         raise HTTPException(status_code=404, detail="Ajuste não encontrado")
+    status_antigo = ajuste.status
     if payload.titulo is not None:
         titulo = payload.titulo.strip()
         if not titulo:
@@ -148,6 +157,19 @@ def update_ajuste(ajuste_id: int, payload: schemas.AtivoAjusteUpdate, db: Sessio
         ajuste.retorno_em = sa_func.now() if retorno else None
     if payload.prazo is not None:
         ajuste.prazo = normaliza_prazo(payload.prazo)
+
+    # a Novidade registra a mudança de situação (é a que interessa acompanhar);
+    # uma edição de conteúdo sem trocar situação também entra, mas mais discreta.
+    # Retorno/prazo sozinhos (autosave da pauta) não geram evento — vira ruído.
+    if payload.status is not None and ajuste.status != status_antigo:
+        log_activity(db, FLUXO_ATIVOS, "ajuste",
+                     f'Ajuste #{ajuste.numero} ({ajuste.versao}) mudou para "{AJUSTE_LABEL.get(ajuste.status, ajuste.status)}": {ajuste.titulo}',
+                     case_code=f"AJT-{ajuste.id}")
+    elif payload.titulo is not None or payload.atual is not None or payload.esperado is not None:
+        log_activity(db, FLUXO_ATIVOS, "ajuste",
+                     f'Ajuste #{ajuste.numero} ({ajuste.versao}) editado: "{ajuste.titulo}"',
+                     case_code=f"AJT-{ajuste.id}")
+
     db.commit()
     db.refresh(ajuste)
     return ajuste
@@ -158,6 +180,8 @@ def delete_ajuste(ajuste_id: int, db: Session = Depends(get_db)):
     ajuste = db.query(models.AtivoAjuste).filter(models.AtivoAjuste.id == ajuste_id).first()
     if not ajuste:
         raise HTTPException(status_code=404, detail="Ajuste não encontrado")
+    log_activity(db, FLUXO_ATIVOS, "ajuste", f'Ajuste #{ajuste.numero} ({ajuste.versao}) excluído: "{ajuste.titulo}"',
+                 case_code=f"AJT-{ajuste.id}")
     db.delete(ajuste)
     db.commit()
     return {"deleted": ajuste_id}

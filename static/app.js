@@ -2940,12 +2940,19 @@
   let LAST_SEEN_ID = 0;
   const activityModal = $("#activity-modal");
 
+  // A Gestão de Ativos não tem Fluxo A/B/C — reaproveita a mesma trilha de
+  // Novidades (activity_log/team_views) com essa chave fixa como "fluxo".
+  const FLUXO_ATIVOS = "ATIVOS";
+  function activityFluxo() { return currentModule === "ativos" ? FLUXO_ATIVOS : currentFlow; }
+
   async function loadActivities() {
-    if (!PERFIL) { const el = $("#activity-count"); if (el) el.hidden = true; return; }
+    const badges = ["#activity-count", "#activity-count-ativos"];
+    if (!PERFIL) { badges.forEach((sel) => { const el = $(sel); if (el) el.hidden = true; }); return; }
+    const fluxo = activityFluxo();
     try {
       const [acts, seen] = await Promise.all([
-        api(`/api/atividades?fluxo=${encodeURIComponent(currentFlow)}`),
-        api(`/api/atividades/visto?perfil=${encodeURIComponent(PERFIL)}&fluxo=${encodeURIComponent(currentFlow)}`),
+        api(`/api/atividades?fluxo=${encodeURIComponent(fluxo)}`),
+        api(`/api/atividades/visto?perfil=${encodeURIComponent(PERFIL)}&fluxo=${encodeURIComponent(fluxo)}`),
       ]);
       ACTIVITIES = acts;
       LAST_SEEN_ID = (seen && seen.last_seen_id) || 0;
@@ -2957,16 +2964,28 @@
 
   function updateActivityCount() {
     const n = ACTIVITIES.filter(actIsNew).length;
-    const el = $("#activity-count");
-    if (el) { el.textContent = n > 99 ? "99+" : n; el.hidden = n === 0; }
+    ["#activity-count", "#activity-count-ativos"].forEach((sel) => {
+      const el = $(sel);
+      if (el) { el.textContent = n > 99 ? "99+" : n; el.hidden = n === 0; }
+    });
   }
 
-  const ACT_ICON = { status: "◉", obs: "💬", print: "🖼️", teste: "🧪", ponto: "📋", diagrama: "🗺️" };
+  const ACT_ICON = { status: "◉", obs: "💬", print: "🖼️", teste: "🧪", ponto: "📋", diagrama: "🗺️", ajuste: "🛠️" };
+
+  // rótulo do "ir para" conforme o prefixo do case_code do evento.
+  function goCodeLabel(code) {
+    if (String(code).startsWith("SIT-")) return "a situação";
+    if (String(code).startsWith("AJT-")) return "o ajuste";
+    return "o teste";
+  }
 
   function renderActivityList(boundary) {
     const el = $("#activity-list");
+    const vazio = currentModule === "ativos"
+      ? "Nenhuma atividade registrada ainda na Gestão de Ativos."
+      : "Nenhuma atividade registrada ainda neste fluxo.";
     if (!ACTIVITIES.length) {
-      el.innerHTML = `<div class="notes-empty">Nenhuma atividade registrada ainda neste fluxo.</div>`;
+      el.innerHTML = `<div class="notes-empty">${vazio}</div>`;
       return;
     }
     let html = "", divided = false, anyNew = false;
@@ -2977,15 +2996,16 @@
         html += `<div class="act-divider">acima: novo pra ${esc(PERFIL_LABEL[PERFIL] || "você")} · abaixo: já visto</div>`;
         divided = true;
       }
-      // eventos de caso (FC-...) levam ao card; os de diagrama (case_code "diagrama:ID") não
+      // eventos de caso/situação/ajuste levam ao card; os de diagrama (case_code "diagrama:ID") não
       const goCode = a.case_code && !String(a.case_code).startsWith("diagrama:") ? a.case_code : "";
-      html += `<div class="act-item ${isNew ? "is-new" : ""} ${goCode ? "act-go" : ""}" ${goCode ? `data-go="${esc(goCode)}" role="button" tabindex="0" title="Ir para o teste ${esc(goCode)}"` : ""}>
+      const rotulo = goCode ? goCodeLabel(goCode) : "";
+      html += `<div class="act-item ${isNew ? "is-new" : ""} ${goCode ? "act-go" : ""}" ${goCode ? `data-go="${esc(goCode)}" role="button" tabindex="0" title="Ir para ${rotulo}"` : ""}>
         <span class="act-icon">${ACT_ICON[a.tipo] || "•"}</span>
         <div class="act-body">
           <div class="act-text">${esc(a.texto)}</div>
           <div class="act-meta">${a.autor ? esc(a.autor) + " · " : ""}${fmtWhen(a.created_at)}${isNew ? ' · <b class="act-new">novo</b>' : ""}</div>
         </div>
-        ${goCode ? '<span class="act-goto" aria-hidden="true">ver o teste →</span>' : ""}
+        ${goCode ? `<span class="act-goto" aria-hidden="true">ver ${rotulo} →</span>` : ""}
       </div>`;
     });
     el.innerHTML = html;
@@ -2998,10 +3018,11 @@
 
   // leva da trilha de novidades até o card do teste: garante o fluxo/sub-aba
   // certos, limpa filtro que poderia esconder o card, rola até ele e destaca.
-  // Atividades de Situação reaproveitam o mesmo campo case_code (códigos
-  // SIT-xx) — essas vivem na aba "Situações", não em "Testes".
+  // Atividades de Situação e de ajuste reaproveitam o mesmo campo case_code
+  // (códigos SIT-xx e AJT-id) — vivem nas abas "Situações" e "Gestão de Ativos".
   function goToCase(code) {
     if (String(code).startsWith("SIT-")) { goToSituacao(code); return; }
+    if (String(code).startsWith("AJT-")) { goToAjuste(code.slice(4)); return; }
     const c = findCase(code);
     closeActivityModal();
     if (c && caseFlow(c) !== currentFlow) setFlow(caseFlow(c));
@@ -3044,6 +3065,27 @@
     }, 80);
   }
 
+  // mesma ideia de goToCase, mas pro ajuste da Gestão de Ativos: troca de
+  // módulo, recarrega a lista (o ajuste pode ter sido criado numa leva que
+  // ainda não tinha sido aberta nesta tela), abre a versão certa e destaca.
+  async function goToAjuste(id) {
+    closeActivityModal();
+    if (currentModule !== "ativos") switchModule("ativos");
+    await loadAjustes();
+    const a = AJUSTES.find((x) => String(x.id) === String(id));
+    if (!a) { toast("Esse ajuste não está mais na lista (pode ter sido excluído)."); return; }
+    ajusteVersao = a.versao;
+    ajusteFiltros.tipo = ajusteFiltros.status = "";
+    renderAjustes();
+    setTimeout(() => {
+      const card = document.querySelector(`.ajuste-item[data-id="${cssEscape(String(id))}"]`);
+      if (!card) return;
+      card.scrollIntoView({ behavior: "smooth", block: "center" });
+      card.classList.add("case-flash");
+      setTimeout(() => card.classList.remove("case-flash"), 1800);
+    }, 80);
+  }
+
   async function markSeen() {
     if (!PERFIL || !ACTIVITIES.length) return;
     const maxId = ACTIVITIES.reduce((m, a) => Math.max(m, a.id), 0);
@@ -3051,7 +3093,7 @@
     try {
       await api("/api/atividades/visto", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ perfil: PERFIL, fluxo: currentFlow, last_seen_id: maxId }),
+        body: JSON.stringify({ perfil: PERFIL, fluxo: activityFluxo(), last_seen_id: maxId }),
       });
       LAST_SEEN_ID = maxId;   // marca visto pro time todo; badge zera
       updateActivityCount();
@@ -3059,7 +3101,12 @@
   }
 
   function openActivityModal() {
-    $("#activity-flow-label").textContent = "Fluxo " + currentFlow + " · " + (PERFIL_LABEL[PERFIL] || "");
+    const emAtivos = currentModule === "ativos";
+    $("#activity-flow-label").textContent = (emAtivos ? "Gestão de Ativos" : "Fluxo " + currentFlow)
+      + " · " + (PERFIL_LABEL[PERFIL] || "");
+    $("#activity-hint").innerHTML = emAtivos
+      ? 'Tudo que mudou nos ajustes da Gestão de Ativos — criação, mudança de situação e edição — do mais recente pro mais antigo. O que você ainda não tinha visto aparece marcado como <b>novo</b>.'
+      : 'Tudo que mudou neste fluxo — status, observações, prints, testes, pontos e diagramas — do mais recente pro mais antigo. O que você ainda não tinha visto aparece marcado como <b>novo</b>.';
     const boundary = LAST_SEEN_ID;       // fronteira do que era novo ao abrir
     renderActivityList(boundary);
     markSeen();                          // dá o "visto" pro time no servidor
@@ -3068,6 +3115,10 @@
   function closeActivityModal() { activityModal.hidden = true; }
 
   $("#btn-activity").addEventListener("click", async () => {
+    if (!PERFIL) { openPerfilGate(true); return; }
+    await loadActivities(); openActivityModal();
+  });
+  $("#btn-activity-ativos").addEventListener("click", async () => {
     if (!PERFIL) { openPerfilGate(true); return; }
     await loadActivities(); openActivityModal();
   });
@@ -3108,6 +3159,7 @@
     if (mod === "agenda") loadAgenda();
     if (mod === "todo") loadTodo();
     if (mod === "tecnicos") loadTecnicos();
+    loadActivities();   // o badge de Novidades segue o "fluxo" do módulo aberto
   }
 
   $$(".module-tab").forEach((t) => t.addEventListener("click", () => {

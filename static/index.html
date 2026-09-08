@@ -307,10 +307,17 @@
         <b>Bug</b> (está quebrado) ou <b>Melhoria</b> (funciona, mas precisa evoluir).
         As próximas levas entram como uma versão nova — v3, v4… — sem perder o histórico das anteriores.</p>
       </div>
-      <button type="button" class="add-btn" id="btn-add-ajuste">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Novo ajuste
-      </button>
+      <div class="diagrams-head-actions">
+        <button type="button" class="activity-btn" id="btn-activity-ativos">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Novidades
+          <span class="activity-count" id="activity-count-ativos" hidden>0</span>
+        </button>
+        <button type="button" class="add-btn" id="btn-add-ajuste">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Novo ajuste
+        </button>
+      </div>
     </section>
 
     <nav class="ajustes-versoes" id="ajustes-versoes" aria-label="Selecionar versão dos ajustes"></nav>
@@ -716,7 +723,7 @@
       <button type="button" class="modal-close" id="activity-close" aria-label="Fechar">✕</button>
     </div>
     <div class="modal-body">
-      <p class="notes-hint">Tudo que mudou neste fluxo — status, observações, prints, testes, pontos e diagramas —
+      <p class="notes-hint" id="activity-hint">Tudo que mudou neste fluxo — status, observações, prints, testes, pontos e diagramas —
       do mais recente pro mais antigo. O que você ainda não tinha visto aparece marcado como <b>novo</b>.</p>
       <div class="notes-list" id="activity-list"></div>
     </div>
