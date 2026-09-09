@@ -11,6 +11,7 @@ MCP_TOKEN como senha antes de emitir o token de acesso — ver README.
 import os
 import secrets
 import time
+from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -170,7 +171,10 @@ mcp = FastMCP(
         "de um teste. Pra técnicos: criar_tecnico cadastra, "
         "gerar_mensagem_tecnico monta o convite (texto + link do WhatsApp), "
         "atualizar_status_tecnico acompanha o funil de QA e "
-        "adicionar_observacao_tecnico registra o feedback do teste."
+        "adicionar_observacao_tecnico registra o feedback do teste. O piloto "
+        "anda por fase (leva de técnicos, ex.: \"Fase 2 - Acionamento SP\"): "
+        "listar_fases mostra as levas existentes e mover_tecnico_fase põe ou "
+        "tira um técnico de uma fase."
     ),
     stateless_http=True,
     auth_server_provider=oauth_provider,
@@ -583,6 +587,8 @@ def _tecnico_to_dict(tecnico: models.Tecnico) -> dict:
         "regional": tecnico.regional,
         "lider_nome": tecnico.lider_nome,
         "status": tecnico.status,
+        "fase_id": tecnico.fase_id,
+        "fase_nome": tecnico.fase.nome if tecnico.fase else None,
         "autor": tecnico.autor,
         "nota": tecnico.nota,
         "etapas_testadas": (tecnico.etapas_testadas or "").split("|") if tecnico.etapas_testadas else [],
@@ -604,19 +610,116 @@ def _tecnico_to_dict(tecnico: models.Tecnico) -> dict:
 
 
 @mcp.tool()
-def listar_tecnicos(status: Optional[str] = None, papel: Optional[str] = None) -> list[dict]:
+def listar_tecnicos(
+    status: Optional[str] = None, papel: Optional[str] = None, fase_id: Optional[int] = None
+) -> list[dict]:
     """Lista os técnicos (e líderes) cadastrados pra testar o Track One, com o
     funil de QA de cada um. status opcional: a_contatar, convidado, instalado,
-    em_teste, concluido, sem_retorno. papel opcional: "tecnico" ou "lider"."""
+    em_teste, concluido, sem_retorno. papel opcional: "tecnico" ou "lider".
+    fase_id opcional filtra pela leva do piloto (ver listar_fases): use 0 pra
+    ver só quem ainda está na base geral, sem fase."""
     db = SessionLocal()
     try:
-        query = db.query(models.Tecnico).options(joinedload(models.Tecnico.observacoes))
+        query = db.query(models.Tecnico).options(
+            joinedload(models.Tecnico.observacoes), joinedload(models.Tecnico.fase)
+        )
         if status:
             query = query.filter(models.Tecnico.status == status)
         if papel:
             query = query.filter(models.Tecnico.papel == papel)
+        if fase_id is not None:
+            query = query.filter(models.Tecnico.fase_id == (fase_id if fase_id > 0 else None))
         tecnicos = query.order_by(models.Tecnico.nome).all()
         return [_tecnico_to_dict(t) for t in tecnicos]
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def listar_fases() -> list[dict]:
+    """Lista as fases (levas) do piloto do Track One, na ordem de execução, com
+    quantos técnicos estão em cada uma e quantos já concluíram o teste.
+    fase_id=0 em listar_tecnicos/mover_tecnico_fase significa "sem fase",
+    ou seja, ainda na base geral."""
+    db = SessionLocal()
+    try:
+        fases = db.query(models.PilotoFase).order_by(
+            models.PilotoFase.ordem, models.PilotoFase.id
+        ).all()
+        contagem = dict(
+            db.query(models.Tecnico.fase_id, func.count(models.Tecnico.id))
+            .filter(models.Tecnico.fase_id.isnot(None))
+            .group_by(models.Tecnico.fase_id)
+            .all()
+        )
+        concluidos_por_fase = dict(
+            db.query(models.Tecnico.fase_id, func.count(models.Tecnico.id))
+            .filter(models.Tecnico.fase_id.isnot(None), models.Tecnico.status == "concluido")
+            .group_by(models.Tecnico.fase_id)
+            .all()
+        )
+        return [
+            {
+                "id": f.id,
+                "nome": f.nome,
+                "descricao": f.descricao,
+                "status": f.status,
+                "versao_app": f.versao_app,
+                "total_tecnicos": contagem.get(f.id, 0),
+                "concluidos": concluidos_por_fase.get(f.id, 0),
+                "iniciada_em": f.iniciada_em.isoformat() if f.iniciada_em else None,
+                "liberada_em": f.liberada_em.isoformat() if f.liberada_em else None,
+            }
+            for f in fases
+        ]
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def mover_tecnico_fase(tecnico_id: int, fase_id: int) -> dict:
+    """Põe um técnico numa fase do piloto, ou tira ele de qualquer fase (use
+    fase_id=0 pra devolver ele à base geral, sem fase). fase_id vem de
+    listar_fases.
+
+    Mover um técnico pra uma fase diferente da que ele já estava reseta o
+    progresso de QA dele (status, nota, etapas testadas, link do formulário)
+    — é teste novo, não continuação do anterior. As observações já registradas
+    não são apagadas."""
+    db = SessionLocal()
+    try:
+        tecnico = db.query(models.Tecnico).filter(models.Tecnico.id == tecnico_id).first()
+        if not tecnico:
+            return {"erro": f"Técnico {tecnico_id} não encontrado"}
+
+        alvo_fase_id = fase_id if fase_id > 0 else None
+        fase = None
+        if alvo_fase_id is not None:
+            fase = db.query(models.PilotoFase).filter(models.PilotoFase.id == alvo_fase_id).first()
+            if not fase:
+                return {"erro": f"Fase {fase_id} não encontrada"}
+
+        if tecnico.fase_id == alvo_fase_id:
+            return _tecnico_to_dict(tecnico)
+
+        veio_de_outra_fase = tecnico.fase_id is not None
+        tecnico.fase_id = alvo_fase_id
+        if alvo_fase_id is not None and veio_de_outra_fase:
+            tecnico.status = "a_contatar"
+            tecnico.nota = None
+            tecnico.etapas_testadas = None
+            tecnico.convidado_em = None
+            tecnico.instalado_em = None
+            tecnico.concluido_em = None
+            tecnico.respondido_em = None
+            tecnico.token = models.novo_token_tecnico()
+        if fase is not None and fase.status == "planejada":
+            fase.status = "em_andamento"
+            fase.iniciada_em = fase.iniciada_em or datetime.now(timezone.utc)
+
+        db.commit()
+        db.refresh(tecnico)
+        return _tecnico_to_dict(tecnico)
     finally:
         db.close()
 
