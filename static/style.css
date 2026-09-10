@@ -927,6 +927,7 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 }
 .view-switch-row .view-switch { margin-bottom:0; }
 .global-actions { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.global-actions .btn-ghost { display:inline-flex; align-items:center; gap:7px; text-decoration:none; }
 .view-switch {
   display:inline-flex; gap:4px; padding:4px;
   background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow-1);

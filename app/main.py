@@ -11,6 +11,7 @@ from .database import Base, SessionLocal, engine
 from .routers import cases as cases_router
 from .routers import notes as notes_router
 from .routers import export as export_router
+from .routers import export_completo as export_completo_router
 from .routers import diagrams as diagrams_router
 from .routers import activity as activity_router
 from .routers import situacoes as situacoes_router
@@ -61,6 +62,7 @@ finally:
 app.include_router(cases_router.router, prefix="/api")
 app.include_router(notes_router.router, prefix="/api")
 app.include_router(export_router.router, prefix="/api")
+app.include_router(export_completo_router.router, prefix="/api")
 app.include_router(diagrams_router.router, prefix="/api")
 app.include_router(activity_router.router, prefix="/api")
 app.include_router(situacoes_router.router, prefix="/api")
