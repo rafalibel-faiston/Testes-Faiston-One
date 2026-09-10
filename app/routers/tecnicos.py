@@ -79,6 +79,27 @@ São 2 minutinhos, direto no link:
 
 Pode ser sincero, é justamente pra ajustar o que estiver ruim antes de liberar pra todo mundo. Valeu demais!"""
 
+# mandada pro técnico já cadastrado quando a fase passa a rodar com chamados
+# reais (ex.: Fase 2 - Acionamento SP) — diferente do convite genérico, já
+# fala da instalação do Track One, do cadastro de competências (obrigatório
+# pro chamado ser direcionado) e do fluxo em paralelo com o GO.ON
+TEMPLATE_ACIONAMENTO = """Olá, {nome}. Aqui é o Rafael, da Faiston.
+
+Você foi selecionado para participar de um teste de um novo sistema da Faiston, o *Faiston One*.
+
+O que você precisa fazer:
+1. Instalar o aplicativo *Track One* (o link será enviado a seguir)
+2. Preencher suas competências e especialidades no cadastro do aplicativo — esse preenchimento é obrigatório: sem essa informação, o chamado não será direcionado a você
+3. Manter as notificações push ativadas no celular
+4. Manter a localização do celular ativada — é por meio dela que o sistema identifica os chamados disponíveis na sua região
+5. Continuar seguindo o fluxo normalmente pelo GO.ON, da mesma forma que já faz hoje
+6. Em paralelo, você também passará a utilizar o aplicativo novo — é por meio dele que acompanharemos todo o andamento do atendimento
+7. Nos próximos dias, alguns chamados reais da Grande São Paulo passarão por esse teste. Quando um chamado for oferecido a você, basta aceitá-lo pelo aplicativo, como de costume — atenção: ao aceitar, você estará confirmando que tem condições de atender o chamado conforme a localidade informada
+
+Importante: trata-se apenas de um teste — a forma de atendimento continua a mesma: deslocamento, atendimento e preenchimento da RAT seguem normalmente. A diferença é que o aplicativo novo passará a rodar em paralelo com o GO.ON, para que tenhamos visibilidade completa do fluxo.
+
+Qualquer dúvida ou dificuldade no aplicativo, pode me chamar diretamente por aqui. Peço que confirme quando concluir a instalação."""
+
 # cobrança de quem parou no meio do caminho — muda conforme onde ele travou, que
 # é a diferença entre "instala aí" e "usa no próximo atendimento"
 TEMPLATES_COBRANCA = {
@@ -132,6 +153,8 @@ def _mensagem_para(tecnico: models.Tecnico, tipo: str = "convite", base_url: str
         return template.format(nome=primeiro_nome, link=link)
     if tipo == "feedback":
         return TEMPLATE_FEEDBACK.format(nome=primeiro_nome, link=link)
+    if tipo == "acionamento":
+        return TEMPLATE_ACIONAMENTO.format(nome=primeiro_nome)
     template = TEMPLATE_LIDER if tecnico.papel == "lider" else TEMPLATE_TECNICO
     return template.format(nome=primeiro_nome)
 
@@ -754,10 +777,11 @@ def delete_tecnico(tecnico_id: int, db: Session = Depends(get_db)):
 @router.get("/tecnicos/{tecnico_id}/mensagem", response_model=schemas.TecnicoMensagemOut)
 def mensagem_tecnico(tecnico_id: int, request: Request, tipo: str = "convite", db: Session = Depends(get_db)):
     """Monta a mensagem pronta (texto + link do WhatsApp) pra esse técnico:
-    `tipo=convite` (padrão) chama pra instalação, `tipo=feedback` pede o retorno
-    depois do atendimento e leva o link do formulário. O link do WhatsApp só
-    pré-preenche texto; o APK/manual vai por fora, na própria conversa, já que o
-    wa.me não anexa arquivo."""
+    `tipo=convite` (padrão) chama pra instalação, `tipo=acionamento` avisa que a
+    fase passou a rodar com chamados reais (ex.: Fase 2 - Acionamento SP) e
+    `tipo=feedback` pede o retorno depois do atendimento e leva o link do
+    formulário. O link do WhatsApp só pré-preenche texto; o APK/manual vai por
+    fora, na própria conversa, já que o wa.me não anexa arquivo."""
     tecnico = _get_tecnico_or_404(db, tecnico_id)
     mensagem = _mensagem_para(tecnico, tipo=tipo, base_url=str(request.base_url))
     wa_link = f"https://wa.me/{tecnico.telefone}?text={quote(mensagem)}"

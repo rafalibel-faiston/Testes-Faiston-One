@@ -767,9 +767,11 @@ def criar_tecnico(
 def gerar_mensagem_tecnico(tecnico_id: int, tipo: str = "convite") -> dict:
     """Monta a mensagem do Track One pronta pra esse técnico, com o link do
     WhatsApp já preenchido. tipo="convite" (padrão) chama pra instalação
-    conforme o papel dele; tipo="feedback" pede o retorno depois do atendimento
-    e leva o link do formulário. O link do WhatsApp só leva o texto — o APK e o
-    manual são enviados à parte na conversa."""
+    conforme o papel dele; tipo="acionamento" avisa que a fase passou a rodar
+    com chamados reais (ex.: Fase 2 - Acionamento SP); tipo="feedback" pede o
+    retorno depois do atendimento e leva o link do formulário. O link do
+    WhatsApp só leva o texto — o APK e o manual são enviados à parte na
+    conversa."""
     from urllib.parse import quote
 
     db = SessionLocal()
