@@ -421,6 +421,9 @@ def migrate_schema(engine):
         # em qual leva do piloto o técnico entrou (NULL = ainda na base geral)
         if "fase_id" not in tec_cols:
             stmts.append("ALTER TABLE tecnicos ADD COLUMN fase_id INTEGER")
+        # cruzado com a base de Agentes (PARC + REPASSE); NULL = ainda não cruzado
+        if "repasse" not in tec_cols:
+            stmts.append("ALTER TABLE tecnicos ADD COLUMN repasse BOOLEAN")
 
     # relato do técnico: vínculo com o backlog, build testada e chamado de origem
     if "tecnico_observacoes" in existing_tables:

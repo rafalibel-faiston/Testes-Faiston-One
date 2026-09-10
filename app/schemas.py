@@ -443,6 +443,7 @@ class TecnicoOut(BaseModel):
     papel: str = "tecnico"
     regional: Optional[str] = None
     lider_nome: Optional[str] = None
+    repasse: Optional[bool] = None  # cruzado com a base de Agentes; None = ainda não cruzado
     status: str = "a_contatar"
     autor: Optional[str] = None
     fase_id: Optional[int] = None          # leva do piloto em que ele entrou
@@ -464,6 +465,7 @@ class TecnicoCreate(BaseModel):
     papel: Optional[str] = "tecnico"
     regional: Optional[str] = None
     lider_nome: Optional[str] = None
+    repasse: Optional[bool] = None
     autor: Optional[str] = None
 
 
@@ -473,6 +475,7 @@ class TecnicoUpdate(BaseModel):
     papel: Optional[str] = None
     regional: Optional[str] = None
     lider_nome: Optional[str] = None
+    repasse: Optional[bool] = None
     status: Optional[str] = None
 
 

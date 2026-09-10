@@ -454,6 +454,9 @@ class Tecnico(Base):
     papel = Column(String, nullable=False, default="tecnico", server_default="tecnico")  # tecnico / lider
     regional = Column(String, nullable=True)      # cidade/regional de atuação
     lider_nome = Column(String, nullable=True)    # a quem o técnico responde (quando papel=tecnico)
+    # True = prestador de repasse (PARC + REPASSE na base de Agentes), False = PARC
+    # direto ou CLT, NULL = não cruzado com a base de Agentes ainda
+    repasse = Column(Boolean, nullable=True)
     status = Column(String, nullable=False, default="a_contatar", server_default="a_contatar")
     autor = Column(String, nullable=True)         # quem cadastrou/está conduzindo o teste
     # em qual leva do piloto ele entrou; NULL = ainda na base geral, sem ser chamado

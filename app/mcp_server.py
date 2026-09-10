@@ -586,6 +586,7 @@ def _tecnico_to_dict(tecnico: models.Tecnico) -> dict:
         "papel": tecnico.papel,
         "regional": tecnico.regional,
         "lider_nome": tecnico.lider_nome,
+        "repasse": tecnico.repasse,
         "status": tecnico.status,
         "fase_id": tecnico.fase_id,
         "fase_nome": tecnico.fase.nome if tecnico.fase else None,
@@ -787,6 +788,24 @@ def gerar_mensagem_tecnico(tecnico_id: int, tipo: str = "convite") -> dict:
             "wa_link": f"https://wa.me/{tecnico.telefone}?text={quote(mensagem)}",
             "link_formulario": f"{PUBLIC_BASE_URL}/formulario/{tecnico.token}" if tecnico.token else None,
         }
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def atualizar_repasse_tecnico(tecnico_id: int, repasse: Optional[bool] = None) -> dict:
+    """Marca se o técnico é prestador de repasse (True), PARC direto/CLT (False)
+    ou volta a "não informado" (None) — é o que cruza com a base geral de
+    Agentes (coluna "Informações Adicionais" com "REPASSE")."""
+    db = SessionLocal()
+    try:
+        tecnico = db.query(models.Tecnico).filter(models.Tecnico.id == tecnico_id).first()
+        if not tecnico:
+            return {"erro": f"Técnico {tecnico_id} não encontrado"}
+        tecnico.repasse = repasse
+        db.commit()
+        db.refresh(tecnico)
+        return _tecnico_to_dict(tecnico)
     finally:
         db.close()
 

@@ -4739,6 +4739,7 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
             <span>${t.papel === "lider" ? "Líder de equipe" : "Técnico"}</span>
             ${t.regional ? `<span>${esc(t.regional)}</span>` : ""}
             ${t.lider_nome ? `<span>responde a ${esc(t.lider_nome)}</span>` : ""}
+            ${t.repasse === true ? `<span>Repasse</span>` : ""}
             <span class="tecnico-tel">${esc(formatTelefone(t.telefone))}</span>
           </div>
         </div>
@@ -4975,6 +4976,7 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
       tecnicoForm.papel.value = t.papel;
       tecnicoForm.regional.value = t.regional || "";
       tecnicoForm.lider_nome.value = t.lider_nome || "";
+      tecnicoForm.repasse.value = t.repasse === true ? "true" : t.repasse === false ? "false" : "";
     }
     tecnicoModal.hidden = false;
   }
@@ -5119,11 +5121,13 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
     const nome = (fd.get("nome") || "").trim();
     const telefone = (fd.get("telefone") || "").trim();
     if (!nome || !telefone) return;
+    const repasseRaw = fd.get("repasse");
     const payload = {
       nome, telefone,
       papel: fd.get("papel"),
       regional: fd.get("regional") || null,
       lider_nome: fd.get("lider_nome") || null,
+      repasse: repasseRaw === "" ? null : repasseRaw === "true",
     };
     try {
       if (editingTecnicoId) {

@@ -722,6 +722,7 @@ def create_tecnico(payload: schemas.TecnicoCreate, db: Session = Depends(get_db)
         papel=papel,
         regional=(payload.regional or "").strip() or None,
         lider_nome=(payload.lider_nome or "").strip() or None,
+        repasse=payload.repasse,
         autor=(payload.autor or "").strip() or None,
         token=models.novo_token_tecnico(),
         status="a_contatar",
@@ -750,6 +751,10 @@ def update_tecnico(tecnico_id: int, payload: schemas.TecnicoUpdate, db: Session 
         tecnico.regional = payload.regional.strip() or None
     if payload.lider_nome is not None:
         tecnico.lider_nome = payload.lider_nome.strip() or None
+    # bool tem valor legítimo em False, então "campo enviado" (mesmo como null,
+    # pra voltar a "não informado") é o que importa, não "diferente de None"
+    if "repasse" in payload.model_fields_set:
+        tecnico.repasse = payload.repasse
     if payload.status is not None:
         if payload.status not in STATUSES:
             raise HTTPException(status_code=400, detail="Status inválido.")
