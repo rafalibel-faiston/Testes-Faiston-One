@@ -422,14 +422,29 @@
         problemas encontrados.</p>
       </div>
       <div class="tecnicos-head-actions">
-        <a class="btn-ghost" href="/api/tecnicos/modelo" download>Baixar modelo (.xlsx)</a>
-        <label class="btn-ghost tecnico-import-btn">
-          Importar planilha
-          <input type="file" id="tecnico-import-input" accept=".xlsx,.xlsm" hidden>
-        </label>
-        <a class="btn-ghost" id="btn-exportar-piloto" href="/api/tecnicos/exportar" download>Exportar (.xlsx)</a>
-        <button type="button" class="btn-ghost" id="btn-nova-fase">Nova fase</button>
-        <button type="button" class="btn-ghost tecnico-limpar-btn" id="btn-limpar-base">Limpar base</button>
+        <div class="tool-group" role="group" aria-label="Planilhas">
+          <a class="tool-btn" href="/api/tecnicos/modelo" download title="Baixar a planilha modelo de importação">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 12 5 5 5-5"/><path d="M5 21h14"/></svg>
+            Modelo
+          </a>
+          <label class="tool-btn" title="Importar técnicos de uma planilha">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 18V6"/><path d="m7 11 5-5 5 5"/><path d="M5 21h14"/></svg>
+            Importar
+            <input type="file" id="tecnico-import-input" accept=".xlsx,.xlsm" hidden>
+          </label>
+          <a class="tool-btn" id="btn-exportar-piloto" href="/api/tecnicos/exportar" download title="Exportar a fase aberta em .xlsx">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><path d="M3.5 9.5h17M9.5 9.5v11"/></svg>
+            Exportar
+          </a>
+        </div>
+        <button type="button" class="tool-btn" id="btn-nova-fase" title="Criar uma nova fase do piloto">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 7.5l9 4.5 9-4.5L12 3Z"/><path d="m3 16.5 9 4.5 9-4.5"/><path d="m3 12 9 4.5L21 12"/></svg>
+          Nova fase
+        </button>
+        <button type="button" class="tool-btn tool-danger" id="btn-limpar-base" title="Apagar todos os técnicos da base">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9.5 7V5.5A1.5 1.5 0 0 1 11 4h2a1.5 1.5 0 0 1 1.5 1.5V7"/><path d="M6.5 7l.8 12a2 2 0 0 0 2 1.9h5.4a2 2 0 0 0 2-1.9L17.5 7"/></svg>
+          Limpar base
+        </button>
         <button type="button" class="add-btn" id="btn-add-tecnico">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Novo técnico

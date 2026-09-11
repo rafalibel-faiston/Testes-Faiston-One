@@ -4155,7 +4155,13 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
       return `
       <button type="button" class="fase-aba${f.id === FASE_ATUAL ? " active" : ""} st-${f.status}" data-fase="${f.id}">
         <span class="fase-nome">${esc(f.nome)}</span>
-        <span class="fase-sub">${f.total_tecnicos} técnico(s) · ${FASE_STATUS_LABEL[f.status] || f.status}${f.versao_app ? ` · ${esc(f.versao_app)}` : ""}</span>
+        <span class="fase-meta">
+          <span class="fase-status"><i></i>${FASE_STATUS_LABEL[f.status] || f.status}</span>
+          <span class="fase-sep"></span>
+          <span>${f.total_tecnicos} técnico${f.total_tecnicos === 1 ? "" : "s"}</span>
+          ${f.versao_app ? `<span class="fase-sep"></span><span>${esc(f.versao_app)}</span>` : ""}
+          ${f.total_tecnicos ? `<span class="fase-pct">${pct}%</span>` : ""}
+        </span>
         <span class="fase-progress" title="${f.concluidos} de ${f.total_tecnicos} concluíram o teste (${pct}%)">
           <i style="width:${f.total_tecnicos ? Math.max(pct, f.concluidos ? 3 : 0) : 0}%"></i>
         </span>
@@ -4166,8 +4172,11 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
     }).join("");
     nav.innerHTML = abas + `
       <button type="button" class="fase-aba fase-base${FASE_ATUAL === null ? " active" : ""}" data-fase="">
-        <span class="fase-nome">Base completa</span>
-        <span class="fase-sub">quem ainda não entrou em fase</span>
+        <span class="fase-nome">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>
+          Base completa
+        </span>
+        <span class="fase-meta"><span>quem ainda não entrou em fase</span></span>
       </button>`;
     // exportar segue a fase aberta: quem está numa fase quer a planilha dela
     const exportar = $("#btn-exportar-piloto");

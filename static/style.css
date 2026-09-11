@@ -1769,37 +1769,71 @@ body.inline-connecting * { cursor:crosshair !important; }
    O app entra região por região, então a tela trabalha uma fase por vez: é o que
    mantém a aba rápida com milhares de cadastros na base (só os da fase viram
    card) e o que faz o critério de liberação ser por leva, não global. */
-.fases-nav { display:flex; gap:8px; flex-wrap:wrap; margin:16px 0 14px; }
+.fases-nav { display:flex; align-items:stretch; gap:10px; flex-wrap:wrap; margin:18px 0 16px; }
 .fase-aba {
-  position:relative; display:flex; flex-direction:column; gap:2px; align-items:flex-start; cursor:pointer;
-  min-width:190px; padding:9px 30px 9px 15px; border-radius:var(--radius); border:1px solid var(--line);
+  position:relative; display:flex; flex-direction:column; justify-content:center; gap:4px;
+  align-items:flex-start; text-align:left; cursor:pointer; overflow:hidden;
+  min-width:212px; padding:12px 34px 14px 16px; border-radius:var(--radius); border:1px solid var(--line);
   background:var(--surface); color:var(--text-2); font-family:'Roboto',sans-serif;
-  transition:transform .18s var(--ease), box-shadow .18s var(--ease), border-color .18s var(--ease);
+  transition:transform .18s var(--ease), box-shadow .18s var(--ease), border-color .18s var(--ease), background .18s var(--ease);
 }
-.fase-aba:hover { transform:translateY(-2px); box-shadow:var(--shadow-1); border-color:var(--line-2); }
-.fase-nome { font-family:'Roboto Slab',serif; font-size:13.5px; font-weight:700; color:var(--text); }
-.fase-sub { font-size:10.5px; color:var(--text-3); }
+.fase-aba:hover { transform:translateY(-2px); box-shadow:var(--shadow-2); border-color:var(--line-2); }
+.fase-nome {
+  display:flex; align-items:center; gap:7px; line-height:1.25;
+  font-family:'Roboto Slab',serif; font-size:13.5px; font-weight:700; letter-spacing:-.1px; color:var(--text);
+}
+.fase-nome svg { flex-shrink:0; opacity:.65; }
+/* uma linha só de contexto: status, tamanho da leva, versão e o quanto já fechou */
+.fase-meta {
+  display:flex; align-items:center; gap:6px; align-self:stretch;
+  font-size:11px; line-height:1.4; color:var(--text-3); white-space:nowrap;
+}
+.fase-status { display:inline-flex; align-items:center; gap:6px; }
+.fase-status i { width:6px; height:6px; border-radius:50%; background:var(--na); flex-shrink:0; }
+.st-em_andamento .fase-status i { background:var(--f-blue); box-shadow:0 0 0 3px rgba(0,84,236,.14); }
+.st-concluida .fase-status i, .st-liberada .fase-status i { background:var(--ok); }
+.fase-sep { width:3px; height:3px; border-radius:50%; background:currentColor; opacity:.4; flex-shrink:0; }
+.fase-pct { margin-left:auto; font-family:'Roboto Mono',monospace; font-weight:600; color:var(--text-2); }
 /* progresso da fase: fração já concluída no funil, pra bater o olho na aba
-   e ver quão perto de fechar cada região está — sem abrir o painel do piloto */
+   e ver quão perto de fechar cada região está — sem abrir o painel do piloto.
+   Fica rente à borda de baixo, assim toda aba tem a mesma altura com ou sem ele */
 .fase-progress {
-  display:block; width:100%; height:4px; margin-top:6px; border-radius:999px;
-  background:rgba(24,26,50,.08); overflow:hidden;
+  position:absolute; left:0; right:0; bottom:0; height:3px;
+  background:rgba(24,26,50,.07); overflow:hidden;
 }
-.fase-progress i { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,#0d9d6c,#34d399); transition:width .2s var(--ease); }
-.fase-aba.active .fase-progress { background:rgba(255,255,255,.28); }
+.fase-progress i { display:block; height:100%; background:linear-gradient(90deg,#0d9d6c,#34d399); transition:width .25s var(--ease); }
+.fase-aba.active {
+  border-color:transparent; background:var(--grad-primary); color:rgba(255,255,255,.82);
+  box-shadow:0 14px 28px -16px rgba(0,84,236,.8);
+}
+.fase-aba.active:hover { box-shadow:0 18px 32px -16px rgba(0,84,236,.85); }
+.fase-aba.active .fase-nome, .fase-aba.active .fase-pct { color:#fff; }
+.fase-aba.active .fase-meta { color:rgba(255,255,255,.8); }
+.fase-aba.active .fase-status i { background:#fff; box-shadow:0 0 0 3px rgba(255,255,255,.22); }
+.fase-aba.active .fase-progress { background:rgba(255,255,255,.25); }
 .fase-aba.active .fase-progress i { background:#fff; }
-.fase-aba.active { border-color:transparent; background:var(--grad-primary); box-shadow:0 10px 24px -14px rgba(0,84,236,.7); }
-.fase-aba.active .fase-nome, .fase-aba.active .fase-sub { color:#fff; }
+/* o lápis só aparece na aba aberta ou sob o mouse: sem ele a fileira fica limpa */
 .fase-editar {
-  position:absolute; top:7px; right:7px; display:flex; align-items:center; justify-content:center;
-  width:20px; height:20px; border-radius:50%; color:inherit; opacity:.55;
+  position:absolute; top:8px; right:8px; display:flex; align-items:center; justify-content:center;
+  width:22px; height:22px; border-radius:50%; color:inherit; opacity:0;
+  transition:opacity .15s var(--ease), background .15s var(--ease);
 }
-.fase-editar:hover { opacity:1; background:rgba(0,0,0,.08); }
+.fase-aba:hover .fase-editar, .fase-aba.active .fase-editar { opacity:.6; }
+.fase-editar:hover { opacity:1; background:rgba(24,26,50,.08); }
 .fase-aba.active .fase-editar:hover { background:rgba(255,255,255,.22); }
 /* fase liberada é destino cumprido: verde, mesmo quando não é a aba aberta */
 .fase-aba.st-liberada { border-color:var(--ok-ln); background:var(--ok-bg); }
-.fase-aba.st-liberada.active { background:linear-gradient(120deg,#0d9d6c,#34d399); border-color:transparent; }
-.fase-base { border-style:dashed; }
+.fase-aba.st-liberada.active {
+  background:linear-gradient(120deg,#0d9d6c,#34d399); border-color:transparent;
+  box-shadow:0 14px 28px -16px rgba(13,157,108,.8);
+}
+/* a base não é uma fase: fica neutra e separada, sem disputar com as levas */
+.fase-base { border-style:dashed; background:transparent; }
+.fase-base:hover { background:var(--surface); }
+.fase-base.active {
+  background:linear-gradient(120deg,#2f3350,#565b78); border-style:solid;
+  box-shadow:0 14px 28px -16px rgba(30,34,80,.7);
+}
 
 /* ---------- base completa (escolher quem entra na fase) ---------- */
 .base-sel {
@@ -1949,10 +1983,6 @@ body.inline-connecting * { cursor:crosshair !important; }
 }
 
 /* ---------- zerar a base ---------- */
-/* botão discreto de propósito: fica ao lado dos outros sem convidar o clique,
-   e só ganha cara de perigo quando a pessoa passa o mouse */
-.tecnico-limpar-btn { color:var(--text-3); }
-.tecnico-limpar-btn:hover { color:var(--bad); border-color:var(--bad-ln); background:var(--bad-bg); }
 .limpar-card { max-width:520px; }
 .limpar-aviso {
   padding:14px 16px; border-radius:var(--radius-sm); margin-bottom:14px;
@@ -1985,9 +2015,28 @@ body.inline-connecting * { cursor:crosshair !important; }
 }
 
 /* ---------- Técnicos — QA do Track One ---------- */
-.tecnicos-head-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; flex-shrink:0; }
-.tecnicos-head-actions .btn-ghost { display:inline-flex; align-items:center; text-decoration:none; }
-.tecnico-import-btn { cursor:pointer; }
+.tecnicos-head-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; flex-shrink:0; }
+/* eram seis botões de mesmo peso disputando a atenção; agora as ações de
+   planilha viram um bloco só e sobra um destaque visual: "Novo técnico" */
+.tool-btn {
+  display:inline-flex; align-items:center; gap:7px; cursor:pointer; text-decoration:none; white-space:nowrap;
+  padding:9px 13px; border:1px solid var(--line-2); border-radius:10px;
+  background:var(--surface); color:var(--text-2);
+  font-family:'Roboto',sans-serif; font-size:12.5px; font-weight:500;
+  transition:background .15s var(--ease), color .15s var(--ease), border-color .15s var(--ease);
+}
+.tool-btn svg { width:15px; height:15px; flex-shrink:0; opacity:.7; }
+.tool-btn:hover { background:var(--surface-2); color:var(--text); }
+.tool-btn:hover svg { opacity:1; }
+.tool-group { display:inline-flex; align-items:center; }
+.tool-group .tool-btn { border-radius:0; margin-left:-1px; }
+.tool-group .tool-btn:first-child { border-radius:10px 0 0 10px; margin-left:0; }
+.tool-group .tool-btn:last-child { border-radius:0 10px 10px 0; }
+.tool-group .tool-btn:hover { position:relative; z-index:1; border-color:var(--line-2); }
+.tool-danger { color:var(--text-3); }
+.tool-danger:hover { color:var(--bad); border-color:var(--bad-ln); background:var(--bad-bg); }
+.tool-danger:hover svg { opacity:1; }
+.tecnicos-head-actions .add-btn { padding:9px 16px; border-radius:10px; font-size:12.5px; }
 .tecnicos-mais {
   width:100%; padding:11px; border-radius:var(--radius); cursor:pointer;
   border:1px dashed var(--line-2); background:var(--surface); color:var(--f-blue);
