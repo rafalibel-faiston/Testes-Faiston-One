@@ -48,16 +48,24 @@ TIPOS_OBS = {"positivo", "melhoria", "problema"}
 
 # textos enviados exatamente como definidos com o Rafa — {nome} é a única
 # substituição feita na hora de gerar o link do WhatsApp.
-TEMPLATE_TECNICO = """Fala, {nome}! Tudo certo?
-Estamos lançando um app novo pra técnicos (Track One) e você foi selecionado pra testar antes de liberar geral.
-O que ele faz:
+TEMPLATE_TECNICO = """Olá, {nome}. Aqui é o Rafael, da Faiston.
 
-* Acompanha o fluxo inteiro do atendimento, desde o chamado atribuído a você até o fechamento da RAT, tudo pelo app
-* Mostra rastreio e previsão de entrega quando o atendimento precisa de peça
-* Você confirma o recebimento do equipamento direto por lá
+Você foi selecionado para participar de um teste de um novo sistema da Faiston, o *Faiston One*.
 
-Vou te chamar pra fazer a instalação e já passo o manual de uso na hora. Depois é só usar normal no seu próximo atendimento, do começo ao fim, e qualquer coisa estranha (tela que não atualiza, notificação que não chega, informação que falta) me avisa direto — print ajuda muito.
-Bora marcar a instalação?"""
+O que você precisa fazer:
+1. Instalar o aplicativo *Track One* (o link será enviado a seguir)
+2. Preencher suas competências e especialidades no cadastro do aplicativo — esse preenchimento é obrigatório: sem essa informação, o chamado não será direcionado a você
+3. Manter as notificações push ativadas no celular
+4. Manter a localização do celular ativada — é por meio dela que o sistema identifica os chamados disponíveis na sua região
+5. Continuar seguindo o fluxo normalmente pelo GO.ON, da mesma forma que já faz hoje
+6. Em paralelo, você também passará a utilizar o aplicativo novo — é por meio dele que acompanharemos todo o andamento do atendimento
+7. Nos próximos dias, alguns chamados reais da Grande São Paulo passarão por esse teste. Quando um chamado for oferecido a você, basta aceitá-lo pelo aplicativo, como de costume — atenção: ao aceitar, você estará confirmando que tem condições de atender o chamado conforme a localidade informada
+
+Importante: trata-se apenas de um teste — a forma de atendimento continua a mesma: deslocamento, atendimento e preenchimento da RAT seguem normalmente. A diferença é que o aplicativo novo passará a rodar em paralelo com o GO.ON, para que tenhamos visibilidade completa do fluxo.
+
+Qualquer dúvida ou dificuldade no aplicativo, pode me chamar diretamente por aqui. Peço que confirme quando concluir a instalação.
+
+Agradeço a participação."""
 
 TEMPLATE_LIDER = """Fala, {nome}! Tudo certo?
 Estamos lançando um app novo pra técnicos (Track One) e já vou entrar em contato direto com o seu time pra fazer a instalação. Só queria te avisar antes.
