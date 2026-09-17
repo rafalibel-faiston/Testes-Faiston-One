@@ -1143,8 +1143,9 @@
       <div class="diagram-body">
         ${d.descricao ? `<div class="diagram-desc">${esc(d.descricao)}</div>` : ""}
         <div class="inline-toolbar" data-toolbar="${d.id}" hidden>
-          <span class="inline-tb-hint">Renomear: clique na caixa · Ligar: <b>arraste o +</b> · seta: clique traceja, <b>Aa</b> rotula (Sim/Não), <b>⇄</b>/<b>×</b> inverte/exclui · <b>Delete</b> apaga o que está sob o mouse</span>
+          <span class="inline-tb-hint">Renomear: clique na caixa · Ligar: <b>arraste o +</b> · seta: clique traceja, <b>Aa</b> rotula (Sim/Não), <b>⇄</b>/<b>×</b> inverte/exclui · <b>Delete</b> apaga o que está sob o mouse · <b>Shift+clique</b> seleciona caixas pra juntar lado a lado</span>
           <span class="inline-tb-spacer"></span>
+          <button type="button" class="inline-group-btn" title="Shift+clique em 2 ou mais caixas e junte-as lado a lado" disabled>▭▭ Lado a lado</button>
           <button type="button" class="inline-undo" title="Desfazer (Ctrl+Z)" disabled>↶ Desfazer</button>
           <div class="inline-dir" role="group" aria-label="Sentido do fluxo">
             <button type="button" class="inline-dir-btn" data-dir="TD" title="Vertical">↓</button>
@@ -1249,8 +1250,9 @@
   let previewTimer = null;
   let syncingCode = false;   // evita loop builder <-> código
   let manualCode = false;    // usuário editou o código à mão (modo avançado)
-  // estado do builder: { dir, nodes:[{id,label,shape}], edges:[{id,from,to,label,dotted}] }
-  let builder = { dir: "TD", nodes: [], edges: [], nSeq: 0, eSeq: 0 };
+  // estado do builder: { dir, nodes:[{id,label,shape}], edges:[{id,from,to,label,dotted}],
+  //                       groups:[{id,label,dir,nodes:[idDaEtapa]}] }
+  let builder = { dir: "TD", nodes: [], edges: [], groups: [], nSeq: 0, eSeq: 0, gSeq: 0 };
 
   function newNodeId(state) {
     const s = state || builder;
@@ -1262,6 +1264,36 @@
   function newEdgeId(state) {
     const s = state || builder;
     return "e" + (++s.eSeq);
+  }
+
+  // ids de grupo vivem em outra sequência ("g1") pra nunca colidirem com etapas ("n1")
+  function newGroupId(state) {
+    const s = state || builder;
+    s.gSeq = s.gSeq || 0;
+    let id;
+    do { id = "g" + (++s.gSeq); } while ((s.groups || []).some((g) => g.id === id));
+    return id;
+  }
+
+  // sentido "cruzado": num desenho vertical o grupo deita as caixas lado a lado
+  const crossDir = (dir) => (dir === "LR" || dir === "RL" ? "TB" : "LR");
+
+  function groupOfNode(s, nodeId) {
+    return (s.groups || []).find((g) => (g.nodes || []).includes(nodeId)) || null;
+  }
+
+  // tira a etapa de qualquer grupo (ao excluir a caixa ou ao regrupar)
+  function detachFromGroups(s, nodeId) {
+    (s.groups || []).forEach((g) => { g.nodes = (g.nodes || []).filter((id) => id !== nodeId); });
+  }
+
+  // grupo com menos de 2 etapas vira só uma moldura sobrando — descarta
+  function pruneGroups(s) {
+    s.groups = (s.groups || []).map((g) => {
+      g.nodes = (g.nodes || []).filter((id) => s.nodes.some((n) => n.id === id));
+      return g;
+    }).filter((g) => g.nodes.length >= 2);
+    return s;
   }
 
   // --- gerar código Mermaid a partir do estado ---
@@ -1281,20 +1313,46 @@
     notifCli: "classDef notifCli fill:#e7f8ef,stroke:#0d9d6c,stroke-width:1.5px,color:#075e40;",
   };
 
+  // uma etapa em código Mermaid (a forma decide os delimitadores)
+  function nodeMermaidLine(n) {
+    const label = cleanLabel(n.label) || n.id;
+    if (n.shape === "decision") return `${n.id}{"${label}"}`;
+    if (n.shape === "botao") return `${n.id}("${label}")`;
+    if (n.shape === "notif") {
+      const phrase = NOTIF_PHRASE[n.to];
+      const msg = cleanLabel(n.label);
+      const inner = phrase ? (msg ? `🔔 ${phrase}: ${msg}` : `🔔 ${phrase}`) : `🔔 ${msg || "Notificação"}`;
+      return `${n.id}(["${inner}"])`;
+    }
+    return `${n.id}["${label}"]`;
+  }
+
   function generateMermaid(s) {
     const lines = ["flowchart " + (s.dir || "TD")];
+    // grupos = subgraph com "direction" próprio: é o que coloca caixas lado a lado
+    const groups = (s.groups || []).filter(
+      (g) => (g.nodes || []).filter((id) => s.nodes.some((n) => n.id === id)).length >= 2
+    );
+    const groupByNode = new Map();
+    groups.forEach((g) => g.nodes.forEach((id) => { if (!groupByNode.has(id)) groupByNode.set(id, g); }));
+    const drawn = new Set();
     s.nodes.forEach((n) => {
-      const label = cleanLabel(n.label) || n.id;
-      if (n.shape === "decision") lines.push(`    ${n.id}{"${label}"}`);
-      else if (n.shape === "botao") lines.push(`    ${n.id}("${label}")`);
-      else if (n.shape === "notif") {
-        const phrase = NOTIF_PHRASE[n.to];
-        const msg = cleanLabel(n.label);
-        let inner;
-        if (phrase) inner = msg ? `🔔 ${phrase}: ${msg}` : `🔔 ${phrase}`;
-        else inner = `🔔 ${msg || "Notificação"}`;
-        lines.push(`    ${n.id}(["${inner}"])`);
-      } else lines.push(`    ${n.id}["${label}"]`);
+      const g = groupByNode.get(n.id);
+      if (!g) { lines.push("    " + nodeMermaidLine(n)); return; }
+      if (drawn.has(g.id)) return;          // o grupo inteiro sai na posição do 1º membro
+      drawn.add(g.id);
+      const members = g.nodes.filter((id) => s.nodes.some((x) => x.id === id));
+      lines.push(`    subgraph ${g.id}["${cleanLabel(g.label) || " "}"]`);
+      lines.push(`    direction ${g.dir || "LR"}`);
+      members.forEach((id) => lines.push("      " + nodeMermaidLine(s.nodes.find((x) => x.id === id))));
+      // corrente invisível entre os membros: sem ela o Mermaid ignora o "direction"
+      // de um subgraph cujas caixas só se ligam por fora, e elas voltam a empilhar.
+      for (let i = 0; i + 1 < members.length; i++) {
+        const a = members[i], b = members[i + 1];
+        const linked = s.edges.some((e) => (e.from === a && e.to === b) || (e.from === b && e.to === a));
+        if (!linked) lines.push(`      ${a} ~~~ ${b}`);
+      }
+      lines.push("    end");
     });
     s.edges.forEach((e) => {
       if (!e.from || !e.to) return;
@@ -1318,15 +1376,23 @@
       lines.push("    classDef botao fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#075985;");
       lines.push("    class " + botaoIds.join(",") + " botao;");
     }
+    // moldura do grupo: tracejada e discreta, é só um apoio visual
+    if (groups.length) {
+      lines.push("    classDef grupo fill:none,stroke:#c9cee4,stroke-width:1px,stroke-dasharray:5 4,color:#565b78;");
+      lines.push("    class " + groups.map((g) => g.id).join(",") + " grupo;");
+    }
     return lines.join("\n");
   }
 
   // --- interpretar código Mermaid simples de volta pro estado (best-effort) ---
   function parseMermaid(code) {
-    const s = { dir: "TD", nodes: [], edges: [], nSeq: 0, eSeq: 0 };
+    const s = { dir: "TD", nodes: [], edges: [], groups: [], nSeq: 0, eSeq: 0, gSeq: 0 };
     const map = new Map();
+    let group = null;               // subgraph aberto no momento
     const ensure = (id) => {
       if (!map.has(id)) { const n = { id, label: id, shape: "step" }; map.set(id, n); s.nodes.push(n); }
+      // no Mermaid, toda etapa citada dentro de um subgraph pertence a ele
+      if (group && !group.nodes.includes(id)) group.nodes.push(id);
       return map.get(id);
     };
     // extrai definições de nó (inclusive inline numa aresta, ex.: A[x] --> B[y]),
@@ -1367,7 +1433,29 @@
         s.dir = m[1].toUpperCase() === "TB" ? "TD" : m[1].toUpperCase();
         return;
       }
+      // --- grupos (subgraph): precisam sair antes do extractNodes, senão o
+      // rótulo do grupo (g1["..."]) seria lido como uma etapa comum ---
+      if (/^end\b/i.test(line)) { group = null; return; }
+      if (/^subgraph\b/i.test(line)) {
+        let id = null, label = "";
+        if ((m = line.match(/^subgraph\s+([A-Za-z0-9_]+)\s*\[\s*"?([\s\S]*?)"?\s*\]\s*$/))) { id = m[1]; label = m[2]; }
+        else if ((m = line.match(/^subgraph\s+([A-Za-z0-9_]+)\s*$/))) { id = m[1]; }
+        else { label = line.replace(/^subgraph\s*/i, "").replace(/^\[|\]$/g, "").replace(/^"|"$/g, ""); }
+        if (!id || s.groups.some((g) => g.id === id)) id = "g" + (++s.gSeq);
+        group = { id, label: (label || "").trim(), dir: crossDir(s.dir), nodes: [] };
+        s.groups.push(group);
+        return;
+      }
+      if ((m = line.match(/^direction\s+(TD|TB|LR|RL|BT)/i))) {
+        if (group) group.dir = m[1].toUpperCase();
+        return;
+      }
       line = extractNodes(line);   // nós (inline ou soltos) já registrados; sobra "A --> B"
+      // ligação invisível (~~~): só alinha, não é seta — registra os nós e sai
+      if (/~~~/.test(line)) {
+        line.split(/~~~+/).forEach((part) => { const mm = /^\s*(\w+)\s*$/.exec(part); if (mm) ensure(mm[1]); });
+        return;
+      }
       // arestas (checar variações com rótulo antes da simples)
       if ((m = line.match(/^(\w+)\s*-\.\s*(.+?)\s*\.->\s*(\w+)/))) { ensure(m[1]); ensure(m[3]); s.edges.push({ id: "e" + (++s.eSeq), from: m[1], to: m[3], label: m[2], dotted: true }); return; }
       if ((m = line.match(/^(\w+)\s*-\.->\s*(\w+)/))) { ensure(m[1]); ensure(m[2]); s.edges.push({ id: "e" + (++s.eSeq), from: m[1], to: m[2], label: "", dotted: true }); return; }
@@ -1375,9 +1463,23 @@
       if ((m = line.match(/^(\w+)\s*--\s*(.+?)\s*-->\s*(\w+)/))) { ensure(m[1]); ensure(m[3]); s.edges.push({ id: "e" + (++s.eSeq), from: m[1], to: m[3], label: m[2], dotted: false }); return; }
       if ((m = line.match(/^(\w+)\s*-->\s*(\w+)/))) { ensure(m[1]); ensure(m[2]); s.edges.push({ id: "e" + (++s.eSeq), from: m[1], to: m[2], label: "", dotted: false }); return; }
     });
-    // nSeq alto o suficiente pra novos ids não colidirem
+    // nSeq/gSeq altos o suficiente pra novos ids não colidirem
     s.nodes.forEach((n) => { const mm = /^n(\d+)$/.exec(n.id); if (mm) s.nSeq = Math.max(s.nSeq, +mm[1]); });
+    s.groups.forEach((g) => { const mm = /^g(\d+)$/.exec(g.id); if (mm) s.gSeq = Math.max(s.gSeq, +mm[1]); });
+    pruneGroups(s);
     return s;
+  }
+
+  // --- opções de <select> dos grupos (etapas do mesmo grupo saem lado a lado) ---
+  function groupOptions(current) {
+    const gs = builder.groups || [];
+    const opts = [`<option value="" ${!current ? "selected" : ""}>— sem grupo —</option>`];
+    gs.forEach((g, i) => {
+      const txt = cleanLabel(g.label) || `Grupo ${i + 1}`;
+      opts.push(`<option value="${g.id}" ${current && current.id === g.id ? "selected" : ""}>${esc(txt)}</option>`);
+    });
+    opts.push(`<option value="__new">+ novo grupo</option>`);
+    return opts.join("");
   }
 
   // --- opções de <select> das etapas (usadas nas ligações) ---
@@ -1406,6 +1508,9 @@
           <option value="" ${!n.to ? "selected" : ""}>— destinatário —</option>
           ${NOTIF_RECIPIENTS.map((r) => `<option value="${r}" ${n.to === r ? "selected" : ""}>${r}</option>`).join("")}
         </select>
+        <select class="b-group" title="Grupo — etapas do mesmo grupo ficam lado a lado">
+          ${groupOptions(groupOfNode(builder, n.id))}
+        </select>
         <button type="button" class="builder-del" title="Remover etapa" aria-label="Remover">×</button>
       </div>`).join("");
     $$(".builder-row", el).forEach((row) => {
@@ -1420,9 +1525,24 @@
         scheduleSync();
       });
       row.querySelector(".b-recipient").addEventListener("change", (ev) => { node.to = ev.target.value; scheduleSync(); });
+      row.querySelector(".b-group").addEventListener("change", (ev) => {
+        const v = ev.target.value;
+        detachFromGroups(builder, id);
+        if (v === "__new") {
+          builder.groups = builder.groups || [];
+          builder.groups.push({ id: newGroupId(builder), label: "", dir: crossDir(builder.dir), nodes: [id] });
+        } else if (v) {
+          const g = (builder.groups || []).find((x) => x.id === v);
+          if (g) g.nodes.push(id);
+        }
+        // grupo vazio some da lista; com 1 etapa ainda espera a segunda
+        builder.groups = (builder.groups || []).filter((g) => g.nodes.length);
+        renderNodes(); scheduleSync();
+      });
       row.querySelector(".builder-del").addEventListener("click", () => {
         builder.nodes = builder.nodes.filter((n) => n.id !== id);
         builder.edges = builder.edges.filter((e) => e.from !== id && e.to !== id);
+        detachFromGroups(builder, id);
         renderNodes(); renderEdges(); scheduleSync();
       });
     });
@@ -1480,9 +1600,10 @@
 
   function starterState() {
     return {
-      dir: "TD", nSeq: 2, eSeq: 1,
+      dir: "TD", nSeq: 2, eSeq: 1, gSeq: 0,
       nodes: [{ id: "n1", label: "Início", shape: "step" }, { id: "n2", label: "Fim", shape: "step" }],
       edges: [{ id: "e1", from: "n1", to: "n2", label: "", dotted: false }],
+      groups: [],
     };
   }
 
@@ -1625,7 +1746,7 @@
     $$(".diagram.editing").forEach((other) => { if (other !== art) exitInlineEdit(other); });
     const state = parseMermaid(d.mermaid || "");
     if (!state.nodes.length) { toast("Esse desenho é complexo demais pra editar aqui — use o editor completo.", true); return; }
-    const st = { d, state, saveTimer: null, dirty: false, history: [cloneState(state)], hoverNodeId: null, hoverEdgeId: null };
+    const st = { d, state, saveTimer: null, dirty: false, history: [cloneState(state)], hoverNodeId: null, hoverEdgeId: null, sel: new Set() };
     inlineState.set(d.id, st);
     art.classList.add("editing");
     const tb = art.querySelector(".inline-toolbar");
@@ -1658,7 +1779,10 @@
     tb.dataset.wired = "1";
     tb.addEventListener("click", (e) => e.stopPropagation());
     $$(".inline-dir-btn", tb).forEach((b) => b.addEventListener("click", () => {
+      const before = st.state.dir;
       st.state.dir = b.dataset.dir;
+      // grupo que estava cruzado com o desenho continua cruzado (segue lado a lado)
+      (st.state.groups || []).forEach((g) => { if (g.dir === crossDir(before)) g.dir = crossDir(st.state.dir); });
       syncInlineDirButtons(art, st);
       commitInline(art, st);
     }));
@@ -1687,6 +1811,8 @@
       st.state.nodes.push({ id, label: "", shape: "notif", to: "Técnico" });
       commitInline(art, st);
     });
+    const groupBtn = tb.querySelector(".inline-group-btn");
+    if (groupBtn) groupBtn.addEventListener("click", () => toggleGroupSelection(art, st));
     const undoBtn = tb.querySelector(".inline-undo");
     if (undoBtn) undoBtn.addEventListener("click", () => undoInline(art, st));
     const doneBtn = tb.querySelector(".inline-done");
@@ -1716,6 +1842,103 @@
     scheduleInlineSave(art, st);
     updateUndoBtn(art, st);
     toast("Desfeito");
+  }
+
+  // ---- seleção de caixas (Shift+clique) e agrupamento lado a lado ----
+  function toggleSelect(art, st, nid) {
+    st.sel = st.sel || new Set();
+    if (st.sel.has(nid)) st.sel.delete(nid); else st.sel.add(nid);
+    paintSelection(art, st);
+  }
+
+  function clearSelection(art, st) {
+    if (!st.sel || !st.sel.size) return false;
+    st.sel.clear();
+    paintSelection(art, st);
+    return true;
+  }
+
+  function paintSelection(art, st) {
+    // etapa apagada (ou desfeita) não continua selecionada
+    if (st.sel) [...st.sel].forEach((id) => { if (!st.state.nodes.some((n) => n.id === id)) st.sel.delete(id); });
+    const svg = art.querySelector(".diagram-canvas svg");
+    if (svg) $$("g.node", svg).forEach((g) => {
+      const nid = inlineNodeId(g);
+      g.classList.toggle("inline-selected", !!(nid && st.sel && st.sel.has(nid)));
+    });
+    syncGroupBtn(art, st);
+  }
+
+  // grupo em que TODAS as caixas selecionadas já estão (aí o botão vira "desagrupar")
+  function selectedGroup(st) {
+    const sel = [...(st.sel || [])];
+    if (sel.length < 2) return null;
+    const g = groupOfNode(st.state, sel[0]);
+    if (!g) return null;
+    return sel.every((id) => g.nodes.includes(id)) ? g : null;
+  }
+
+  function syncGroupBtn(art, st) {
+    const b = art.querySelector(".inline-group-btn");
+    if (!b) return;
+    const n = (st.sel || new Set()).size;
+    const g = selectedGroup(st);
+    b.disabled = n < 2;
+    b.classList.toggle("is-ungroup", !!g);
+    b.textContent = g ? "⤫ Desagrupar" : n >= 2 ? `▭▭ Lado a lado (${n})` : "▭▭ Lado a lado";
+  }
+
+  function toggleGroupSelection(art, st) {
+    const sel = [...(st.sel || [])];
+    if (sel.length < 2) { toast("Selecione 2 ou mais caixas com Shift+clique.", true); return; }
+    const existing = selectedGroup(st);
+    if (existing) {
+      st.state.groups = (st.state.groups || []).filter((g) => g.id !== existing.id);
+      st.sel.clear();
+      commitInline(art, st);
+      toast("Grupo desfeito");
+      return;
+    }
+    sel.forEach((id) => detachFromGroups(st.state, id));
+    // a ordem dentro do grupo segue a ordem das etapas no desenho
+    const members = st.state.nodes.filter((n) => sel.includes(n.id)).map((n) => n.id);
+    st.state.groups = st.state.groups || [];
+    st.state.groups.push({ id: newGroupId(st.state), label: "", dir: crossDir(st.state.dir), nodes: members });
+    pruneGroups(st.state);
+    st.sel.clear();
+    commitInline(art, st);
+    toast("Caixas alinhadas lado a lado");
+  }
+
+  // renomear o grupo direto sobre a moldura
+  function startGroupRename(art, st, gid, rect, fxRect) {
+    const fx = art.querySelector(".diagram-canvas .inline-fx");
+    const g = (st.state.groups || []).find((x) => x.id === gid);
+    if (!fx || !g) return;
+    fx.querySelector(".inline-rename")?.remove();
+    const inp = document.createElement("input");
+    inp.type = "text";
+    inp.className = "inline-rename";
+    inp.value = g.label || "";
+    inp.placeholder = "nome do grupo (opcional)";
+    inp.style.left = (rect.left - fxRect.left + rect.width / 2 - 90) + "px";
+    inp.style.top = (rect.top - fxRect.top - 14) + "px";
+    inp.style.width = "180px";
+    fx.appendChild(inp);
+    setTimeout(() => { inp.focus(); inp.select(); }, 10);
+    let done = false;
+    const commit = (save) => {
+      if (done) return; done = true;
+      if (save) { g.label = inp.value; commitInline(art, st); }
+      else { inp.remove(); }
+    };
+    inp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); commit(true); }
+      else if (ev.key === "Escape") { ev.preventDefault(); commit(false); }
+      ev.stopPropagation();
+    });
+    inp.addEventListener("blur", () => commit(true));
+    inp.addEventListener("click", (ev) => ev.stopPropagation());
   }
 
   function syncInlineDirButtons(art, st) {
@@ -1813,6 +2036,8 @@
       g.addEventListener("click", (ev) => {
         if (ev.target.closest && ev.target.closest(".inline-node-fx")) return;
         ev.stopPropagation();
+        // Shift/Ctrl+clique marca a caixa pra juntar lado a lado; clique simples renomeia
+        if (ev.shiftKey || ev.ctrlKey || ev.metaKey) { toggleSelect(art, st, nid); return; }
         startRename(art, st, nid);
       });
       const r = g.getBoundingClientRect();
@@ -1847,9 +2072,13 @@
       }
       fx.appendChild(grp);
       // manter os botões visíveis enquanto o mouse está no nó ou no grupo;
-      // e registrar qual caixa está sob o cursor (pra tecla Delete)
-      const show = () => { grp.classList.add("hot"); st.hoverNodeId = nid; };
-      const hide = () => { grp.classList.remove("hot"); if (st.hoverNodeId === nid) st.hoverNodeId = null; };
+      // e registrar qual caixa está sob o cursor (pra tecla Delete).
+      // caixa agrupada acende junto os controles da moldura — a borda tracejada
+      // é fina demais pra ser o único alvo de hover.
+      const ownGroup = groupOfNode(st.state, nid);
+      const groupBox = () => (ownGroup ? fx.querySelector(`.inline-group-fx[data-gid="${ownGroup.id}"]`) : null);
+      const show = () => { grp.classList.add("hot"); st.hoverNodeId = nid; groupBox()?.classList.add("hot"); };
+      const hide = () => { grp.classList.remove("hot"); if (st.hoverNodeId === nid) st.hoverNodeId = null; groupBox()?.classList.remove("hot"); };
       g.addEventListener("mouseenter", show); g.addEventListener("mouseleave", hide);
       grp.addEventListener("mouseenter", show); grp.addEventListener("mouseleave", hide);
       // + : clique cria uma etapa ligada; arrastar até outra caixa liga nela
@@ -1868,6 +2097,8 @@
         ev.stopPropagation();
         st.state.nodes = st.state.nodes.filter((n) => n.id !== nid);
         st.state.edges = st.state.edges.filter((e) => e.from !== nid && e.to !== nid);
+        detachFromGroups(st.state, nid); pruneGroups(st.state);
+        if (st.sel) st.sel.delete(nid);
         commitInline(art, st);
       });
     });
@@ -1876,6 +2107,8 @@
     const edgePaths = $$(".edgePaths path.flowchart-link, .edgePaths path", svg);
     const usedEdge = new Set();
     edgePaths.forEach((path) => {
+      // a corrente invisível dos grupos não é seta: não ganha controles
+      if (path.classList.contains("edge-thickness-invisible")) return;
       const edge = edgeForPath(path, st.state, usedEdge);
       if (!edge) return;
       path.classList.add("inline-edge");
@@ -1928,6 +2161,52 @@
         [hit, path, ctrls].forEach((el) => { el.addEventListener("mouseenter", showRev); el.addEventListener("mouseleave", hideRev); });
       } catch (e) { /* getPointAtLength pode falhar em curvas raras — segue sem os controles */ }
     });
+
+    // ---- molduras de grupo: nome, sentido, ordem e desagrupar ----
+    $$("g.cluster", svg).forEach((c) => {
+      const g = (st.state.groups || []).find((x) => (c.id || "") === x.id || (c.id || "").endsWith("-" + x.id));
+      if (!g) return;
+      const r = c.getBoundingClientRect();
+      const box = document.createElement("div");
+      box.className = "inline-group-fx";
+      box.dataset.gid = g.id;
+      box.style.left = (r.left - fxRect.left) + "px";
+      box.style.top = (r.top - fxRect.top) + "px";
+      box.style.width = r.width + "px";
+      box.style.height = r.height + "px";
+      box.innerHTML =
+        `<div class="grp-tools">
+           <button type="button" class="ifx ifx-grp-label" title="Nome do grupo">Aa</button>
+           <button type="button" class="ifx ifx-grp-dir" title="Virar o grupo: lado a lado / empilhado">${(g.dir || "LR") === "LR" ? "↔" : "↕"}</button>
+           <button type="button" class="ifx ifx-grp-order" title="Inverter a ordem das caixas">⇄</button>
+           <button type="button" class="ifx ifx-grp-del" title="Desagrupar (as caixas continuam no fluxo)">⤫</button>
+         </div>`;
+      fx.appendChild(box);
+      const show = () => box.classList.add("hot");
+      const hide = () => box.classList.remove("hot");
+      c.addEventListener("mouseenter", show); c.addEventListener("mouseleave", hide);
+      box.addEventListener("mouseenter", show); box.addEventListener("mouseleave", hide);
+      box.querySelector(".ifx-grp-label").addEventListener("click", (ev) => {
+        ev.stopPropagation(); startGroupRename(art, st, g.id, r, fxRect);
+      });
+      box.querySelector(".ifx-grp-dir").addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        g.dir = (g.dir || "LR") === "LR" ? "TB" : "LR";
+        commitInline(art, st);
+      });
+      box.querySelector(".ifx-grp-order").addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        g.nodes.reverse();
+        commitInline(art, st);
+      });
+      box.querySelector(".ifx-grp-del").addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        st.state.groups = (st.state.groups || []).filter((x) => x.id !== g.id);
+        commitInline(art, st);
+      });
+    });
+
+    paintSelection(art, st);
   }
 
   // arrastar do "+" de uma caixa até outra pra criar a ligação.
@@ -2095,6 +2374,8 @@
     const st = inlineState.get(Number(art.dataset.id));
     if (!st) return;
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || "");
+    // Esc solta a seleção de caixas
+    if (e.key === "Escape" && !typing) { if (clearSelection(art, st)) e.preventDefault(); return; }
     // Ctrl/Cmd+Z desfaz
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === "z" || e.key === "Z")) {
       if (typing) return;   // deixa o desfazer nativo do campo de texto
@@ -2107,6 +2388,8 @@
         const nid = st.hoverNodeId; st.hoverNodeId = null;
         st.state.nodes = st.state.nodes.filter((n) => n.id !== nid);
         st.state.edges = st.state.edges.filter((ed) => ed.from !== nid && ed.to !== nid);
+        detachFromGroups(st.state, nid); pruneGroups(st.state);
+        if (st.sel) st.sel.delete(nid);
         commitInline(art, st);
       } else if (st.hoverEdgeId) {
         e.preventDefault();

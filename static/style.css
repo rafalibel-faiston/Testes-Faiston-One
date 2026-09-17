@@ -1075,6 +1075,7 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 .builder-row .b-label { flex:1; }
 .builder-row .b-shape { flex-shrink:0; }
 .builder-row .b-recipient { flex-shrink:0; display:none; }
+.builder-row .b-group { flex-shrink:0; max-width:130px; }
 .builder-row.is-notif .b-recipient { display:inline-block; }
 .builder-row .b-arrow { color:var(--text-3); flex-shrink:0; font-size:14px; }
 .builder-row .b-from, .builder-row .b-to { flex:1; max-width:38%; }
@@ -1159,6 +1160,16 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 .inline-dir-btn + .inline-dir-btn { border-left:1px solid var(--line-2); }
 .inline-dir-btn:hover { background:var(--surface-3); color:var(--f-blue); }
 .inline-dir-btn.active { background:var(--grad-primary); color:#fff; }
+/* juntar caixas lado a lado (grupo) */
+.inline-group-btn {
+  border:1px solid var(--line-2); background:var(--surface); color:var(--text-2);
+  border-radius:8px; padding:5px 11px; font-family:'Roboto',sans-serif; font-size:12px; font-weight:600;
+  cursor:pointer; white-space:nowrap; transition:all .15s var(--ease);
+}
+.inline-group-btn:hover:not(:disabled) { border-color:var(--f-blue); color:var(--f-blue); background:rgba(0,84,236,.06); }
+.inline-group-btn:disabled { opacity:.45; cursor:not-allowed; }
+.inline-group-btn.is-ungroup:not(:disabled) { border-color:var(--bad); color:var(--bad); background:var(--bad-bg); }
+
 /* paleta de formatos: cada botão mostra o desenho da caixa que adiciona */
 .inline-palette { display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap; }
 .inline-palette-label {
@@ -1241,6 +1252,26 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 .ifx-del:hover { color:var(--bad); border-color:var(--bad); background:var(--bad-bg); }
 .ifx-recipient { left:-11px; top:-11px; font-size:11px; }
 .ifx-recipient:hover { color:#9333ea; border-color:#9333ea; background:rgba(147,51,234,.10); }
+
+/* caixa marcada com Shift+clique, à espera de virar grupo */
+.diagram-canvas.inline-canvas svg g.node.inline-selected rect,
+.diagram-canvas.inline-canvas svg g.node.inline-selected polygon,
+.diagram-canvas.inline-canvas svg g.node.inline-selected circle {
+  stroke:#9333ea !important; stroke-width:3px !important; stroke-dasharray:6 3 !important;
+  filter:drop-shadow(0 2px 8px rgba(147,51,234,.35));
+}
+/* controles da moldura de um grupo (nome / sentido / ordem / desagrupar) */
+.inline-group-fx { position:absolute; pointer-events:none; }
+.inline-group-fx .grp-tools {
+  position:absolute; right:-4px; top:-13px; display:flex; gap:5px;
+  opacity:0; transform:scale(.8); transform-origin:100% 50%;
+  transition:opacity .12s var(--ease), transform .12s var(--ease);
+}
+.inline-group-fx.hot .grp-tools { opacity:1; transform:scale(1); }
+.inline-group-fx .ifx { position:static; opacity:1; transform:none; width:23px; height:23px; font-size:13px; }
+.ifx-grp-label { font-size:11px; font-weight:700; }
+.ifx-grp-label:hover, .ifx-grp-dir:hover, .ifx-grp-order:hover { color:var(--f-blue); border-color:var(--f-blue); }
+.ifx-grp-del:hover { color:var(--bad); border-color:var(--bad); background:var(--bad-bg); }
 
 /* arrastar pra ligar */
 .inline-drag-line {
