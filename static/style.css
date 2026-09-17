@@ -1160,6 +1160,15 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 .inline-dir-btn + .inline-dir-btn { border-left:1px solid var(--line-2); }
 .inline-dir-btn:hover { background:var(--surface-3); color:var(--f-blue); }
 .inline-dir-btn.active { background:var(--grad-primary); color:#fff; }
+/* ligar duas caixas marcadas (sem arrastar) */
+.inline-link-btn {
+  border:1px solid var(--f-blue); background:rgba(0,84,236,.06); color:var(--f-blue);
+  border-radius:8px; padding:5px 11px; font-family:'Roboto',sans-serif; font-size:12px; font-weight:600;
+  cursor:pointer; white-space:nowrap; transition:all .15s var(--ease);
+}
+.inline-link-btn:hover:not(:disabled) { background:var(--f-blue); color:#fff; }
+.inline-link-btn:disabled { opacity:.45; cursor:not-allowed; border-color:var(--line-2); background:var(--surface); color:var(--text-2); }
+
 /* juntar caixas lado a lado (grupo) */
 .inline-group-btn {
   border:1px solid var(--line-2); background:var(--surface); color:var(--text-2);

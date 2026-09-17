@@ -1143,8 +1143,9 @@
       <div class="diagram-body">
         ${d.descricao ? `<div class="diagram-desc">${esc(d.descricao)}</div>` : ""}
         <div class="inline-toolbar" data-toolbar="${d.id}" hidden>
-          <span class="inline-tb-hint">Renomear: clique na caixa · Ligar: <b>arraste o +</b> · seta: clique traceja, <b>Aa</b> rotula (Sim/Não), <b>⇄</b>/<b>×</b> inverte/exclui · <b>Delete</b> apaga o que está sob o mouse · <b>Shift+clique</b> seleciona caixas pra juntar lado a lado</span>
+          <span class="inline-tb-hint">Renomear: clique na caixa · Ligar perto: <b>arraste o +</b> · Ligar longe: <b>Shift+clique</b> na origem e no destino e use <b>Ligar</b> (também junta caixas <b>Lado a lado</b>) · seta: clique traceja, <b>Aa</b> rotula (Sim/Não), <b>⇄</b>/<b>×</b> inverte/exclui · <b>Delete</b> apaga o que está sob o mouse</span>
           <span class="inline-tb-spacer"></span>
+          <button type="button" class="inline-link-btn" title="Shift+clique na caixa de origem e depois na de destino — funciona a qualquer distância" disabled>→ Ligar</button>
           <button type="button" class="inline-group-btn" title="Shift+clique em 2 ou mais caixas e junte-as lado a lado" disabled>▭▭ Lado a lado</button>
           <button type="button" class="inline-undo" title="Desfazer (Ctrl+Z)" disabled>↶ Desfazer</button>
           <div class="inline-dir" role="group" aria-label="Sentido do fluxo">
@@ -1811,6 +1812,8 @@
       st.state.nodes.push({ id, label: "", shape: "notif", to: "Técnico" });
       commitInline(art, st);
     });
+    const linkBtn = tb.querySelector(".inline-link-btn");
+    if (linkBtn) linkBtn.addEventListener("click", () => linkSelection(art, st));
     const groupBtn = tb.querySelector(".inline-group-btn");
     if (groupBtn) groupBtn.addEventListener("click", () => toggleGroupSelection(art, st));
     const undoBtn = tb.querySelector(".inline-undo");
@@ -1846,6 +1849,7 @@
 
   // ---- seleção de caixas (Shift+clique) e agrupamento lado a lado ----
   function toggleSelect(art, st, nid) {
+    try { window.getSelection().removeAllRanges(); } catch (e) { /* navegador sem seleção ativa */ }
     st.sel = st.sel || new Set();
     if (st.sel.has(nid)) st.sel.delete(nid); else st.sel.add(nid);
     paintSelection(art, st);
@@ -1879,13 +1883,40 @@
   }
 
   function syncGroupBtn(art, st) {
+    const sel = [...(st.sel || [])];
+    const n = sel.length;
     const b = art.querySelector(".inline-group-btn");
-    if (!b) return;
-    const n = (st.sel || new Set()).size;
-    const g = selectedGroup(st);
-    b.disabled = n < 2;
-    b.classList.toggle("is-ungroup", !!g);
-    b.textContent = g ? "⤫ Desagrupar" : n >= 2 ? `▭▭ Lado a lado (${n})` : "▭▭ Lado a lado";
+    if (b) {
+      const g = selectedGroup(st);
+      b.disabled = n < 2;
+      b.classList.toggle("is-ungroup", !!g);
+      b.textContent = g ? "⤫ Desagrupar" : n >= 2 ? `▭▭ Lado a lado (${n})` : "▭▭ Lado a lado";
+    }
+    // ligar só faz sentido com um par: a 1ª marcada é a origem, a 2ª o destino
+    const lb = art.querySelector(".inline-link-btn");
+    if (lb) {
+      lb.disabled = n !== 2;
+      lb.textContent = n === 2 ? `→ Ligar (${nodeShort(st, sel[0])} → ${nodeShort(st, sel[1])})` : "→ Ligar";
+    }
+  }
+
+  // nome curto de uma etapa, pro rótulo do botão de ligar
+  function nodeShort(st, id) {
+    const n = st.state.nodes.find((x) => x.id === id);
+    const txt = cleanLabel(n && n.label) || id;
+    return txt.length > 11 ? txt.slice(0, 10) + "…" : txt;
+  }
+
+  // liga as duas caixas marcadas — o caminho sem arrastar, pra caixas distantes
+  function linkSelection(art, st) {
+    const sel = [...(st.sel || [])];
+    if (sel.length !== 2) { toast("Marque 2 caixas com Shift+clique: primeiro a origem, depois o destino.", true); return; }
+    const res = addEdgeBetween(st, sel[0], sel[1]);
+    if (res === "dup") { toast("Essas caixas já estão ligadas."); return; }
+    if (!res) return;
+    st.sel.clear();
+    commitInline(art, st);
+    toast(res === "dotted" ? "Notificação ligada" : "Ligação criada");
   }
 
   function toggleGroupSelection(art, st) {
@@ -2033,6 +2064,11 @@
       const node = st.state.nodes.find((n) => n.id === nid);
       if (!node) return;
       g.classList.add("inline-node");
+      // Shift+clique, pro navegador, estende a seleção de texto da página —
+      // aqui ele marca a caixa, então a seleção nativa é cortada no mousedown
+      g.addEventListener("mousedown", (ev) => {
+        if (ev.shiftKey || ev.ctrlKey || ev.metaKey) ev.preventDefault();
+      });
       g.addEventListener("click", (ev) => {
         if (ev.target.closest && ev.target.closest(".inline-node-fx")) return;
         ev.stopPropagation();
@@ -2209,6 +2245,18 @@
     paintSelection(art, st);
   }
 
+  // cria a ligação entre duas caixas — usada pelo arrasto do "+" e pelo botão "Ligar".
+  // devolve "dup" se a seta já existe, "dotted" quando envolve notificação (aviso
+  // lateral, não fluxo principal) ou "ok".
+  function addEdgeBetween(st, from, to) {
+    if (!from || !to || from === to) return null;
+    if (st.state.edges.some((e) => e.from === from && e.to === to)) return "dup";
+    const isNotif = (id) => { const n = st.state.nodes.find((x) => x.id === id); return n && n.shape === "notif"; };
+    const dotted = isNotif(from) || isNotif(to);
+    st.state.edges.push({ id: newEdgeId(st.state), from, to, label: "", dotted });
+    return dotted ? "dotted" : "ok";
+  }
+
   // arrastar do "+" de uma caixa até outra pra criar a ligação.
   // sem arrastar (só clique) mantém o atalho de criar uma etapa nova já ligada.
   function startConnectDrag(art, st, sourceId, downEv) {
@@ -2216,21 +2264,31 @@
     const fx = canvas && canvas.querySelector(".inline-fx");
     const svg = canvas && canvas.querySelector("svg");
     if (!fx || !svg) return;
-    const fxRect = fx.getBoundingClientRect();
-    const toLocal = (cx, cy) => [cx - fxRect.left, cy - fxRect.top];
-    // posições das caixas (fixas durante o arrasto)
+    // tudo em coordenadas de documento: a página rola durante o arrasto (caixa
+    // longe, fora da tela) e retângulos de viewport ficariam desatualizados.
+    const docRect = (el) => {
+      const r = el.getBoundingClientRect();
+      return { left: r.left + window.scrollX, top: r.top + window.scrollY,
+               right: r.right + window.scrollX, bottom: r.bottom + window.scrollY,
+               width: r.width, height: r.height };
+    };
+    const fxRect = docRect(fx);
+    const toLocal = (cx, cy) => [cx + window.scrollX - fxRect.left, cy + window.scrollY - fxRect.top];
     const nodes = $$("g.node", svg).map((g) => {
       const id = inlineNodeId(g); if (!id) return null;
-      const r = g.getBoundingClientRect();
-      return { id, g, r };
+      return { id, g, r: docRect(g) };
     }).filter(Boolean);
     const src = nodes.find((n) => n.id === sourceId);
     if (!src) return;
-    const nodeAt = (cx, cy) => nodes.find((n) => cx >= n.r.left && cx <= n.r.right && cy >= n.r.top && cy <= n.r.bottom);
+    const nodeAt = (cx, cy) => {
+      const x = cx + window.scrollX, y = cy + window.scrollY;
+      return nodes.find((n) => x >= n.r.left && x <= n.r.right && y >= n.r.top && y <= n.r.bottom);
+    };
 
     // linha-fantasma que segue o cursor. Um <div> girado (não um <svg> aninhado,
     // que a regra global ".diagram-canvas svg { height:auto }" colapsava pra 0×0).
-    const [sx, sy] = toLocal(src.r.left + src.r.width / 2, src.r.top + src.r.height / 2);
+    const sx = src.r.left - fxRect.left + src.r.width / 2;
+    const sy = src.r.top - fxRect.top + src.r.height / 2;
     const line = document.createElement("div");
     line.className = "inline-drag-line";
     line.style.left = sx + "px";
@@ -2243,21 +2301,47 @@
     };
     document.body.classList.add("inline-connecting");
 
-    let dragging = false, hovered = null;
+    let dragging = false, hovered = null, last = downEv;
+    // redesenha a linha e marca a caixa sob o cursor (a partir da última posição
+    // conhecida — vale tanto pro mousemove quanto pra rolagem automática)
+    const apply = () => {
+      const [lx, ly] = toLocal(last.clientX, last.clientY);
+      drawLine(lx, ly);
+      const tgt = nodeAt(last.clientX, last.clientY);
+      if (hovered && (!tgt || tgt.g !== hovered)) hovered.classList.remove("inline-drop-target");
+      if (tgt && tgt.id !== sourceId) { tgt.g.classList.add("inline-drop-target"); hovered = tgt.g; }
+      else if (!tgt) hovered = null;
+    };
+    // perto da borda da janela a página rola sozinha, senão não dá pra alcançar
+    // uma caixa que está fora da tela sem soltar o arrasto.
+    // o "scroll-behavior:smooth" do CSS anima cada scrollBy e uma rolagem de
+    // 16 em 16ms ficaria travada — durante o arrasto ela volta a ser instantânea.
+    const rootStyle = document.documentElement.style;
+    const prevBehavior = rootStyle.scrollBehavior;
+    rootStyle.scrollBehavior = "auto";
+    const EDGE = 80, SPEED = 16;
+    const autoScroll = () => {
+      if (!dragging) return;
+      const y = last.clientY, h = window.innerHeight;
+      let dy = 0;
+      if (y < EDGE) dy = -SPEED * (1 - y / EDGE) - 3;
+      else if (y > h - EDGE) dy = SPEED * (1 - (h - y) / EDGE) + 3;
+      if (dy) { window.scrollBy(0, dy); apply(); }
+    };
+    const autoTimer = setInterval(autoScroll, 16);
+
     const move = (e) => {
+      last = e;
       const dx = e.clientX - downEv.clientX, dy = e.clientY - downEv.clientY;
       if (!dragging && Math.hypot(dx, dy) < 5) return;
       dragging = true;
-      const [lx, ly] = toLocal(e.clientX, e.clientY);
-      drawLine(lx, ly);
-      const tgt = nodeAt(e.clientX, e.clientY);
-      if (hovered && (!tgt || tgt.g !== hovered)) hovered.classList.remove("inline-drop-target");
-      if (tgt && tgt.id !== sourceId) { tgt.g.classList.add("inline-drop-target"); hovered = tgt.g; }
-      else hovered = tgt && tgt.id === sourceId ? hovered : null;
+      apply();
     };
     const up = (e) => {
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
+      clearInterval(autoTimer);
+      rootStyle.scrollBehavior = prevBehavior;
       document.body.classList.remove("inline-connecting");
       if (hovered) hovered.classList.remove("inline-drop-target");
       line.remove();
@@ -2271,14 +2355,11 @@
       }
       const tgt = nodeAt(e.clientX, e.clientY);
       if (!tgt || tgt.id === sourceId) return;   // soltou no vazio (ou nela mesma): cancela
-      const dup = st.state.edges.some((ed) => ed.from === sourceId && ed.to === tgt.id);
-      if (dup) { toast("Essas caixas já estão ligadas."); return; }
-      // ligação que envolve notificação nasce tracejada (aviso lateral, não fluxo principal)
-      const isNotif = (id) => { const n = st.state.nodes.find((x) => x.id === id); return n && n.shape === "notif"; };
-      const dotted = isNotif(sourceId) || isNotif(tgt.id);
-      st.state.edges.push({ id: newEdgeId(st.state), from: sourceId, to: tgt.id, label: "", dotted });
+      const res = addEdgeBetween(st, sourceId, tgt.id);
+      if (res === "dup") { toast("Essas caixas já estão ligadas."); return; }
+      if (!res) return;
       commitInline(art, st);
-      toast(dotted ? "Notificação ligada ao lado" : "Ligação criada");
+      toast(res === "dotted" ? "Notificação ligada ao lado" : "Ligação criada");
     };
     document.addEventListener("mousemove", move);
     document.addEventListener("mouseup", up);
