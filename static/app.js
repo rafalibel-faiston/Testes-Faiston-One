@@ -3310,7 +3310,7 @@
         </label>
         <ul class="guia-lista">
           <li>O time define de quem são as <b>Novidades</b>: cada time vê só o que mudou desde a última vez que <i>aquele time</i> olhou.</li>
-          <li>No time <b>Faiston</b> aparecem também as abas <b>Agenda</b>, <b>Todo</b> e <b>Técnicos</b>, que são da operação.</li>
+          <li>No time <b>Faiston</b> aparece também a aba <b>Técnicos</b>, que é da operação.</li>
         </ul>`,
       after: montarPassoPerfil,
     },
@@ -3329,9 +3329,9 @@
             <p>A lista de ajustes pedidos na tela de ativos — cada ajuste com status e responsável.</p>
           </div>
           <div class="guia-card-item">
-            <span class="guia-card-tag">Agenda · Todo · Técnicos</span>
-            <p>Só no time Faiston: a pauta das reuniões, as tarefas do desmame da planilha e a base dos
-            técnicos (com o convite de WhatsApp e o formulário de feedback).</p>
+            <span class="guia-card-tag">Técnicos</span>
+            <p>Só no time Faiston: a base dos técnicos do piloto, com o convite de WhatsApp, o formulário de
+            feedback e o painel que diz se já dá pra liberar geral.</p>
           </div>
         </div>`,
     },
@@ -3728,21 +3728,29 @@
   activityModal.addEventListener("click", (e) => { if (e.target.id === "activity-modal") closeActivityModal(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !activityModal.hidden) closeActivityModal(); });
 
-  // ---------------- módulos (Dispatcher / Gestão de Ativos / Agenda / Todo) ----------------
+  // ---------------- módulos (Dispatcher / Gestão de Ativos / Técnicos) ----------------
   // Gestão de Ativos é compartilhada: a Faiston levanta os ajustes, a LP é quem
   // desenvolve — sem ver a lista, a LP dependia de alguém repassar cada item.
-  // Agenda e Todo continuam só da Faiston: são o planejamento interno do time,
-  // não têm nada que a LP precise acompanhar.
+  // Técnicos continua só da Faiston: é o planejamento interno do time, não tem
+  // nada que a LP precise acompanhar.
   let currentModule = "dispatcher";
 
-  const MODULOS_FAISTON = ["agenda", "todo", "tecnicos"];
+  const MODULOS_FAISTON = ["tecnicos"];
+
+  // Agenda e Todo saíram da barra de módulos: o time deixou de tocar o
+  // planejamento por aqui, e aba que ninguém abre só polui a tela. O módulo, a
+  // API e os dados continuam de pé — pra trazer de volta é só esvaziar a lista.
+  const MODULOS_OCULTOS = ["agenda", "todo"];
+
+  function moduloVisivel(mod) {
+    if (MODULOS_OCULTOS.includes(mod)) return false;
+    if (MODULOS_FAISTON.includes(mod)) return PERFIL === "Faiston";
+    return true;
+  }
 
   function applyModuleVisibility() {
-    const isFaiston = PERFIL === "Faiston";
-    $("#module-tab-agenda").hidden = !isFaiston;
-    $("#module-tab-todo").hidden = !isFaiston;
-    $("#module-tab-tecnicos").hidden = !isFaiston;
-    if (!isFaiston && MODULOS_FAISTON.includes(currentModule)) switchModule("dispatcher");
+    $$(".module-tab").forEach((t) => { t.hidden = !moduloVisivel(t.dataset.module); });
+    if (!moduloVisivel(currentModule)) switchModule("dispatcher");
   }
 
   function switchModule(mod) {

@@ -222,13 +222,24 @@ caindo direto na tela, como antes.
 ## Entrar não tem senha
 
 Escolher o time (**LP Digital** ou **Faiston**) é identificação, não login: define
-de quem são as *Novidades* e quais abas aparecem (Agenda, Todo e Técnicos são do
-time Faiston). Não existe senha em nenhum dos dois — quem tem o link, entra.
+de quem são as *Novidades* e quais abas aparecem (*Técnicos* é só do time
+Faiston). Não existe senha em nenhum dos dois — quem tem o link, entra.
 
 A senha que a Faiston pedia (`FAISTON_SENHA` + `POST /api/perfil/entrar`) foi
 removida: atrapalhava mais do que protegia, já que o link em si nunca foi
 secreto. O `MCP_TOKEN` da telinha `/mcp-login` é outra coisa e continua valendo —
 ele protege o conector MCP, não a tela.
+
+## Agenda e Todo estão ocultas
+
+As abas **Agenda** (compromissos do time) e **Todo** (tarefas do desmame da
+planilha) saíram da barra de módulos: o time deixou de tocar o planejamento por
+aqui, e aba que ninguém abre só polui a tela de quem chega agora.
+
+Só a entrada na barra sumiu. O módulo, as rotas (`/api/agenda`, `/api/todo`), as
+ferramentas MCP (`listar_tarefas`, `criar_tarefa`) e as abas do *Exportar tudo*
+continuam de pé, com os dados intactos. Pra trazer as abas de volta, esvazie
+`MODULOS_OCULTOS` em `static/app.js` — nada mais precisa mudar.
 
 ## Colar print (Ctrl+V)
 
@@ -251,8 +262,7 @@ anexar imagem.
 O módulo **Gestão de Ativos** do Faiston One já está no ar; a aba *Gestão de
 Ativos* aqui no console é o backlog dos ajustes pedidos em cima dele. A aba
 aparece pros dois perfis: a Faiston levanta os ajustes, a LP é quem desenvolve
-— sem ver a lista, a LP dependia de alguém repassar item por item. (Agenda e
-Todo continuam só da Faiston: são planejamento interno do time.) Cada ajuste é
+— sem ver a lista, a LP dependia de alguém repassar item por item. Cada ajuste é
 um item no formato que o time já usa:
 
 - **como está hoje** (`atual`) × **como deve ser** (`esperado`);
@@ -339,7 +349,7 @@ Vale pros dois lugares em que a observação existe: caso de teste (`Observation
 
 ## Técnicos — QA do Track One
 
-Aba **Técnicos** (só perfil Faiston, ao lado de Agenda e Todo) — a base dos técnicos
+Aba **Técnicos** (só perfil Faiston) — a base dos técnicos
 e líderes de equipe convidados a testar o **Track One** (o app novo que acompanha o
 atendimento do chamado até o fechamento da RAT) antes de liberar geral. Ela resolve os
 dois pedidos que geraram esse módulo: ter um lugar só pra acompanhar quem já foi
