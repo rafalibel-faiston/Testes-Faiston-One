@@ -22,6 +22,10 @@
       <h1>Console de Teste</h1>
       <p class="sub">Operador (web) × App do técnico · NEXO Despacho</p>
     </div>
+    <button type="button" class="guia-btn" id="btn-guia" title="Como usar o sistema (passo a passo, com os fluxogramas)">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12" y2="17"/></svg>
+      Como usar
+    </button>
     <div class="perfil-box">
       <label>Entrando como</label>
       <button type="button" class="perfil-chip" id="perfil-chip" title="Trocar perfil">
@@ -57,11 +61,29 @@
           <span class="perfil-choice-name">Faiston</span>
           <span class="perfil-choice-sub">Cliente que valida os testes</span>
         </button>
-        <div class="perfil-senha" id="perfil-senha-box" hidden>
-          <input type="password" id="perfil-senha-input" placeholder="Senha da Faiston" autocomplete="off" />
-          <button type="button" id="perfil-senha-confirmar">Entrar</button>
-          <p class="perfil-senha-erro" id="perfil-senha-erro" hidden>Senha incorreta.</p>
-        </div>
+      </div>
+      <p class="perfil-guia-link">Primeira vez por aqui?
+        <button type="button" class="linkish" id="perfil-abrir-guia">Ver como usar o sistema</button>
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- guia de primeiro acesso: "como usar o sistema", com os fluxogramas de verdade -->
+<div class="modal guia-modal" id="guia-modal" hidden aria-modal="true" role="dialog" aria-labelledby="guia-titulo">
+  <div class="modal-card guia-card">
+    <div class="modal-head">
+      <span class="guia-passo" id="guia-passo">1/6</span>
+      <h3 id="guia-titulo">Bem-vindo</h3>
+      <button type="button" class="modal-close" id="guia-close" aria-label="Fechar">&#10005;</button>
+    </div>
+    <div class="guia-trilha" id="guia-trilha" role="tablist" aria-label="Passos do guia"></div>
+    <div class="modal-body guia-body" id="guia-body"></div>
+    <div class="guia-foot">
+      <button type="button" class="linkish" id="guia-pular">Pular o guia</button>
+      <div class="guia-foot-acoes">
+        <button type="button" class="btn-ghost" id="guia-voltar">Voltar</button>
+        <button type="button" class="btn-primary" id="guia-avancar">Avan&ccedil;ar</button>
       </div>
     </div>
   </div>

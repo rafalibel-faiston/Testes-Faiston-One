@@ -3242,17 +3242,6 @@
   }
   function closePerfilGate() { perfilModal.hidden = true; }
 
-  async function tentarEntrar(perfil, senha) {
-    try {
-      const r = await api("/api/perfil/entrar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ perfil, senha }),
-      });
-      return !!r.ok;
-    } catch (e) { return false; }
-  }
-
   function setPerfil(p) {
     PERFIL = p;
     localStorage.setItem(PERFIL_KEY, p);
@@ -3262,38 +3251,287 @@
     if (typeof applyModuleVisibility === "function") applyModuleVisibility();
   }
 
+  // Escolher o time é só identificação (não é login): define de quem são as
+  // Novidades e quais abas aparecem. Sem senha — quem tem o link, entra.
   $$(".perfil-choice").forEach((b) => {
-    b.addEventListener("click", async () => {
-      const p = b.dataset.perfil;
-      if (p === "Faiston") {
-        $("#perfil-senha-box").hidden = false;
-        $("#perfil-senha-input").focus();
-        return;
-      }
-      setPerfil(p);
-    });
+    b.addEventListener("click", () => setPerfil(b.dataset.perfil));
   });
 
-  async function confirmarSenhaFaiston() {
-    const senha = $("#perfil-senha-input").value;
-    const ok = await tentarEntrar("Faiston", senha);
-    if (ok) {
-      setPerfil("Faiston");
-      $("#perfil-senha-box").hidden = true;
-      $("#perfil-senha-input").value = "";
-      $("#perfil-senha-erro").hidden = true;
-    } else {
-      $("#perfil-senha-erro").hidden = false;
-    }
-  }
-  $("#perfil-senha-confirmar").addEventListener("click", confirmarSenhaFaiston);
-  $("#perfil-senha-input").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") confirmarSenhaFaiston();
-  });
   $("#perfil-chip").addEventListener("click", () => openPerfilGate(true));
   $("#perfil-modal-close").addEventListener("click", closePerfilGate);
   perfilModal.addEventListener("click", (e) => {
     if (e.target.id === "perfil-modal" && perfilModal.dataset.dismissable) closePerfilGate();
+  });
+
+  // ---------------- guia "como usar o sistema" ----------------
+  // Quem chega pela primeira vez (sem time e sem nome) cai neste passo a passo:
+  // explica o console, mostra os fluxogramas de verdade (puxados da API, não uma
+  // imagem) e termina na identificação. Depois disso, o botão "Como usar" no topo
+  // reabre o guia quando quiser.
+  const GUIA_KEY = "fluxoc_guia_visto";
+  const guiaModal = $("#guia-modal");
+  const guiaBody = $("#guia-body");
+  let guiaPasso = 0;
+  let guiaDiagramas = null;        // cache do /api/diagramas, só dentro do guia
+  let guiaDiagramaAtivo = null;    // id do diagrama sendo mostrado no passo dos fluxogramas
+
+  const GUIA_PASSOS = [
+    {
+      titulo: "O que é este console",
+      html: `
+        <p class="guia-lead">Aqui a <b>Faiston</b> acompanha, junto com a <b>LP Digital</b>, os testes do
+        <b>NEXO Despacho</b>: o que já foi validado, o que voltou reprovado e o que ainda precisa de ajuste.</p>
+        <ul class="guia-lista">
+          <li><b>Não tem login nem senha.</b> Quem tem o link, entra. Você só diz de que time é, pra tela saber o que te mostrar.</li>
+          <li><b>Tudo é salvo na hora e é compartilhado.</b> Status, observação e print que você registra aparecem pra todo mundo que abrir o link.</li>
+          <li><b>Nada aqui mexe no NEXO de verdade.</b> Este console é o registro do teste — o sistema testado é o NEXO, à parte.</li>
+        </ul>
+        <p class="guia-nota">Leva menos de um minuto: como se identificar, onde ficam os módulos, os fluxogramas do processo e a rotina do dia a dia.</p>`,
+    },
+    {
+      titulo: "Quem está entrando",
+      html: `
+        <p class="guia-lead">Escolha o seu time e deixe seu nome. Isso não é senha — é só pra saber de quem é cada registro.</p>
+        <div class="guia-perfis" id="guia-perfis">
+          <button type="button" class="perfil-choice" data-perfil="LP">
+            <span class="perfil-choice-dot lp"></span>
+            <span class="perfil-choice-name">LP Digital</span>
+            <span class="perfil-choice-sub">Time que desenvolve o NEXO</span>
+          </button>
+          <button type="button" class="perfil-choice" data-perfil="Faiston">
+            <span class="perfil-choice-dot fai"></span>
+            <span class="perfil-choice-name">Faiston</span>
+            <span class="perfil-choice-sub">Cliente que valida os testes</span>
+          </button>
+        </div>
+        <label class="fld fld-wide guia-nome">Seu nome
+          <input type="text" id="guia-nome-input" placeholder="ex.: Rafael" autocomplete="off">
+          <span class="fld-hint">Vai junto de cada status e observação que você registrar. Dá pra mudar depois no topo da tela, em "Testando como".</span>
+        </label>
+        <ul class="guia-lista">
+          <li>O time define de quem são as <b>Novidades</b>: cada time vê só o que mudou desde a última vez que <i>aquele time</i> olhou.</li>
+          <li>No time <b>Faiston</b> aparecem também as abas <b>Agenda</b>, <b>Todo</b> e <b>Técnicos</b>, que são da operação.</li>
+        </ul>`,
+      after: montarPassoPerfil,
+    },
+    {
+      titulo: "Os módulos",
+      html: `
+        <p class="guia-lead">As abas lá no alto trocam de módulo. Cada uma é um assunto diferente:</p>
+        <div class="guia-cards">
+          <div class="guia-card-item">
+            <span class="guia-card-tag">Dispatcher</span>
+            <p>O despacho NEXO: os fluxogramas do processo, as situações reais de campo e os casos de teste.
+            É onde você passa a maior parte do tempo.</p>
+          </div>
+          <div class="guia-card-item">
+            <span class="guia-card-tag">Gestão de Ativos</span>
+            <p>A lista de ajustes pedidos na tela de ativos — cada ajuste com status e responsável.</p>
+          </div>
+          <div class="guia-card-item">
+            <span class="guia-card-tag">Agenda · Todo · Técnicos</span>
+            <p>Só no time Faiston: a pauta das reuniões, as tarefas do desmame da planilha e a base dos
+            técnicos (com o convite de WhatsApp e o formulário de feedback).</p>
+          </div>
+        </div>`,
+    },
+    {
+      titulo: "Dentro do Dispatcher",
+      html: `
+        <p class="guia-lead">Primeiro você escolhe o <b>fluxo</b> (A, B ou C — o C é o Despacho NEXO, o que está em teste),
+        depois alterna entre duas visões:</p>
+        <div class="guia-cards">
+          <div class="guia-card-item">
+            <span class="guia-card-tag">Fluxos (diagramas)</span>
+            <p>O desenho do processo: <b>como está hoje</b> e <b>como deveria funcionar</b>.
+            Dá pra editar direto no desenho — arrastar caixa, renomear etapa, ligar seta.</p>
+          </div>
+          <div class="guia-card-item">
+            <span class="guia-card-tag">Situações</span>
+            <p>Cada situação real do campo, aberta em estágios (01, 02, 03…), com o que o operador vê e o que o
+            técnico vê em cada um.</p>
+          </div>
+        </div>
+        <p class="guia-nota">Dentro de uma situação, o botão <b>Ver evidências em sequência</b> passa print a print,
+        agrupado por estágio — é o modo de apresentar numa reunião.</p>`,
+    },
+    {
+      titulo: "Os fluxogramas",
+      html: `
+        <p class="guia-lead">Estes são os fluxogramas que estão no sistema agora — os mesmos que você abre na visão
+        <b>Fluxos (diagramas)</b>. Clique num deles pra ver:</p>
+        <div class="guia-diagramas" id="guia-diagramas"><span class="guia-nota">Carregando fluxogramas…</span></div>
+        <div class="guia-diagrama-desc" id="guia-diagrama-desc" hidden></div>
+        <div class="guia-diagrama-canvas" id="guia-diagrama-canvas"></div>
+        <button type="button" class="btn-ghost guia-abrir-fluxos" id="guia-abrir-fluxos">
+          Abrir este fluxograma em tamanho grande
+        </button>
+        <p class="guia-nota">Ler o fluxograma antes de testar economiza tempo: ele mostra onde entra o operador,
+        onde entra o técnico e quais são os pontos de decisão (escalonamento N2, aprovação da RAT).
+        Em tamanho grande — e pra editar — eles ficam na visão <b>Fluxos (diagramas)</b> do Dispatcher.</p>`,
+      after: montarPassoDiagramas,
+    },
+    {
+      titulo: "A rotina do dia a dia",
+      html: `
+        <ol class="guia-passos">
+          <li><b>Abra o caso ou o estágio</b> que você vai testar e execute no NEXO.</li>
+          <li><b>Marque o status</b>: Aprovado, Reprovado, Bloqueado ou N/A. O seu nome vai junto.</li>
+          <li><b>Escreva o que aconteceu</b> na observação — principalmente quando reprovar. Uma linha objetiva já ajuda muito.</li>
+          <li><b>Cole o print</b> com <span class="guia-kbd">Ctrl</span> + <span class="guia-kbd">V</span>: clique antes no card que vai receber a imagem (ele fica com a borda azul).</li>
+          <li><b>Confira as Novidades</b> pra ver o que o outro time mexeu desde a sua última visita.</li>
+        </ol>
+        <p class="guia-nota"><b>Pra reunião:</b> <i>Pauta da reunião</i> monta a lista do que não está aprovado, e
+        <i>Exportar tudo</i> baixa um Excel com todos os dados do sistema, cada tipo na sua aba.</p>
+        <p class="guia-nota">Precisou rever alguma coisa? O botão <b>Como usar</b>, lá no topo, reabre este guia a qualquer momento.</p>`,
+    },
+  ];
+
+  function montarPassoPerfil() {
+    const nomeInput = $("#guia-nome-input");
+    nomeInput.value = localStorage.getItem(TESTER_KEY) || "";
+    nomeInput.addEventListener("input", () => {
+      const nome = nomeInput.value.trim();
+      localStorage.setItem(TESTER_KEY, nome);
+      const topo = $("#input-tester");
+      if (topo) topo.value = nome;
+    });
+    function marcarEscolhido() {
+      $$("#guia-perfis .perfil-choice").forEach((b) => {
+        b.classList.toggle("escolhido", b.dataset.perfil === PERFIL);
+      });
+    }
+    $$("#guia-perfis .perfil-choice").forEach((b) => {
+      b.addEventListener("click", () => {
+        setPerfil(b.dataset.perfil);
+        marcarEscolhido();
+        toast("Entrando como " + PERFIL_LABEL[PERFIL]);
+      });
+    });
+    marcarEscolhido();
+  }
+
+  async function montarPassoDiagramas() {
+    const lista = $("#guia-diagramas");
+    if (!guiaDiagramas) {
+      try {
+        guiaDiagramas = await api("/api/diagramas");
+      } catch (e) {
+        lista.innerHTML = `<span class="guia-nota">Não consegui carregar os fluxogramas agora (${esc(e.message)}). Eles ficam na visão <b>Fluxos (diagramas)</b>.</span>`;
+        return;
+      }
+    }
+    if (!guiaDiagramas.length) {
+      lista.innerHTML = `<span class="guia-nota">Ainda não há fluxograma cadastrado. Dá pra criar o primeiro na visão <b>Fluxos (diagramas)</b>.</span>`;
+      return;
+    }
+    // abre no "como deveria funcionar" do fluxo em foco, que é o desenho de referência
+    if (!guiaDiagramas.some((d) => d.id === guiaDiagramaAtivo)) {
+      const pref = guiaDiagramas.find((d) => d.fluxo === currentFlow && d.kind === "ideal")
+        || guiaDiagramas.find((d) => d.fluxo === currentFlow)
+        || guiaDiagramas[0];
+      guiaDiagramaAtivo = pref.id;
+    }
+    lista.innerHTML = guiaDiagramas.map((d) => `
+      <button type="button" class="guia-diagrama-chip ${d.id === guiaDiagramaAtivo ? "active" : ""}" data-id="${d.id}">
+        <span class="guia-diagrama-fluxo">Fluxo ${esc(d.fluxo)}</span>
+        <span class="guia-diagrama-kind k-${esc(d.kind)}">${esc(KIND_LABEL[d.kind] || d.kind)}</span>
+        <span class="guia-diagrama-titulo">${esc(d.titulo)}</span>
+      </button>`).join("");
+    $$(".guia-diagrama-chip", lista).forEach((b) => {
+      b.addEventListener("click", () => {
+        guiaDiagramaAtivo = Number(b.dataset.id);
+        $$(".guia-diagrama-chip", lista).forEach((o) => o.classList.toggle("active", o === b));
+        desenharDiagramaDoGuia();
+      });
+    });
+    const abrir = $("#guia-abrir-fluxos");
+    if (abrir) abrir.addEventListener("click", abrirDiagramaNaVisaoFluxos);
+    desenharDiagramaDoGuia();
+  }
+
+  // Dentro do guia o desenho cabe inteiro na caixa (fica pequeno). Este atalho
+  // fecha o guia e leva pro mesmo diagrama aberto na visão Fluxos, em tamanho real.
+  async function abrirDiagramaNaVisaoFluxos() {
+    const d = (guiaDiagramas || []).find((x) => x.id === guiaDiagramaAtivo);
+    if (!d) return;
+    closeGuia();
+    if (d.fluxo !== currentFlow) setFlow(d.fluxo);
+    switchModule("dispatcher");
+    expandedDiagrams.add(d.id);
+    switchView("fluxos");
+    await loadDiagrams();
+    const art = $(`.diagram[data-id="${d.id}"]`);
+    if (art) art.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function desenharDiagramaDoGuia() {
+    const d = (guiaDiagramas || []).find((x) => x.id === guiaDiagramaAtivo);
+    const canvas = $("#guia-diagrama-canvas");
+    const desc = $("#guia-diagrama-desc");
+    if (!d || !canvas) return;
+    if (desc) {
+      desc.textContent = d.descricao || "";
+      desc.hidden = !d.descricao;
+    }
+    canvas.innerHTML = `<div class="diagram-preview-empty">Desenhando…</div>`;
+    renderMermaidInto(canvas, d.mermaid);
+  }
+
+  function renderGuia() {
+    const passo = GUIA_PASSOS[guiaPasso];
+    $("#guia-passo").textContent = `${guiaPasso + 1}/${GUIA_PASSOS.length}`;
+    $("#guia-titulo").textContent = passo.titulo;
+    guiaBody.innerHTML = passo.html;
+    guiaBody.scrollTop = 0;
+    $("#guia-trilha").innerHTML = GUIA_PASSOS.map((p, i) => `
+      <button type="button" class="guia-trilha-item ${i === guiaPasso ? "active" : ""} ${i < guiaPasso ? "feito" : ""}"
+              data-i="${i}" role="tab" aria-selected="${i === guiaPasso}" title="${esc(p.titulo)}">
+        <span class="guia-trilha-n">${i + 1}</span>
+        <span class="guia-trilha-t">${esc(p.titulo)}</span>
+      </button>`).join("");
+    $$("#guia-trilha .guia-trilha-item").forEach((b) => {
+      b.addEventListener("click", () => irParaPassoGuia(Number(b.dataset.i)));
+    });
+    $("#guia-voltar").disabled = guiaPasso === 0;
+    const ultimo = guiaPasso === GUIA_PASSOS.length - 1;
+    $("#guia-avancar").textContent = ultimo ? "Começar a usar" : "Avançar";
+    if (typeof passo.after === "function") passo.after();
+  }
+
+  function irParaPassoGuia(i) {
+    guiaPasso = Math.max(0, Math.min(GUIA_PASSOS.length - 1, i));
+    renderGuia();
+  }
+
+  function openGuia(passo) {
+    guiaPasso = passo || 0;
+    guiaModal.hidden = false;
+    renderGuia();
+  }
+
+  // Fechar o guia (de qualquer jeito) já conta como visto — ninguém quer levar o
+  // mesmo passo a passo na cara toda vez que abre o link.
+  function closeGuia() {
+    guiaModal.hidden = true;
+    guiaBody.innerHTML = "";
+    localStorage.setItem(GUIA_KEY, "1");
+    if (!PERFIL) openPerfilGate(false);
+  }
+
+  $("#btn-guia").addEventListener("click", () => openGuia(0));
+  $("#guia-close").addEventListener("click", closeGuia);
+  $("#guia-pular").addEventListener("click", closeGuia);
+  $("#guia-voltar").addEventListener("click", () => irParaPassoGuia(guiaPasso - 1));
+  $("#guia-avancar").addEventListener("click", () => {
+    if (guiaPasso === GUIA_PASSOS.length - 1) closeGuia();
+    else irParaPassoGuia(guiaPasso + 1);
+  });
+  guiaModal.addEventListener("click", (e) => { if (e.target.id === "guia-modal") closeGuia(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !guiaModal.hidden) closeGuia(); });
+  $("#perfil-abrir-guia").addEventListener("click", () => {
+    closePerfilGate();
+    openGuia(0);
   });
 
   // ---------------- novidades (trilha de atividades) ----------------
@@ -5546,10 +5784,14 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
     }, 200);
   });
 
-  // na entrada: aplica o chip e, se ninguém escolheu ainda, força a escolha do perfil
+  // na entrada: aplica o chip e decide o que mostrar pra quem chegou agora.
+  // Sem time escolhido e sem nunca ter visto o guia = primeiro acesso: abre o
+  // passo a passo (que termina na identificação). Quem já conhece cai direto na
+  // escolha do time, como antes.
   applyPerfilChip();
   applyModuleVisibility();
-  if (!PERFIL) openPerfilGate(false);
+  if (!PERFIL && !localStorage.getItem(GUIA_KEY)) openGuia(0);
+  else if (!PERFIL) openPerfilGate(false);
 
   // ---------------- tester name ----------------
   const testerInput = $("#input-tester");

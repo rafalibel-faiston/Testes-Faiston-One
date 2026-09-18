@@ -16,7 +16,6 @@ from .routers import diagrams as diagrams_router
 from .routers import activity as activity_router
 from .routers import situacoes as situacoes_router
 from . import seed_data
-from .routers import auth as auth_router
 from .routers import agenda as agenda_router
 from .routers import todo as todo_router
 from .routers import ativos as ativos_router
@@ -66,7 +65,6 @@ app.include_router(export_completo_router.router, prefix="/api")
 app.include_router(diagrams_router.router, prefix="/api")
 app.include_router(activity_router.router, prefix="/api")
 app.include_router(situacoes_router.router, prefix="/api")
-app.include_router(auth_router.router, prefix="/api")
 app.include_router(agenda_router.router, prefix="/api")
 app.include_router(todo_router.router, prefix="/api")
 app.include_router(ativos_router.router, prefix="/api")

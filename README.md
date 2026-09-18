@@ -196,6 +196,40 @@ python3 tools/relatorio_reuniao.py --json-dir ./dump --out pauta-11-08.html
 O HTML é autocontido (CSS e logo embutidos, sem CDN) — abre offline e pode ser
 anexado num e-mail sem quebrar.
 
+## Primeiro acesso — o guia "Como usar"
+
+Quem abre o link pela primeira vez (sem time escolhido e sem nome) cai num passo
+a passo de 6 telas antes de qualquer outra coisa: o que é o console, quem está
+entrando, os módulos, as visões do Dispatcher, **os fluxogramas** e a rotina do
+dia a dia.
+
+O passo dos fluxogramas não é print nem texto: ele busca `/api/diagramas` e
+desenha o Mermaid de verdade ali dentro, com um botão por diagrama (*como está
+hoje* / *como deveria funcionar*, por fluxo). Assim o desenho do guia nunca fica
+desatualizado em relação ao que o time editou. O botão **Abrir este fluxograma em
+tamanho grande** fecha o guia e leva pro mesmo diagrama já aberto na visão
+*Fluxos (diagramas)*.
+
+O passo 2 é onde a pessoa se identifica — escolhe o time e digita o nome, que já
+cai no campo *Testando como* do topo. Fechar o guia de qualquer jeito (pelo ✕,
+pelo *Pular o guia* ou pelo Esc) marca `fluxoc_guia_visto` no `localStorage`, e o
+guia não aparece de novo sozinho. Pra reabrir: botão **Como usar**, no topo da
+tela, a qualquer momento.
+
+Quem já usava o console (time gravado no navegador) não é interrompido — continua
+caindo direto na tela, como antes.
+
+## Entrar não tem senha
+
+Escolher o time (**LP Digital** ou **Faiston**) é identificação, não login: define
+de quem são as *Novidades* e quais abas aparecem (Agenda, Todo e Técnicos são do
+time Faiston). Não existe senha em nenhum dos dois — quem tem o link, entra.
+
+A senha que a Faiston pedia (`FAISTON_SENHA` + `POST /api/perfil/entrar`) foi
+removida: atrapalhava mais do que protegia, já que o link em si nunca foi
+secreto. O `MCP_TOKEN` da telinha `/mcp-login` é outra coisa e continua valendo —
+ele protege o conector MCP, não a tela.
+
 ## Colar print (Ctrl+V)
 
 Print é a evidência mais rápida de anexar e a mais difícil de contestar, então dá

@@ -136,17 +136,112 @@ h1,h2,h3 { font-family:'Roboto Slab',serif; }
 .perfil-choice-name { font-family:'Roboto Slab',serif; font-size:16px; font-weight:700; color:var(--text); }
 .perfil-choice-sub { font-size:11.5px; color:var(--text-3); }
 
-.perfil-senha { width:100%; margin-top:10px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-.perfil-senha input {
-  flex:1; min-width:160px; padding:9px 12px; border-radius:var(--radius); border:1px solid var(--line-2);
-  background:var(--surface-2); color:var(--text); font-family:'Roboto',sans-serif; font-size:13.5px;
+.perfil-choice.escolhido { border-color:var(--f-blue); box-shadow:0 0 0 3px rgba(0,84,236,.12); }
+.perfil-guia-link { margin-top:14px; font-size:12px; color:var(--text-3); }
+
+/* botão de texto, sem caixa — usado nos atalhos pro guia */
+.linkish {
+  border:none; background:none; padding:0; cursor:pointer; font-family:'Roboto',sans-serif;
+  font-size:inherit; font-weight:600; color:var(--f-blue); text-decoration:underline;
+  text-underline-offset:2px;
 }
-.perfil-senha input:focus { outline:none; border-color:var(--f-blue); }
-.perfil-senha button {
-  padding:9px 16px; border-radius:var(--radius); border:none; background:var(--f-blue); color:#fff;
-  font-family:'Roboto',sans-serif; font-weight:600; font-size:13.5px; cursor:pointer;
+.linkish:hover { color:var(--f-blue-dark); }
+
+/* ---------- guia "como usar o sistema" ---------- */
+.guia-btn {
+  display:inline-flex; align-items:center; gap:6px; margin-left:auto;
+  border:1px solid var(--line-2); background:var(--surface-2); color:var(--text-2);
+  border-radius:999px; padding:7px 14px; font-family:'Roboto',sans-serif;
+  font-size:12.5px; font-weight:600; cursor:pointer;
+  transition:border-color .15s var(--ease), box-shadow .15s var(--ease), color .15s var(--ease);
 }
-.perfil-senha-erro { width:100%; margin:0; color:var(--f-magenta); font-size:11.5px; }
+.guia-btn:hover { border-color:var(--f-blue); color:var(--f-blue); box-shadow:0 0 0 3px rgba(0,84,236,.10); }
+.guia-card { max-width:860px; display:flex; flex-direction:column; max-height:calc(100vh - 80px); }
+.guia-passo {
+  font-family:'Roboto Mono',monospace; font-size:11px; font-weight:600; color:var(--f-blue);
+  background:rgba(0,84,236,.08); border:1px solid rgba(0,84,236,.20); border-radius:999px; padding:2px 9px;
+}
+.guia-trilha {
+  display:flex; gap:6px; overflow-x:auto; padding:12px 22px; border-bottom:1px solid var(--line);
+  background:var(--surface-2);
+}
+.guia-trilha-item {
+  display:flex; align-items:center; gap:7px; flex-shrink:0; cursor:pointer;
+  border:1px solid var(--line-2); background:var(--surface); border-radius:999px; padding:5px 12px 5px 5px;
+  font-family:'Roboto',sans-serif; font-size:11.5px; font-weight:500; color:var(--text-3);
+  transition:border-color .15s var(--ease), color .15s var(--ease);
+}
+.guia-trilha-item:hover { border-color:var(--f-blue); color:var(--text-2); }
+.guia-trilha-n {
+  width:20px; height:20px; border-radius:50%; display:grid; place-items:center; flex-shrink:0;
+  background:var(--surface-3); color:var(--text-3); font-size:10.5px; font-weight:700;
+}
+.guia-trilha-item.feito .guia-trilha-n { background:rgba(13,157,108,.14); color:var(--ok); }
+.guia-trilha-item.active { border-color:transparent; background:var(--grad-primary); color:#fff; }
+.guia-trilha-item.active .guia-trilha-n { background:rgba(255,255,255,.22); color:#fff; }
+.guia-body { overflow-y:auto; gap:12px; }
+.guia-lead { font-size:14.5px; color:var(--text-2); line-height:1.65; }
+.guia-nota { font-size:12.5px; color:var(--text-3); line-height:1.6; }
+.guia-lista { display:flex; flex-direction:column; gap:8px; padding-left:18px; margin:0; }
+.guia-lista li { font-size:13px; color:var(--text-2); line-height:1.6; }
+.guia-passos { display:flex; flex-direction:column; gap:9px; padding-left:20px; margin:0; }
+.guia-passos li { font-size:13.5px; color:var(--text-2); line-height:1.6; }
+.guia-kbd {
+  font-family:'Roboto Mono',monospace; font-size:11px; font-weight:600; color:var(--text-2);
+  background:var(--surface-2); border:1px solid var(--line-2); border-bottom-width:2px;
+  border-radius:5px; padding:1px 6px;
+}
+.guia-cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
+.guia-card-item {
+  background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius);
+  padding:14px; display:flex; flex-direction:column; gap:7px;
+}
+.guia-card-tag {
+  align-self:flex-start; font-size:10px; font-weight:700; letter-spacing:.5px; text-transform:uppercase;
+  color:var(--f-blue); background:rgba(0,84,236,.08); border:1px solid rgba(0,84,236,.20);
+  border-radius:999px; padding:2px 9px;
+}
+.guia-card-item p { font-size:12.5px; color:var(--text-2); line-height:1.6; }
+.guia-perfis { display:flex; gap:12px; flex-wrap:wrap; }
+.guia-nome { max-width:340px; }
+.guia-diagramas { display:flex; gap:8px; flex-wrap:wrap; }
+.guia-diagrama-chip {
+  cursor:pointer; text-align:left; display:flex; flex-direction:column; gap:2px;
+  border:1px solid var(--line-2); background:var(--surface-2); border-radius:var(--radius);
+  padding:9px 13px; font-family:'Roboto',sans-serif;
+  transition:border-color .15s var(--ease), box-shadow .15s var(--ease);
+}
+.guia-diagrama-chip:hover { border-color:var(--f-blue); }
+.guia-diagrama-chip.active { border-color:var(--f-blue); box-shadow:0 0 0 3px rgba(0,84,236,.12); background:var(--surface); }
+.guia-diagrama-fluxo { font-size:9.5px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--text-3); }
+.guia-diagrama-kind { font-size:11px; font-weight:700; color:var(--f-blue); }
+.guia-diagrama-kind.k-atual { color:var(--f-magenta); }
+.guia-diagrama-titulo { font-size:11.5px; color:var(--text-2); }
+.guia-diagrama-desc { font-size:12.5px; color:var(--text-3); line-height:1.6; }
+.guia-diagrama-canvas {
+  background:
+    linear-gradient(var(--surface-2), var(--surface-2)) padding-box,
+    radial-gradient(circle at 1px 1px, rgba(24,26,50,.06) 1px, transparent 0) padding-box;
+  background-size:auto, 18px 18px;
+  border:1px solid var(--line); border-radius:var(--radius);
+  padding:12px; text-align:center; min-height:180px; flex-shrink:0;
+}
+.guia-abrir-fluxos { align-self:flex-start; padding:8px 14px; font-size:12.5px; }
+/* altura fixa + viewBox do Mermaid = o desenho inteiro cabe na caixa, sem rolar */
+.guia-diagrama-canvas svg { width:100%; height:38vh; max-width:100%; display:block; margin:0 auto; }
+.guia-diagrama-canvas .diagram-error {
+  color:var(--bad); font-size:12.5px; font-family:'Roboto Mono',monospace; text-align:left; white-space:pre-wrap;
+}
+.guia-foot {
+  display:flex; align-items:center; gap:12px; padding:14px 22px; border-top:1px solid var(--line);
+  background:var(--surface-2);
+}
+.guia-foot-acoes { margin-left:auto; display:flex; gap:10px; }
+.guia-foot .btn-ghost:disabled { opacity:.45; cursor:default; }
+@media (max-width:640px) {
+  .guia-trilha-t { display:none; }
+  .guia-trilha-item { padding:5px; }
+}
 
 /* ---------- main layout ---------- */
 main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
