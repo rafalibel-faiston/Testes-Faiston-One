@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.sql import func
 
-from .. import models, schemas
+from .. import models, niveis, schemas
 from ..activity import log as log_activity, snippet, normaliza_cor
 from ..database import get_db
 
@@ -15,7 +15,9 @@ router = APIRouter(tags=["cases"])
 
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8MB por print
 ALLOWED_CONTENT_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"}
-VALID_STATUSES = {"Não testado", "Aprovado", "Reprovado", "Bloqueado", "N/A"}
+# os status gravaveis valem pra CADA nível de teste (meu teste / operação) —
+# o consolidado é derivado, nunca gravado (ver app/niveis.py)
+VALID_STATUSES = niveis.VALID_STATUSES
 # campos descritivos que, ao serem editados, tornam o caso "do usuário"
 DESCRIPTIVE_FIELDS = {
     "fluxo", "grupo", "estagio", "frente", "tipo", "prioridade",
@@ -137,16 +139,41 @@ def get_case(code: str, db: Session = Depends(get_db)):
 @router.patch("/cases/{code}", response_model=schemas.TestCaseOut)
 def update_case(code: str, payload: schemas.TestCaseUpdate, db: Session = Depends(get_db)):
     case = _get_case_or_404(db, code)
-    old_status = case.status
+    old_geral = case.status_geral
+    mudancas = []   # (nível, status novo, quem testou) — pra trilha de atividade
+
+    # nível interno: o meu teste
     if payload.status is not None:
         if payload.status not in VALID_STATUSES:
             raise HTTPException(status_code=400, detail=f"Status inválido: {payload.status}")
+        if payload.status != case.status:
+            mudancas.append((niveis.NIVEL_INTERNO, payload.status,
+                             payload.testado_por or case.testado_por))
+            # a data do teste é de quem rodou, não do último toque no registro
+            case.testado_em = func.now() if payload.status != niveis.NAO_TESTADO else None
         case.status = payload.status
     if payload.testado_por is not None:
         case.testado_por = payload.testado_por
     # dado de execução — do testador, não é "conteúdo do caso" (não vira user_managed)
     if payload.chamado is not None:
         case.chamado = payload.chamado
+
+    # nível operação: o mesmo caso rodado por quem opera
+    if payload.status_operacao is not None:
+        if payload.status_operacao not in VALID_STATUSES:
+            raise HTTPException(status_code=400,
+                                detail=f"Status inválido: {payload.status_operacao}")
+        if payload.status_operacao != case.status_operacao:
+            mudancas.append((niveis.NIVEL_OPERACAO, payload.status_operacao,
+                             payload.testado_por_operacao or case.testado_por_operacao))
+            case.testado_em_operacao = (
+                func.now() if payload.status_operacao != niveis.NAO_TESTADO else None
+            )
+        case.status_operacao = payload.status_operacao
+    if payload.testado_por_operacao is not None:
+        case.testado_por_operacao = payload.testado_por_operacao
+    if payload.chamado_operacao is not None:
+        case.chamado_operacao = payload.chamado_operacao
 
     # edição de campos descritivos → o caso passa a ser "do usuário"
     data = payload.model_dump(exclude_unset=True)
@@ -160,9 +187,16 @@ def update_case(code: str, payload: schemas.TestCaseUpdate, db: Session = Depend
     if touched_descriptive:
         case.user_managed = True
 
-    if payload.status is not None and payload.status != old_status:
-        log_activity(db, case.fluxo, "status", f"{case.code} mudou para {payload.status}",
-                     autor=payload.testado_por or case.testado_por, case_code=case.code)
+    for nivel, status_novo, autor in mudancas:
+        log_activity(db, case.fluxo, "status",
+                     f"{case.code} · {niveis.NIVEL_LABEL[nivel]} mudou para {status_novo}",
+                     autor=autor, case_code=case.code)
+    # o consolidado virando outra coisa é o que interessa pra reunião — por isso
+    # entra na trilha como uma linha própria, separada da mudança de nível
+    novo_geral = niveis.status_geral(case.status, case.status_operacao)
+    if mudancas and novo_geral != old_geral:
+        log_activity(db, case.fluxo, "status", f"{case.code} agora está {novo_geral}",
+                     case_code=case.code)
     if touched_descriptive:
         log_activity(db, case.fluxo, "teste", f"Teste {case.code} editado", case_code=case.code)
 
@@ -179,9 +213,14 @@ def add_observation(code: str, payload: schemas.ObservationCreate, db: Session =
     texto = (payload.texto or "").strip()
     if not texto:
         raise HTTPException(status_code=400, detail="Observação vazia.")
+    try:
+        nivel = niveis.normaliza_nivel(payload.nivel)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
     db.add(models.Observation(test_case_id=case.id, autor=payload.autor, texto=texto,
-                              cor=normaliza_cor(payload.cor)))
-    log_activity(db, case.fluxo, "obs", f'Observação em {case.code}: "{snippet(texto)}"',
+                              cor=normaliza_cor(payload.cor), nivel=nivel))
+    log_activity(db, case.fluxo, "obs",
+                 f'Observação ({niveis.NIVEL_LABEL[nivel]}) em {case.code}: "{snippet(texto)}"',
                  autor=payload.autor, case_code=case.code)
     db.commit()
     db.refresh(case)
@@ -296,13 +335,33 @@ def delete_screenshot(screenshot_id: int, db: Session = Depends(get_db)):
 
 @router.get("/summary", response_model=schemas.SummaryOut)
 def summary(db: Session = Depends(get_db)):
-    from sqlalchemy import func
+    """Resumo em três leituras: o consolidado (o que vale pra fora) e cada
+    nível separado — dá pra ver de um olho só o que já passou comigo e ainda
+    não foi validado na operação."""
+    cases = db.query(models.TestCase.status, models.TestCase.status_operacao).all()
+    total = len(cases)
 
-    total = db.query(models.TestCase).count()
-    counts = {s: 0 for s in VALID_STATUSES}
-    rows = db.query(models.TestCase.status, func.count(models.TestCase.id)).group_by(models.TestCase.status).all()
-    for status, qtd in rows:
-        counts[status] = counts.get(status, 0) + qtd
-    executado = total - counts.get("Não testado", 0)
-    pct = round((executado / total) * 100, 1) if total else 0.0
-    return schemas.SummaryOut(total=total, counts=counts, pct_executado=pct)
+    counts = {s: 0 for s in niveis.STATUSES_GERAIS}
+    counts_interno = {s: 0 for s in niveis.VALID_STATUSES}
+    counts_operacao = {s: 0 for s in niveis.VALID_STATUSES}
+    executado = 0
+    for interno, operacao in cases:
+        geral = niveis.status_geral(interno, operacao)
+        counts[geral] = counts.get(geral, 0) + 1
+        counts_interno[interno] = counts_interno.get(interno, 0) + 1
+        counts_operacao[operacao] = counts_operacao.get(operacao, 0) + 1
+        if niveis.executado(interno, operacao):
+            executado += 1
+
+    def pct(qtd):
+        return round((qtd / total) * 100, 1) if total else 0.0
+
+    return schemas.SummaryOut(
+        total=total,
+        counts=counts,
+        pct_executado=pct(executado),
+        counts_interno=counts_interno,
+        counts_operacao=counts_operacao,
+        pct_executado_interno=pct(total - counts_interno.get(niveis.NAO_TESTADO, 0)),
+        pct_executado_operacao=pct(total - counts_operacao.get(niveis.NAO_TESTADO, 0)),
+    )

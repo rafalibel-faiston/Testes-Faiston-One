@@ -6,6 +6,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func, expression
 
 from .database import Base
+from . import niveis
 
 
 class TestCase(Base):
@@ -27,16 +28,30 @@ class TestCase(Base):
     # texto original do "problema encontrado" (planilha-mãe do projeto), quando existe —
     # usado na exportação Excel pra reproduzir o formato original com o status atualizado.
     problema_encontrado = Column(Text, nullable=True)
+    # NÍVEL INTERNO — o meu teste (ver app/niveis.py)
     status = Column(String, nullable=False, default="Não testado")
     observacao = Column(Text, nullable=True, default="")
     testado_por = Column(String, nullable=True)
+    testado_em = Column(DateTime(timezone=True), nullable=True)
     chamado = Column(String, nullable=True)     # chamado testado
+    # NÍVEL OPERAÇÃO — o mesmo caso rodado por quem opera de verdade. Vive
+    # separado de propósito: passar comigo não é passar na operação.
+    status_operacao = Column(String, nullable=False, default="Não testado",
+                             server_default="Não testado")
+    testado_por_operacao = Column(String, nullable=True)
+    testado_em_operacao = Column(DateTime(timezone=True), nullable=True)
+    chamado_operacao = Column(String, nullable=True)
     # active=False é exclusão suave (some da tela, não ressuscita no deploy, recuperável).
     active = Column(Boolean, nullable=False, default=True, server_default=expression.true())
     # user_managed=True marca um caso que o usuário criou/editou na tela — o seed
     # NUNCA sobrescreve os textos desse caso num redeploy.
     user_managed = Column(Boolean, nullable=False, default=False, server_default=expression.false())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+    @property
+    def status_geral(self) -> str:
+        """O status que vale pra fora: só Aprovado com os dois níveis aprovados."""
+        return niveis.status_geral(self.status, self.status_operacao)
 
     screenshots = relationship(
         "Screenshot", back_populates="test_case", cascade="all, delete-orphan", order_by="Screenshot.id"
@@ -63,6 +78,8 @@ class Situacao(Base):
     # um único chamado testado vale pra situação inteira (todos os estágios são
     # passos do mesmo atendimento sendo percorrido, não atendimentos separados)
     chamado = Column(String, nullable=True)
+    # o chamado usado quando a operação percorreu a mesma situação
+    chamado_operacao = Column(String, nullable=True)
     # active=False é exclusão suave (some da tela, não ressuscita no deploy porque o
     # seed de situações só insere quando o code está totalmente ausente da tabela).
     active = Column(Boolean, nullable=False, default=True, server_default=expression.true())
@@ -89,9 +106,19 @@ class SituacaoEstagio(Base):
     frente = Column(String, nullable=False, default="Transversal")
     passos = Column(Text, nullable=True, default="")
     resultado_esperado = Column(Text, nullable=False)
+    # mesmos dois níveis do caso de teste (ver app/niveis.py)
     status = Column(String, nullable=False, default="Não testado")
     testado_por = Column(String, nullable=True)
+    testado_em = Column(DateTime(timezone=True), nullable=True)
+    status_operacao = Column(String, nullable=False, default="Não testado",
+                             server_default="Não testado")
+    testado_por_operacao = Column(String, nullable=True)
+    testado_em_operacao = Column(DateTime(timezone=True), nullable=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+    @property
+    def status_geral(self) -> str:
+        return niveis.status_geral(self.status, self.status_operacao)
 
     situacao = relationship("Situacao", back_populates="estagios")
     screenshots = relationship(
@@ -113,6 +140,9 @@ class SituacaoObservation(Base):
     # (problema, pendência). None é a observação normal, sem cor — o padrão de
     # quem só quer anotar algo.
     cor = Column(String, nullable=True)
+    # de qual nível de teste veio a observação: "interno" (meu teste) ou
+    # "operacao" (o teste na operação) — o padrão das antigas é interno.
+    nivel = Column(String, nullable=False, default="interno", server_default="interno")
     # quem atualizou o texto pela última vez e quando — o texto original (e cada
     # versão intermediária) fica guardado em `revisions`, nada se perde na edição.
     editado_por = Column(String, nullable=True)
@@ -530,6 +560,9 @@ class Observation(Base):
     # (problema, pendência). None é a observação normal, sem cor — o padrão de
     # quem só quer anotar algo.
     cor = Column(String, nullable=True)
+    # de qual nível de teste veio a observação: "interno" (meu teste) ou
+    # "operacao" (o teste na operação) — o padrão das antigas é interno.
+    nivel = Column(String, nullable=False, default="interno", server_default="interno")
     # a observação pode ser atualizada quando o ponto evolui (foi ajustado, mudou
     # de entendimento, ganhou detalhe). `texto` é sempre a versão vigente; quem
     # atualizou e quando ficam aqui, e o que estava escrito antes vira uma linha

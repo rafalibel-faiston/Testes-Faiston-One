@@ -148,8 +148,10 @@
 
   <section class="hero">
     <div class="stat-strip" id="stat-strip" role="group" aria-label="Filtrar por status">
-      <button type="button" class="stat" data-k="Não testado" title="Filtrar: Não testado"><span class="stat-n" id="stat-nt">0</span><span class="stat-l">Não testado</span></button>
-      <button type="button" class="stat ok" data-k="Aprovado" title="Filtrar: Aprovado"><span class="stat-n" id="stat-ok">0</span><span class="stat-l">Aprovado</span></button>
+      <button type="button" class="stat" data-k="Não testado" title="Filtrar: nenhum dos dois níveis testado"><span class="stat-n" id="stat-nt">0</span><span class="stat-l">Não testado</span></button>
+      <button type="button" class="stat part" data-k="Validação interna" title="Filtrar: passou no meu teste, a operação ainda não validou"><span class="stat-n" id="stat-falta-op">0</span><span class="stat-l">Falta a operação</span></button>
+      <button type="button" class="stat part" data-k="Validação operação" title="Filtrar: passou na operação, falta o meu teste"><span class="stat-n" id="stat-falta-meu">0</span><span class="stat-l">Falta o meu teste</span></button>
+      <button type="button" class="stat ok" data-k="Aprovado" title="Filtrar: aprovado nos dois níveis"><span class="stat-n" id="stat-ok">0</span><span class="stat-l">Aprovado</span></button>
       <button type="button" class="stat bad" data-k="Reprovado" title="Filtrar: Reprovado"><span class="stat-n" id="stat-bad">0</span><span class="stat-l">Reprovado</span></button>
       <button type="button" class="stat warn" data-k="Bloqueado" title="Filtrar: Bloqueado"><span class="stat-n" id="stat-warn">0</span><span class="stat-l">Bloqueado</span></button>
       <button type="button" class="stat na" data-k="N/A" title="Filtrar: N/A"><span class="stat-n" id="stat-na">0</span><span class="stat-l">N/A</span></button>
@@ -271,8 +273,10 @@
     </section>
 
     <div class="stat-strip" id="sit-stat-strip" role="group" aria-label="Filtrar estágios por status">
-      <button type="button" class="stat" data-k="Não testado" title="Filtrar: Não testado"><span class="stat-n" id="sit-stat-nt">0</span><span class="stat-l">Não testado</span></button>
-      <button type="button" class="stat ok" data-k="Aprovado" title="Filtrar: Aprovado"><span class="stat-n" id="sit-stat-ok">0</span><span class="stat-l">Aprovado</span></button>
+      <button type="button" class="stat" data-k="Não testado" title="Filtrar: nenhum dos dois níveis testado"><span class="stat-n" id="sit-stat-nt">0</span><span class="stat-l">Não testado</span></button>
+      <button type="button" class="stat part" data-k="Validação interna" title="Filtrar: passou no meu teste, a operação ainda não validou"><span class="stat-n" id="sit-stat-falta-op">0</span><span class="stat-l">Falta a operação</span></button>
+      <button type="button" class="stat part" data-k="Validação operação" title="Filtrar: passou na operação, falta o meu teste"><span class="stat-n" id="sit-stat-falta-meu">0</span><span class="stat-l">Falta o meu teste</span></button>
+      <button type="button" class="stat ok" data-k="Aprovado" title="Filtrar: aprovado nos dois níveis"><span class="stat-n" id="sit-stat-ok">0</span><span class="stat-l">Aprovado</span></button>
       <button type="button" class="stat bad" data-k="Reprovado" title="Filtrar: Reprovado"><span class="stat-n" id="sit-stat-bad">0</span><span class="stat-l">Reprovado</span></button>
       <button type="button" class="stat warn" data-k="Bloqueado" title="Filtrar: Bloqueado"><span class="stat-n" id="sit-stat-warn">0</span><span class="stat-l">Bloqueado</span></button>
       <button type="button" class="stat na" data-k="N/A" title="Filtrar: N/A"><span class="stat-n" id="sit-stat-na">0</span><span class="stat-l">N/A</span></button>

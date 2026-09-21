@@ -350,6 +350,22 @@ def migrate_schema(engine):
             stmts.append("ALTER TABLE test_cases ADD COLUMN chamado VARCHAR")
         if "problema_encontrado" not in cols:
             stmts.append("ALTER TABLE test_cases ADD COLUMN problema_encontrado TEXT")
+        # nível operação: o mesmo caso rodado por quem opera (ver app/niveis.py).
+        # Os casos que já existiam entram como "Não testado" na operação — o que
+        # estava gravado em `status` continua sendo o meu teste, nada se perde.
+        if "status_operacao" not in cols:
+            stmts.append("ALTER TABLE test_cases ADD COLUMN status_operacao VARCHAR "
+                         "NOT NULL DEFAULT 'Não testado'")
+        if "testado_por_operacao" not in cols:
+            stmts.append("ALTER TABLE test_cases ADD COLUMN testado_por_operacao VARCHAR")
+        if "testado_em_operacao" not in cols:
+            stmts.append("ALTER TABLE test_cases ADD COLUMN testado_em_operacao "
+                         + ("TIMESTAMP WITH TIME ZONE" if pg else "TIMESTAMP"))
+        if "chamado_operacao" not in cols:
+            stmts.append("ALTER TABLE test_cases ADD COLUMN chamado_operacao VARCHAR")
+        if "testado_em" not in cols:
+            stmts.append("ALTER TABLE test_cases ADD COLUMN testado_em "
+                         + ("TIMESTAMP WITH TIME ZONE" if pg else "TIMESTAMP"))
 
     if "meeting_notes" in existing_tables:
         note_cols = {c["name"] for c in insp.get_columns("meeting_notes")}
@@ -386,6 +402,23 @@ def migrate_schema(engine):
         sit_cols = {c["name"] for c in insp.get_columns("situacoes")}
         if "chamado" not in sit_cols:
             stmts.append("ALTER TABLE situacoes ADD COLUMN chamado VARCHAR")
+        if "chamado_operacao" not in sit_cols:
+            stmts.append("ALTER TABLE situacoes ADD COLUMN chamado_operacao VARCHAR")
+
+    # os estágios das situações têm os mesmos dois níveis do caso de teste
+    if "situacao_estagios" in existing_tables:
+        est_cols = {c["name"] for c in insp.get_columns("situacao_estagios")}
+        if "status_operacao" not in est_cols:
+            stmts.append("ALTER TABLE situacao_estagios ADD COLUMN status_operacao VARCHAR "
+                         "NOT NULL DEFAULT 'Não testado'")
+        if "testado_por_operacao" not in est_cols:
+            stmts.append("ALTER TABLE situacao_estagios ADD COLUMN testado_por_operacao VARCHAR")
+        if "testado_em_operacao" not in est_cols:
+            stmts.append("ALTER TABLE situacao_estagios ADD COLUMN testado_em_operacao "
+                         + ("TIMESTAMP WITH TIME ZONE" if pg else "TIMESTAMP"))
+        if "testado_em" not in est_cols:
+            stmts.append("ALTER TABLE situacao_estagios ADD COLUMN testado_em "
+                         + ("TIMESTAMP WITH TIME ZONE" if pg else "TIMESTAMP"))
 
     # trilha das observações: quem atualizou o texto e quando (o texto anterior
     # vai pras tabelas *_observation_revisions, criadas pelo create_all)
@@ -405,6 +438,14 @@ def migrate_schema(engine):
         if tabela in existing_tables:
             if "cor" not in {c["name"] for c in insp.get_columns(tabela)}:
                 stmts.append(f"ALTER TABLE {tabela} ADD COLUMN cor VARCHAR")
+
+    # de qual nível de teste a observação veio — as que já existem são do
+    # nível interno, que era o único até aqui
+    for tabela in ("observations", "situacao_observations"):
+        if tabela in existing_tables:
+            if "nivel" not in {c["name"] for c in insp.get_columns(tabela)}:
+                stmts.append(f"ALTER TABLE {tabela} ADD COLUMN nivel VARCHAR "
+                             "NOT NULL DEFAULT 'interno'")
 
     # formulário de feedback do técnico (link por token) + o que ele respondeu
     if "tecnicos" in existing_tables:

@@ -12,7 +12,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from sqlalchemy.orm import Session, selectinload
 
-from .. import models
+from .. import models, niveis
 from ..database import get_db
 
 router = APIRouter(tags=["export"])
@@ -96,25 +96,33 @@ def export_completo(db: Session = Depends(get_db)):
     _add_sheet(
         wb, "Casos de teste",
         ["Fluxo", "Código", "Grupo", "Estágio", "Nº", "Frente", "Tipo", "Prioridade", "Origem",
-         "Status", "Testado por", "Chamado", "Pré-condição", "Passos", "Resultado esperado",
+         "Status (consolidado)",
+         "Meu teste", "Testado por", "Testado em", "Chamado",
+         "Operação", "Testado por (operação)", "Testado em (operação)", "Chamado (operação)",
+         "Pré-condição", "Passos", "Resultado esperado",
          "Problema encontrado", "Qtd. observações", "Qtd. prints", "Ativo", "Atualizado em"],
         [
             [c.fluxo, c.code, c.grupo, c.estagio, c.estagio_num, c.frente, c.tipo, c.prioridade, c.origem,
-             c.status, c.testado_por, c.chamado, c.pre_condicao, c.passos, c.resultado_esperado,
+             c.status_geral,
+             c.status, c.testado_por, _dt(c.testado_em), c.chamado,
+             c.status_operacao, c.testado_por_operacao, _dt(c.testado_em_operacao), c.chamado_operacao,
+             c.pre_condicao, c.passos, c.resultado_esperado,
              c.problema_encontrado, len(c.observations), len(c.screenshots), _bool(c.active), _dt(c.updated_at)]
             for c in cases
         ],
-        [8, 10, 12, 26, 5, 16, 10, 10, 16, 12, 14, 12, 30, 34, 34, 30, 8, 8, 8, 16],
+        [8, 10, 12, 26, 5, 16, 10, 10, 16, 18, 12, 14, 16, 12, 12, 18, 16, 14,
+         30, 34, 34, 30, 8, 8, 8, 16],
     )
 
     obs_rows = []
     for c in cases:
         for o in c.observations:
-            obs_rows.append([c.code, o.autor, o.texto, o.cor or "", o.editado_por, _dt(o.editado_em), _dt(o.created_at)])
+            obs_rows.append([c.code, niveis.NIVEL_LABEL.get(o.nivel, o.nivel), o.autor, o.texto,
+                             o.cor or "", o.editado_por, _dt(o.editado_em), _dt(o.created_at)])
     _add_sheet(
         wb, "Observações (casos)",
-        ["Caso", "Autor", "Texto", "Cor", "Editado por", "Editado em", "Criado em"],
-        obs_rows, [10, 16, 46, 10, 16, 16, 16],
+        ["Caso", "Nível", "Autor", "Texto", "Cor", "Editado por", "Editado em", "Criado em"],
+        obs_rows, [10, 12, 16, 46, 10, 16, 16, 16],
     )
 
     # ---------------- situações ----------------
@@ -126,31 +134,40 @@ def export_completo(db: Session = Depends(get_db)):
     )
     _add_sheet(
         wb, "Situações",
-        ["Fluxo", "Código", "Título", "Descrição", "Origem", "Chamado", "Ativo", "Atualizado em"],
+        ["Fluxo", "Código", "Título", "Descrição", "Origem", "Chamado", "Chamado (operação)",
+         "Ativo", "Atualizado em"],
         [
-            [s.fluxo, s.code, s.titulo, s.descricao, s.origem, s.chamado, _bool(s.active), _dt(s.updated_at)]
+            [s.fluxo, s.code, s.titulo, s.descricao, s.origem, s.chamado, s.chamado_operacao,
+             _bool(s.active), _dt(s.updated_at)]
             for s in situacoes
         ],
-        [8, 10, 28, 40, 20, 14, 8, 16],
+        [8, 10, 28, 40, 20, 14, 16, 8, 16],
     )
 
     estagio_rows, sit_obs_rows = [], []
     for s in situacoes:
         for e in s.estagios:
             estagio_rows.append([s.code, e.ordem, e.nome, e.frente, e.passos, e.resultado_esperado,
-                                  e.status, e.testado_por, _dt(e.updated_at)])
+                                  e.status_geral,
+                                  e.status, e.testado_por, _dt(e.testado_em),
+                                  e.status_operacao, e.testado_por_operacao, _dt(e.testado_em_operacao),
+                                  _dt(e.updated_at)])
             for o in e.observations:
-                sit_obs_rows.append([s.code, e.nome, o.autor, o.texto, o.cor or "", o.editado_por,
+                sit_obs_rows.append([s.code, e.nome, niveis.NIVEL_LABEL.get(o.nivel, o.nivel),
+                                      o.autor, o.texto, o.cor or "", o.editado_por,
                                       _dt(o.editado_em), _dt(o.created_at)])
     _add_sheet(
         wb, "Estágios das situações",
-        ["Situação", "Ordem", "Nome", "Frente", "Passos", "Resultado esperado", "Status", "Testado por", "Atualizado em"],
-        estagio_rows, [10, 8, 24, 16, 34, 34, 12, 14, 16],
+        ["Situação", "Ordem", "Nome", "Frente", "Passos", "Resultado esperado",
+         "Status (consolidado)",
+         "Meu teste", "Testado por", "Testado em",
+         "Operação", "Testado por (operação)", "Testado em (operação)", "Atualizado em"],
+        estagio_rows, [10, 8, 24, 16, 34, 34, 18, 12, 14, 16, 12, 18, 16, 16],
     )
     _add_sheet(
         wb, "Observações (situações)",
-        ["Situação", "Estágio", "Autor", "Texto", "Cor", "Editado por", "Editado em", "Criado em"],
-        sit_obs_rows, [10, 24, 16, 46, 10, 16, 16, 16],
+        ["Situação", "Estágio", "Nível", "Autor", "Texto", "Cor", "Editado por", "Editado em", "Criado em"],
+        sit_obs_rows, [10, 24, 12, 16, 46, 10, 16, 16, 16],
     )
 
     # ---------------- ajustes de ativos ----------------

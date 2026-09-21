@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session, joinedload
 
-from .. import models, schemas
+from .. import models, niveis, schemas
 from ..database import get_db
 from ..relatorio import montar_html
 
@@ -128,11 +128,15 @@ def _coletar(db: Session, fluxo: Optional[str]) -> dict:
         .all()
     )
 
+    # a pauta conta pelo status consolidado dos dois níveis (ver app/niveis.py)
     counts: dict = {}
+    executado = 0
     for c in casos:
-        counts[c.status] = counts.get(c.status, 0) + 1
+        geral = c.status_geral
+        counts[geral] = counts.get(geral, 0) + 1
+        if niveis.executado(c.status, c.status_operacao):
+            executado += 1
     total = len(casos)
-    executado = total - counts.get("Não testado", 0)
 
     return {
         "cases": _dump(schemas.TestCaseOut, casos),

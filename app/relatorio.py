@@ -16,8 +16,13 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 # Status de caso de teste que contam como resolvido — o resto entra na pauta.
+# Leia-se sempre o status CONSOLIDADO (`status_geral`): um caso que passou só
+# comigo e ainda não foi validado na operação continua na pauta, porque é
+# exatamente esse o ponto cego que a reunião precisa ver (ver app/niveis.py).
 STATUS_OK = {"Aprovado", "N/A"}
 STATUS_PROBLEMA = {"Reprovado", "Bloqueado"}
+# passou num nível e falta o outro
+STATUS_PARCIAL = {"Validação interna", "Validação operação"}
 
 # Ajuste da Gestão de Ativos: só sai da pauta quando validado (ou descartado).
 AJUSTE_FECHADO = {"validado", "descartado"}
@@ -37,21 +42,40 @@ AJUSTE_BADGE = {
 }
 PRIORIDADE_ORDEM = {"Alta": 0, "Média": 1, "Media": 1, "Baixa": 2}
 PRIORIDADE_BADGE = {"Alta": "b-alert", "Média": "b-warn", "Media": "b-warn", "Baixa": "b-neutral"}
-STATUS_BADGE = {"Reprovado": "b-alert", "Bloqueado": "b-warn", "Não testado": "b-neutral"}
+STATUS_BADGE = {"Reprovado": "b-alert", "Bloqueado": "b-warn", "Não testado": "b-neutral",
+                "Validação interna": "b-info", "Validação operação": "b-info"}
 
 # Cores da barra de status. Verde/vermelho/roxo passam no separador de daltonismo
 # (o magenta da marca ficava perto demais do vermelho pra distinguir); os dois
 # últimos são neutros de propósito — "sem resultado ainda" não é uma cor de dado.
 # Cada faixa vem com rótulo e contagem na legenda, nunca só a cor.
-STATUS_ORDEM = ["Aprovado", "Reprovado", "Bloqueado", "N/A", "Não testado"]
+STATUS_ORDEM = ["Aprovado", "Validação interna", "Validação operação",
+                "Reprovado", "Bloqueado", "N/A", "Não testado"]
 STATUS_COR = {
     "Aprovado": "#04795c",
+    # os dois parciais são azuis: "está andando", nem sucesso nem falha
+    "Validação interna": "#1b5fa8",
+    "Validação operação": "#4a7fc1",
     "Reprovado": "#c02234",
     "Bloqueado": "#960a9c",
     "N/A": "#9aa2b8",
     "Não testado": "#d5dae9",
 }
 STATUS_COR_TEXTO = {"N/A": "#ffffff", "Não testado": "#3f4661"}
+
+
+def status_do(item: dict) -> str:
+    """O status que vale pra pauta: o consolidado dos dois níveis. Cai no
+    `status` puro só pra dado antigo, gerado antes dos níveis existirem."""
+    return item.get("status_geral") or item.get("status")
+
+
+def niveis_do(item: dict) -> str:
+    """Linha 'Meu teste: X · Operação: Y' — na reunião o que importa não é só
+    que o caso está pendente, é DE QUAL LADO ele está pendente."""
+    interno = item.get("status") or "Não testado"
+    operacao = item.get("status_operacao") or "Não testado"
+    return f"Meu teste: {interno} · Operação: {operacao}"
 
 BRT = timezone(timedelta(hours=-3))
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
@@ -225,13 +249,14 @@ def secao_reprovados(casos: list, situacoes: list, multi_fluxo: bool = False) ->
     ser ajustes diferentes sendo pedidos, não variações do mesmo comentário."""
     itens = []
     for c in casos:
-        if c.get("status") in STATUS_PROBLEMA:
+        if status_do(c) in STATUS_PROBLEMA:
             itens.append({
                 "chave": c.get("code"),
                 "fluxo": c.get("fluxo"),
                 "contexto": c.get("estagio"),
                 "titulo": c.get("resultado_esperado"),
-                "status": c.get("status"),
+                "status": status_do(c),
+                "niveis": niveis_do(c),
                 "prioridade": c.get("prioridade"),
                 "frente": c.get("frente"),
                 "problema": c.get("problema_encontrado"),
@@ -243,13 +268,14 @@ def secao_reprovados(casos: list, situacoes: list, multi_fluxo: bool = False) ->
             })
     for sit in situacoes:
         for x in (sit.get("estagios") or []):
-            if x.get("status") in STATUS_PROBLEMA:
+            if status_do(x) in STATUS_PROBLEMA:
                 itens.append({
                     "chave": sit.get("code"),
                     "fluxo": sit.get("fluxo"),
                     "contexto": x.get("nome"),
                     "titulo": x.get("resultado_esperado"),
-                    "status": x.get("status"),
+                    "status": status_do(x),
+                    "niveis": niveis_do(x),
                     "prioridade": None,
                     "frente": x.get("frente"),
                     "problema": None,
@@ -291,6 +317,7 @@ def secao_reprovados(casos: list, situacoes: list, multi_fluxo: bool = False) ->
             corpo += ('<div class="label-sec" style="margin:12px 0 4px">O que foi anotado</div>'
                       f'<ul class="anotacoes">{anotacoes}</ul>')
         rodape = " · ".join(filter(None, [
+            e(i["niveis"]),
             f'Testado por {e(i["quem"])}' if i["quem"] else "",
             f'Chamado {e(i["chamado"])}' if i["chamado"] else "",
         ]))
@@ -319,11 +346,11 @@ def secao_situacoes(situacoes: list, multi_fluxo: bool = False) -> str:
     blocos = ""
     for s in situacoes:
         estagios = s.get("estagios") or []
-        pendentes = [x for x in estagios if x.get("status") not in STATUS_OK]
+        pendentes = [x for x in estagios if status_do(x) not in STATUS_OK]
         if not pendentes:
             continue
-        problemas = [x for x in pendentes if x.get("status") in STATUS_PROBLEMA]
-        fila = [x for x in pendentes if x.get("status") not in STATUS_PROBLEMA]
+        problemas = [x for x in pendentes if status_do(x) in STATUS_PROBLEMA]
+        fila = [x for x in pendentes if status_do(x) not in STATUS_PROBLEMA]
         total = len(estagios)
         ok = total - len(pendentes)
         destaque = fila[:3]
@@ -333,7 +360,7 @@ def secao_situacoes(situacoes: list, multi_fluxo: bool = False) -> str:
             obs = ultima_obs(x)
             linhas += f"""
             <li>
-              <b>{e(x.get("nome"))}</b> {badge(x.get("status"), STATUS_BADGE.get(x.get("status"), "b-neutral"))}
+              <b>{e(x.get("nome"))}</b> {badge(status_do(x), STATUS_BADGE.get(status_do(x), "b-neutral"))}
               <div class="muted" style="font-size:13.5px">{e(x.get("resultado_esperado"))}</div>
               {f'<div style="font-size:13.5px;margin-top:4px">{obs}</div>' if obs else ""}
             </li>"""
@@ -477,7 +504,11 @@ def secao_piloto(piloto: dict) -> str:
 
 
 def secao_nao_executados(casos: list) -> str:
-    pendentes = [c for c in casos if c.get("status") == "Não testado"]
+    """O que ainda não fechou os dois níveis: nem rodado, ou rodado só de um
+    lado. Um caso aprovado por mim e nunca visto pela operação aparece aqui —
+    antes ele sumia da pauta como se estivesse pronto."""
+    pendentes = [c for c in casos
+                 if status_do(c) == "Não testado" or status_do(c) in STATUS_PARCIAL]
     if not pendentes:
         return ""
     por_estagio = {}
@@ -591,15 +622,18 @@ def montar_html(dados: dict, fonte: str, editavel: bool = False) -> str:
     fluxos = sorted({f for f in ({c.get("fluxo") for c in casos}
                                  | {s.get("fluxo") for s in situacoes}) if f})
     multi_fluxo = len(fluxos) > 1
-    reprovados = [c for c in casos if c.get("status") in STATUS_PROBLEMA] + [
+    reprovados = [c for c in casos if status_do(c) in STATUS_PROBLEMA] + [
         x for sit in situacoes for x in (sit.get("estagios") or [])
-        if x.get("status") in STATUS_PROBLEMA
+        if status_do(x) in STATUS_PROBLEMA
     ]
-    casos_pendentes = [c for c in casos if c.get("status") == "Não testado"]
+    casos_pendentes = [c for c in casos
+                       if status_do(c) == "Não testado" or status_do(c) in STATUS_PARCIAL]
+    # o ponto cego que motivou os dois níveis: passou comigo, a operação nunca viu
+    so_validacao_interna = [c for c in casos if status_do(c) == "Validação interna"]
     ajustes_abertos = [a for a in ajustes if a.get("status") not in AJUSTE_FECHADO]
     situacoes_pendentes = sum(
         1 for s in situacoes
-        if any(x.get("status") not in STATUS_OK for x in (s.get("estagios") or []))
+        if any(status_do(x) not in STATUS_OK for x in (s.get("estagios") or []))
     )
     pct = summary.get("pct_executado", 0) or 0
     aprovados = (summary.get("counts") or {}).get("Aprovado", 0)
@@ -616,13 +650,13 @@ def montar_html(dados: dict, fonte: str, editavel: bool = False) -> str:
         kpi("Pontos em aberto", len(pontos_abertos), "◆",
             f'{sum(1 for n in pontos_abertos if n.get("cobrado"))} já cobrados', "b-info" if pontos_abertos else ""),
         kpi("Reprovados / bloqueados", len(reprovados), "✕",
-            f'{sum(1 for c in reprovados if c.get("status") == "Reprovado")} reprovados',
+            f'{sum(1 for c in reprovados if status_do(c) == "Reprovado")} reprovados',
             "b-alert" if reprovados else "b-ok"),
         kpi("Ajustes em aberto", len(ajustes_abertos), "▤",
             f'{sum(1 for a in ajustes_abertos if a.get("tipo") == "Bug")} bugs',
             "b-warn" if ajustes_abertos else "b-ok"),
         kpi("Testes por executar", len(casos_pendentes), "○",
-            f"{len(casos)} no total", "b-neutral"),
+            f"{len(so_validacao_interna)} só esperando a operação", "b-neutral"),
     ])
 
     nav = "".join(
@@ -652,7 +686,8 @@ def montar_html(dados: dict, fonte: str, editavel: bool = False) -> str:
             secao_ajustes(ajustes, editavel), "ajustes"),
         sec("05", "Track One — piloto com os técnicos", "como está cada fase e o que os técnicos relataram",
             secao_piloto(piloto), "piloto"),
-        sec("06", "Testes ainda não executados", "fila de execução, agrupada por estágio",
+        sec("06", "Testes sem os dois níveis fechados",
+            "não executados e os que passaram num nível só — agrupados por estágio",
             secao_nao_executados(casos), "pendentes"),
     ])
 

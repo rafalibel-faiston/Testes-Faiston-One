@@ -30,7 +30,7 @@ from sqlalchemy.orm import joinedload
 
 from fastapi import HTTPException
 
-from . import models
+from . import models, niveis
 from .activity import log as log_activity, snippet, normaliza_cor
 from .database import SessionLocal
 from .routers.tecnicos import PAPEIS as TECNICO_PAPEIS
@@ -39,7 +39,8 @@ from .routers.tecnicos import TIPOS_OBS as TECNICO_TIPOS_OBS
 from .routers.tecnicos import _mensagem_para as mensagem_para_tecnico
 from .routers.tecnicos import _norm_telefone as norm_telefone_tecnico
 
-VALID_STATUSES = {"Não testado", "Aprovado", "Reprovado", "Bloqueado", "N/A"}
+# valem pra cada nível de teste; o consolidado é derivado (ver app/niveis.py)
+VALID_STATUSES = niveis.VALID_STATUSES
 TODO_STATUSES = {"a_fazer", "fazendo", "feito"}
 
 # URL pública do app (sem barra no final) — usada como issuer/resource do OAuth.
@@ -202,9 +203,14 @@ def _case_to_dict(case: models.TestCase) -> dict:
         "grupo": case.grupo,
         "estagio": case.estagio,
         "frente": case.frente,
-        "status": case.status,
+        # consolidado: só "Aprovado" quando os dois níveis passam
+        "status": case.status_geral,
+        "status_interno": case.status,
         "testado_por": case.testado_por,
         "chamado": case.chamado,
+        "status_operacao": case.status_operacao,
+        "testado_por_operacao": case.testado_por_operacao,
+        "chamado_operacao": case.chamado_operacao,
         "resultado_esperado": case.resultado_esperado,
         "observacoes": [
             {
@@ -213,6 +219,7 @@ def _case_to_dict(case: models.TestCase) -> dict:
                 "texto": o.texto,
                 # marcação de cor: "verde", "vermelho" ou None (sem cor)
                 "cor": o.cor,
+                "nivel": o.nivel,
                 "data": o.created_at.isoformat() if o.created_at else None,
                 "atualizada_por": o.editado_por,
                 "atualizada_em": o.editado_em.isoformat() if o.editado_em else None,
@@ -238,10 +245,16 @@ def listar_casos(
     status: Optional[str] = None,
     grupo: Optional[str] = None,
     frente: Optional[str] = None,
+    nivel: Optional[str] = None,
 ) -> list[dict]:
     """Lista os casos de teste do Fluxo C. Filtros opcionais por status
     (Não testado/Aprovado/Reprovado/Bloqueado/N/A), grupo (ex.: "Grupo A")
-    ou frente (ex.: "Operador (web)", "App do técnico")."""
+    ou frente (ex.: "Operador (web)", "App do técnico").
+
+    Cada caso tem DOIS status: "interno" (o meu teste) e "operacao" (o teste
+    de quem opera). `nivel` diz a qual deles o filtro de status se aplica —
+    padrão "interno". O campo "status" devolvido é sempre o consolidado: só
+    fica Aprovado quando os dois níveis passam."""
     db = SessionLocal()
     try:
         query = (
@@ -250,7 +263,13 @@ def listar_casos(
             .filter(models.TestCase.active.is_(True))
         )
         if status:
-            query = query.filter(models.TestCase.status == status)
+            try:
+                alvo = niveis.normaliza_nivel(nivel)
+            except ValueError as err:
+                return [{"erro": str(err)}]
+            coluna = (models.TestCase.status if alvo == niveis.NIVEL_INTERNO
+                      else models.TestCase.status_operacao)
+            query = query.filter(coluna == status)
         if grupo:
             query = query.filter(models.TestCase.grupo == grupo)
         if frente:
@@ -282,11 +301,21 @@ def obter_caso(code: str) -> dict:
 
 
 @mcp.tool()
-def atualizar_status_caso(code: str, status: str, testado_por: Optional[str] = None) -> dict:
-    """Atualiza o status de um caso de teste. Status válidos: Não testado,
-    Aprovado, Reprovado, Bloqueado, N/A."""
+def atualizar_status_caso(
+    code: str, status: str, testado_por: Optional[str] = None, nivel: Optional[str] = None,
+) -> dict:
+    """Atualiza o status de um caso de teste NUM DOS DOIS NÍVEIS. Status válidos:
+    Não testado, Aprovado, Reprovado, Bloqueado, N/A.
+
+    `nivel`: "interno" (o meu teste — padrão) ou "operacao" (o teste feito por
+    quem opera). O status consolidado do caso só vira Aprovado quando os dois
+    níveis estão aprovados."""
     if status not in VALID_STATUSES:
         return {"erro": f"Status inválido: {status}. Use um de {sorted(VALID_STATUSES)}"}
+    try:
+        alvo = niveis.normaliza_nivel(nivel)
+    except ValueError as err:
+        return {"erro": str(err)}
     db = SessionLocal()
     try:
         case = (
@@ -296,15 +325,33 @@ def atualizar_status_caso(code: str, status: str, testado_por: Optional[str] = N
         )
         if not case:
             return {"erro": f"Caso {code} não encontrado"}
-        old_status = case.status
-        case.status = status
-        if testado_por is not None:
-            case.testado_por = testado_por
+        old_geral = case.status_geral
+        if alvo == niveis.NIVEL_INTERNO:
+            old_status = case.status
+            case.status = status
+            if testado_por is not None:
+                case.testado_por = testado_por
+            if status != old_status:
+                case.testado_em = func.now() if status != niveis.NAO_TESTADO else None
+            autor = testado_por or case.testado_por
+        else:
+            old_status = case.status_operacao
+            case.status_operacao = status
+            if testado_por is not None:
+                case.testado_por_operacao = testado_por
+            if status != old_status:
+                case.testado_em_operacao = func.now() if status != niveis.NAO_TESTADO else None
+            autor = testado_por or case.testado_por_operacao
         if status != old_status:
             log_activity(
-                db, case.fluxo, "status", f"{case.code} mudou para {status}",
-                autor=testado_por or case.testado_por, case_code=case.code,
+                db, case.fluxo, "status",
+                f"{case.code} · {niveis.NIVEL_LABEL[alvo]} mudou para {status}",
+                autor=autor, case_code=case.code,
             )
+            novo_geral = niveis.status_geral(case.status, case.status_operacao)
+            if novo_geral != old_geral:
+                log_activity(db, case.fluxo, "status", f"{case.code} agora está {novo_geral}",
+                             case_code=case.code)
         db.commit()
         db.refresh(case)
         return _case_to_dict(case)
@@ -314,12 +361,16 @@ def atualizar_status_caso(code: str, status: str, testado_por: Optional[str] = N
 
 @mcp.tool()
 def adicionar_observacao(
-    code: str, texto: str, autor: Optional[str] = None, cor: Optional[str] = None
+    code: str, texto: str, autor: Optional[str] = None, cor: Optional[str] = None,
+    nivel: Optional[str] = None,
 ) -> dict:
     """Adiciona uma observação ao histórico de um caso de teste (não apaga as anteriores).
 
     `cor` marca a observação na tela: "verde" (deu certo, resolvido) ou
     "vermelho" (problema, pendência). Sem cor é a observação normal.
+
+    `nivel` diz de qual teste saiu a anotação: "interno" (o meu — padrão) ou
+    "operacao" (o teste de quem opera).
     """
     texto = (texto or "").strip()
     if not texto:
@@ -328,6 +379,10 @@ def adicionar_observacao(
         cor = normaliza_cor(cor)
     except HTTPException as err:
         return {"erro": err.detail}
+    try:
+        alvo = niveis.normaliza_nivel(nivel)
+    except ValueError as err:
+        return {"erro": str(err)}
     db = SessionLocal()
     try:
         case = (
@@ -337,9 +392,11 @@ def adicionar_observacao(
         )
         if not case:
             return {"erro": f"Caso {code} não encontrado"}
-        db.add(models.Observation(test_case_id=case.id, autor=autor, texto=texto, cor=cor))
+        db.add(models.Observation(test_case_id=case.id, autor=autor, texto=texto,
+                                  cor=cor, nivel=alvo))
         log_activity(
-            db, case.fluxo, "obs", f'Observação em {case.code}: "{snippet(texto)}"',
+            db, case.fluxo, "obs",
+            f'Observação ({niveis.NIVEL_LABEL[alvo]}) em {case.code}: "{snippet(texto)}"',
             autor=autor, case_code=case.code,
         )
         db.commit()
@@ -412,20 +469,41 @@ def atualizar_observacao(
 
 @mcp.tool()
 def resumo_execucao() -> dict:
-    """Retorna a contagem de casos de teste por status e o percentual executado do Fluxo C."""
+    """Contagem dos casos de teste do Fluxo C por status e percentual executado.
+
+    `counts` é o consolidado dos dois níveis (só Aprovado quando o meu teste E
+    o da operação passaram); `counts_interno` e `counts_operacao` mostram cada
+    nível separado."""
     db = SessionLocal()
     try:
-        total = db.query(models.TestCase).filter(models.TestCase.active.is_(True)).count()
-        rows = (
-            db.query(models.TestCase.status, func.count(models.TestCase.id))
+        linhas = (
+            db.query(models.TestCase.status, models.TestCase.status_operacao)
             .filter(models.TestCase.active.is_(True))
-            .group_by(models.TestCase.status)
             .all()
         )
-        counts = {status: qtd for status, qtd in rows}
-        executado = total - counts.get("Não testado", 0)
-        pct = round((executado / total) * 100, 1) if total else 0.0
-        return {"total": total, "counts": counts, "pct_executado": pct}
+        total = len(linhas)
+        counts, counts_interno, counts_operacao = {}, {}, {}
+        executado = 0
+        for interno, operacao in linhas:
+            geral = niveis.status_geral(interno, operacao)
+            counts[geral] = counts.get(geral, 0) + 1
+            counts_interno[interno] = counts_interno.get(interno, 0) + 1
+            counts_operacao[operacao] = counts_operacao.get(operacao, 0) + 1
+            if niveis.executado(interno, operacao):
+                executado += 1
+
+        def pct(qtd):
+            return round((qtd / total) * 100, 1) if total else 0.0
+
+        return {
+            "total": total,
+            "counts": counts,
+            "pct_executado": pct(executado),
+            "counts_interno": counts_interno,
+            "counts_operacao": counts_operacao,
+            "pct_executado_interno": pct(total - counts_interno.get(niveis.NAO_TESTADO, 0)),
+            "pct_executado_operacao": pct(total - counts_operacao.get(niveis.NAO_TESTADO, 0)),
+        }
     finally:
         db.close()
 

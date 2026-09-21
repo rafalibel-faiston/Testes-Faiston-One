@@ -33,6 +33,9 @@
   --bad:    #e11d48; --bad-bg: rgba(225,29,72,0.08);  --bad-ln: rgba(225,29,72,0.30);
   --warn:    #d97706; --warn-bg: rgba(217,119,6,0.10); --warn-ln: rgba(217,119,6,0.30);
   --na:    #6b7089; --na-bg: rgba(107,112,137,0.09); --na-ln: rgba(107,112,137,0.26);
+  /* parcial: passou num nível de teste e falta o outro — azul de "andando",
+     nem sucesso (verde) nem falha (vermelho) */
+  --part:  #0054ec; --part-bg: rgba(0,84,236,0.08); --part-ln: rgba(0,84,236,0.28);
 
   --radius-sm: 8px;
   --radius: 14px;
@@ -272,12 +275,14 @@ main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
 .stat.bad .stat-n { color:var(--bad); }
 .stat.warn .stat-n { color:var(--warn); }
 .stat.na .stat-n { color:var(--na); }
+.stat.part .stat-n { color:var(--part); }
 .stat.active { background:var(--surface); border-color:var(--text-2); box-shadow:var(--shadow-2); }
 .stat.active .stat-l { color:var(--text-2); font-weight:700; }
 .stat.ok.active   { border-color:var(--ok);   background:var(--ok-bg); }
 .stat.bad.active  { border-color:var(--bad);  background:var(--bad-bg); }
 .stat.warn.active { border-color:var(--warn); background:var(--warn-bg); }
 .stat.na.active   { border-color:var(--na);   background:var(--na-bg); }
+.stat.part.active { border-color:var(--part); background:var(--part-bg); }
 
 /* ---------- toolbar: barra compacta + filtros recolhíveis ---------- */
 .toolbar {
@@ -331,6 +336,7 @@ main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
 .chip.active.c-warn { background:linear-gradient(120deg,#d97706,#fbbf24); box-shadow:0 6px 16px -6px rgba(217,119,6,.4); }
 .chip.active.c-na   { background:linear-gradient(120deg,#6b7089,#9ca0ba); box-shadow:0 6px 16px -6px rgba(107,112,137,.35); }
 .chip.active.c-nt   { background:linear-gradient(120deg,#565b78,#8a8fad); }
+.chip.active.c-part { background:var(--grad-primary); box-shadow:0 6px 16px -6px rgba(0,84,236,.45); }
 
 /* ---------- glow search (barra de busca com anel sutil animado) ---------- */
 .glow-search {
@@ -392,6 +398,7 @@ main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
 .case.st-bad  { border-left-color:var(--bad); }
 .case.st-warn { border-left-color:var(--warn); }
 .case.st-na   { border-left-color:var(--na); }
+.case.st-part { border-left-color:var(--part); }
 
 .case-head { display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-bottom:13px; }
 .case-num {
@@ -426,6 +433,49 @@ main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
 .case-foot, .estagio-foot { border-top:1px solid var(--line); padding-top:14px; display:flex; flex-direction:column; gap:12px; }
 .status-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .status-btns { display:flex; gap:6px; flex-wrap:wrap; }
+
+/* ----- os dois níveis de teste (meu teste / operação) -----
+   Duas linhas empilhadas, cada uma com seus próprios botões: separadas de
+   propósito, porque marcar um nível nunca deve parecer que marca o outro. */
+.status-niveis { display:flex; flex-direction:column; gap:8px; }
+.status-nivel {
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  border:1px solid var(--line); border-radius:10px; padding:8px 10px; background:var(--surface-2);
+}
+.status-nivel[data-nivel="operacao"] { border-color:var(--part-ln); background:var(--part-bg); }
+.nivel-k {
+  font-size:10px; text-transform:uppercase; letter-spacing:.6px; font-weight:700;
+  color:var(--text-3); min-width:70px;
+}
+.status-nivel[data-nivel="operacao"] .nivel-k { color:var(--part); }
+.nivel-meta { margin-left:auto; font-size:11px; color:var(--text-3); }
+
+/* etiqueta do status consolidado, no cabeçalho do caso/estágio */
+.status-geral {
+  font-size:10.5px; font-weight:700; padding:3px 10px; border-radius:999px;
+  border:1px solid var(--line-2); background:var(--surface-2); color:var(--text-2);
+}
+.status-geral.c-ok   { color:var(--ok);   border-color:var(--ok-ln);   background:var(--ok-bg); }
+.status-geral.c-bad  { color:var(--bad);  border-color:var(--bad-ln);  background:var(--bad-bg); }
+.status-geral.c-warn { color:var(--warn); border-color:var(--warn-ln); background:var(--warn-bg); }
+.status-geral.c-na   { color:var(--na);   border-color:var(--na-ln);   background:var(--na-bg); }
+.status-geral.c-part { color:var(--part); border-color:var(--part-ln); background:var(--part-bg); }
+
+/* de qual nível é a observação que está sendo escrita */
+.obs-add-meta { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.nivel-picker { display:flex; gap:4px; }
+.nivel-opt {
+  border:1px solid var(--line-2); background:var(--surface-2); color:var(--text-3);
+  border-radius:7px; padding:4px 10px; font-size:11px; font-weight:600;
+  font-family:'Roboto',sans-serif; cursor:pointer; transition:all .15s var(--ease);
+}
+.nivel-opt:hover { color:var(--text); background:var(--surface-3); }
+.nivel-opt.active { background:var(--grad-primary); border-color:transparent; color:#fff; }
+.obs-nivel {
+  font-size:9.5px; text-transform:uppercase; letter-spacing:.5px; font-weight:700;
+  color:var(--part); border:1px solid var(--part-ln); background:var(--part-bg);
+  border-radius:999px; padding:1px 7px;
+}
 .case-meta { font-size:11px; color:var(--text-3); }
 .case-meta .who { font-weight:600; color:var(--text-2); }
 .sbtn {
@@ -814,6 +864,7 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 .carousel-caption .cap-status.bad { background:rgba(251,113,133,.25); border-color:rgba(251,113,133,.5); }
 .carousel-caption .cap-status.warn{ background:rgba(251,191,36,.25); border-color:rgba(251,191,36,.5); }
 .carousel-caption .cap-status.na  { background:rgba(156,160,186,.25); border-color:rgba(156,160,186,.5); }
+.carousel-caption .cap-status.part{ background:rgba(96,165,250,.25); border-color:rgba(96,165,250,.5); }
 .carousel-caption .cap-meta { font-size:11.5px; color:rgba(255,255,255,.6); }
 .carousel-caption .cap-code { font-family:'Roboto Mono',monospace; }
 /* trilha de miniaturas (posição na sequência) */
@@ -1495,6 +1546,7 @@ body.inline-connecting * { cursor:crosshair !important; }
 .estagio.st-bad  { border-left-color:var(--bad); }
 .estagio.st-warn { border-left-color:var(--warn); }
 .estagio.st-na   { border-left-color:var(--na); }
+.estagio.st-part { border-left-color:var(--part); }
 .estagio-head { display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-bottom:11px; }
 .estagio-num {
   flex-shrink:0; font-family:'Roboto Mono',monospace; font-size:10px; font-weight:700; letter-spacing:.3px;

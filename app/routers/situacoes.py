@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from .. import models, schemas
+from .. import models, niveis, schemas
 from ..activity import log as log_activity, snippet, normaliza_cor
 from ..database import get_db
 from .cases import VALID_STATUSES, MAX_UPLOAD_BYTES, ALLOWED_CONTENT_TYPES
@@ -109,6 +109,8 @@ def update_situacao(code: str, payload: schemas.SituacaoUpdate, db: Session = De
     # dado de execução — do testador, não é "conteúdo" da situação (não vira user_managed)
     if payload.chamado is not None:
         sit.chamado = payload.chamado
+    if payload.chamado_operacao is not None:
+        sit.chamado_operacao = payload.chamado_operacao
 
     data = payload.model_dump(exclude_unset=True)
     changed = False
@@ -170,14 +172,35 @@ def add_estagio(code: str, payload: schemas.SituacaoEstagioCreate, db: Session =
 def update_estagio(code: str, estagio_id: int, payload: schemas.SituacaoEstagioUpdate, db: Session = Depends(get_db)):
     sit = _get_situacao_or_404(db, code)
     est = _get_estagio_in(sit, estagio_id)
-    old_status = est.status
+    old_geral = est.status_geral
+    mudancas = []   # (nível, status novo, quem testou)
 
+    # nível interno: o meu teste
     if payload.status is not None:
         if payload.status not in VALID_STATUSES:
             raise HTTPException(status_code=400, detail=f"Status inválido: {payload.status}")
+        if payload.status != est.status:
+            mudancas.append((niveis.NIVEL_INTERNO, payload.status,
+                             payload.testado_por or est.testado_por))
+            est.testado_em = func.now() if payload.status != niveis.NAO_TESTADO else None
         est.status = payload.status
     if payload.testado_por is not None:
         est.testado_por = payload.testado_por
+
+    # nível operação: o mesmo estágio percorrido por quem opera
+    if payload.status_operacao is not None:
+        if payload.status_operacao not in VALID_STATUSES:
+            raise HTTPException(status_code=400,
+                                detail=f"Status inválido: {payload.status_operacao}")
+        if payload.status_operacao != est.status_operacao:
+            mudancas.append((niveis.NIVEL_OPERACAO, payload.status_operacao,
+                             payload.testado_por_operacao or est.testado_por_operacao))
+            est.testado_em_operacao = (
+                func.now() if payload.status_operacao != niveis.NAO_TESTADO else None
+            )
+        est.status_operacao = payload.status_operacao
+    if payload.testado_por_operacao is not None:
+        est.testado_por_operacao = payload.testado_por_operacao
 
     data = payload.model_dump(exclude_unset=True)
     touched_descriptive = False
@@ -186,9 +209,14 @@ def update_estagio(code: str, estagio_id: int, payload: schemas.SituacaoEstagioU
             setattr(est, field, data[field])
             touched_descriptive = True
 
-    if payload.status is not None and payload.status != old_status:
-        log_activity(db, sit.fluxo, "status", f"{code} · {est.nome} mudou para {payload.status}",
-                     autor=payload.testado_por or est.testado_por, case_code=code)
+    for nivel, status_novo, autor in mudancas:
+        log_activity(db, sit.fluxo, "status",
+                     f"{code} · {est.nome} · {niveis.NIVEL_LABEL[nivel]} mudou para {status_novo}",
+                     autor=autor, case_code=code)
+    novo_geral = niveis.status_geral(est.status, est.status_operacao)
+    if mudancas and novo_geral != old_geral:
+        log_activity(db, sit.fluxo, "status", f"{code} · {est.nome} agora está {novo_geral}",
+                     case_code=code)
     if touched_descriptive:
         sit.user_managed = True
         log_activity(db, sit.fluxo, "situacao", f'Estágio "{est.nome}" de {code} editado', case_code=code)
@@ -216,9 +244,14 @@ def add_estagio_observation(code: str, estagio_id: int, payload: schemas.SitObse
     texto = (payload.texto or "").strip()
     if not texto:
         raise HTTPException(status_code=400, detail="Observação vazia.")
+    try:
+        nivel = niveis.normaliza_nivel(payload.nivel)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
     db.add(models.SituacaoObservation(estagio_id=est.id, autor=payload.autor, texto=texto,
-                                      cor=normaliza_cor(payload.cor)))
-    log_activity(db, sit.fluxo, "obs", f'Observação em {code} · {est.nome}: "{snippet(texto)}"',
+                                      cor=normaliza_cor(payload.cor), nivel=nivel))
+    log_activity(db, sit.fluxo, "obs",
+                 f'Observação ({niveis.NIVEL_LABEL[nivel]}) em {code} · {est.nome}: "{snippet(texto)}"',
                  autor=payload.autor, case_code=code)
     db.commit()
     return _get_situacao_or_404(db, code)

@@ -7,8 +7,30 @@
     "Grupo C": "Evolução da semana — itens transversais",
     "Grupo D": "Ticket filho — a detalhar antes de testar",
   };
+  // status que se marca em CADA nível de teste
   const STATUSES = ["Não testado", "Aprovado", "Reprovado", "Bloqueado", "N/A"];
-  const STATUS_CODE = { "Não testado": "nt", "Aprovado": "ok", "Reprovado": "bad", "Bloqueado": "warn", "N/A": "na" };
+  // NÍVEIS: todo caso (e todo estágio de situação) é testado duas vezes —
+  // por mim e pela operação. Passar comigo não é passar na operação, então os
+  // dois status vivem separados e o que vale pra fora é o consolidado.
+  const NIVEIS = [
+    { key: "interno", label: "Meu teste", campo: "status", quem: "testado_por", quando: "testado_em" },
+    { key: "operacao", label: "Operação", campo: "status_operacao", quem: "testado_por_operacao", quando: "testado_em_operacao" },
+  ];
+  // o consolidado tem dois estados a mais: passou de um lado só
+  const STATUS_GERAIS = ["Não testado", "Validação interna", "Validação operação",
+                         "Aprovado", "Reprovado", "Bloqueado", "N/A"];
+  const STATUS_CODE = {
+    "Não testado": "nt", "Aprovado": "ok", "Reprovado": "bad", "Bloqueado": "warn", "N/A": "na",
+    "Validação interna": "part", "Validação operação": "part",
+  };
+  // como a tela chama cada estado parcial — o rótulo diz o que FALTA, que é o
+  // que a pessoa precisa fazer a seguir
+  const STATUS_LABEL = {
+    "Validação interna": "Falta a operação",
+    "Validação operação": "Falta o meu teste",
+  };
+  const statusGeral = (x) => x.status_geral || x.status || "Não testado";
+  const statusLabel = (st) => STATUS_LABEL[st] || st;
   const FRONT_CODE = { "App do técnico": "app", "Operador (web)": "opr", "Transversal": "trv", "A definir": "trv" };
   const TESTER_KEY = "fluxoc_tester_name";
 
@@ -16,7 +38,8 @@
   const activeFilters = { grupo: "", estagio: "", frente: "", status: "" };
 
   const FRENT_CHIP_CLASS = { "App do técnico": "c-app", "Operador (web)": "c-opr", "Transversal": "c-trv", "A definir": "c-trv" };
-  const STATUS_CHIP_CLASS = { "Não testado": "c-nt", "Aprovado": "c-ok", "Reprovado": "c-bad", "Bloqueado": "c-warn", "N/A": "c-na" };
+  const STATUS_CHIP_CLASS = { "Não testado": "c-nt", "Aprovado": "c-ok", "Reprovado": "c-bad", "Bloqueado": "c-warn", "N/A": "c-na",
+                              "Validação interna": "c-part", "Validação operação": "c-part" };
 
   const $ = (sel, root) => (root || document).querySelector(sel);
   const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
@@ -111,18 +134,21 @@
     const uniq = (arr) => [...new Set(arr)];
     buildChipGroup("chips-grupo", "grupo", ["Todos", ...uniq(src.map((c) => c.grupo))]);
     buildChipGroup("chips-frente", "frente", ["Todas", ...uniq(src.map((c) => c.frente))], FRENT_CHIP_CLASS);
-    buildChipGroup("chips-status", "status", ["Todos", ...STATUSES], STATUS_CHIP_CLASS);
+    buildChipGroup("chips-status", "status", ["Todos", ...STATUS_GERAIS], STATUS_CHIP_CLASS, statusLabel);
     buildChipGroup("chips-estagio", "estagio", ["Todos", ...uniq(src.map((c) => c.estagio))]);
   }
 
-  function buildChipGroup(containerId, filterKey, values, colorMap) {
+  // `rotulo` deixa o chip mostrar um texto diferente do valor filtrado (os
+  // status parciais filtram por "Validação interna" e leem "Falta a operação")
+  function buildChipGroup(containerId, filterKey, values, colorMap, rotulo) {
     const el = document.getElementById(containerId);
     el.innerHTML = values.map((v, i) => {
       const isAll = i === 0;
       const val = isAll ? "" : v;
       const colorClass = colorMap && colorMap[v] ? colorMap[v] : "";
       const active = activeFilters[filterKey] === val;
-      return `<button type="button" class="chip ${colorClass} ${active ? "active" : ""}" data-key="${filterKey}" data-val="${esc(val)}">${esc(v)}</button>`;
+      const texto = isAll || !rotulo ? v : rotulo(v);
+      return `<button type="button" class="chip ${colorClass} ${active ? "active" : ""}" data-key="${filterKey}" data-val="${esc(val)}">${esc(texto)}</button>`;
     }).join("");
     $$(".chip", el).forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -200,6 +226,7 @@
     return `<div class="obs-item${corClasse(o.cor)}" data-obs="${o.id}" data-cor="${esc(o.cor || "")}">
         <div class="obs-item-head">
           <span class="obs-author">${esc(o.autor || "Anônimo")}</span>
+          ${o.nivel === "operacao" ? '<span class="obs-nivel">Operação</span>' : ""}
           <span class="obs-when">${fmtWhen(o.created_at)}</span>
           ${editada}
           ${trailBtn}
@@ -294,8 +321,47 @@
     return observations.map(obsItemHtml).join("");
   }
 
+  // Um bloco de status por nível: rótulo, os botões daquele nível e quem rodou.
+  // O mesmo markup serve pro caso de teste e pro estágio de situação.
+  function nivelStatusHtml(item, nivel) {
+    const atual = item[nivel.campo] || "Não testado";
+    const quem = item[nivel.quem];
+    const quando = item[nivel.quando];
+    return `<div class="status-nivel" data-nivel="${nivel.key}">
+        <span class="nivel-k">${nivel.label}</span>
+        <div class="status-btns">
+          ${STATUSES.map((st) => `<button class="sbtn ${st === atual ? "active" : ""}" data-s="${st}" data-nivel="${nivel.key}">${st}</button>`).join("")}
+        </div>
+        <span class="nivel-meta" data-nivel-meta="${nivel.key}">${quem ? esc(quem) + (quando ? " · " + fmtWhen(quando) : "") : "—"}</span>
+      </div>`;
+  }
+
+  function statusGeralHtml(item) {
+    const st = statusGeral(item);
+    return `<span class="status-geral ${STATUS_CHIP_CLASS[st] || "c-nt"}" data-status-geral
+        title="Status consolidado — só fica Aprovado quando os dois níveis passam">${esc(statusLabel(st))}</span>`;
+  }
+
+  // de qual nível é a observação que está sendo escrita
+  function nivelPickerHtml() {
+    return `<div class="nivel-picker" role="group" aria-label="Nível da observação">
+        ${NIVEIS.map((n, i) => `<button type="button" class="nivel-opt ${i === 0 ? "active" : ""}" data-nivel-obs="${n.key}">${n.label}</button>`).join("")}
+      </div>`;
+  }
+
+  function wireNivelPicker(el) {
+    let atual = "interno";
+    if (el) {
+      $$(".nivel-opt", el).forEach((b) => b.addEventListener("click", () => {
+        atual = b.dataset.nivelObs;
+        $$(".nivel-opt", el).forEach((x) => x.classList.toggle("active", x === b));
+      }));
+    }
+    return { get: () => atual };
+  }
+
   function caseCard(c) {
-    const stCode = STATUS_CODE[c.status] || "nt";
+    const stCode = STATUS_CODE[statusGeral(c)] || "nt";
     const frontCode = FRONT_CODE[c.frente] || "trv";
     const shots = (c.screenshots || []).map((s) => shotThumb(s, c.code)).join("");
     // numero curto e estavel: pega o sufixo do codigo (ex.: FC-02-APP-01 -> 1)
@@ -303,13 +369,14 @@
     const seqMatch = c.code.match(/-(\d+)$/);
     const idx = seqMatch ? parseInt(seqMatch[1], 10) : (CASES.indexOf(c) + 1);
     return `<article class="case st-${stCode}" data-code="${c.code}" data-paste-key="caso:${esc(c.code)}"
-        data-grupo="${esc(c.grupo)}" data-estagio="${esc(c.estagio)}" data-frente="${esc(c.frente)}" data-status="${esc(c.status)}"
+        data-grupo="${esc(c.grupo)}" data-estagio="${esc(c.estagio)}" data-frente="${esc(c.frente)}" data-status="${esc(statusGeral(c))}"
         data-search="${esc((c.code + " " + c.resultado_esperado + " " + c.estagio).toLowerCase())}">
       <div class="case-head">
         <span class="case-num">Teste ${idx}</span>
         <span class="tag front-${frontCode}">${esc(c.frente)}</span>
         <span class="tag">${esc(c.estagio)}</span>
         <span class="tag prio-${esc(c.prioridade)}">${esc(c.prioridade)}</span>
+        ${statusGeralHtml(c)}
         ${c.user_managed ? '<span class="case-managed-flag" title="Criado ou editado na tela — o sistema não sobrescreve">editado</span>' : ""}
         <div class="case-actions">
           <button type="button" class="case-icon-btn" data-edit="${c.code}" title="Editar teste" aria-label="Editar">
@@ -327,16 +394,17 @@
         <div class="blk wide result"><div class="k">Resultado esperado</div><div class="v">${esc(c.resultado_esperado)}</div></div>
       </div>
       <div class="case-foot">
-        <div class="status-row">
-          <div class="status-btns">
-            ${STATUSES.map((s) => `<button class="sbtn ${s === c.status ? "active" : ""}" data-s="${s}">${s}</button>`).join("")}
-          </div>
+        <div class="status-niveis">
+          ${NIVEIS.map((n) => nivelStatusHtml(c, n)).join("")}
         </div>
-        <div class="case-meta">Testado por <span class="who">${c.testado_por ? esc(c.testado_por) : "—"}</span><span class="when">${c.testado_por ? " · " + fmtWhen(c.updated_at) : ""}</span></div>
         <div class="reg-row">
           <label class="reg-field">
-            <span class="reg-k">Chamado testado</span>
-            <input class="reg-chamado" type="text" value="${esc(c.chamado || "")}" placeholder="qual chamado foi testado" autocomplete="off">
+            <span class="reg-k">Chamado — meu teste</span>
+            <input class="reg-chamado" type="text" value="${esc(c.chamado || "")}" placeholder="qual chamado eu testei" autocomplete="off">
+          </label>
+          <label class="reg-field">
+            <span class="reg-k">Chamado — operação</span>
+            <input class="reg-chamado-op" type="text" value="${esc(c.chamado_operacao || "")}" placeholder="qual chamado a operação testou" autocomplete="off">
           </label>
         </div>
         <div class="obs-row">
@@ -345,7 +413,10 @@
             <textarea class="obs-input" rows="1" placeholder="Adicionar observação..."></textarea>
             <button type="button" class="obs-add-btn">Adicionar</button>
           </div>
-          ${corPickerHtml("", "obs-cores-add")}
+          <div class="obs-add-meta">
+            ${nivelPickerHtml()}
+            ${corPickerHtml("", "obs-cores-add")}
+          </div>
         </div>
         <div class="shots-row">
           <div class="shots-grid">${shots}</div>
@@ -416,42 +487,58 @@
     const delBtn = $(".case-icon-btn[data-del-case]", card);
     if (delBtn) delBtn.addEventListener("click", () => deleteCase(code));
 
-    // registro de execução: chamado testado (salva sozinho ao sair do campo)
-    const chamadoInput = $(".reg-chamado", card);
-    if (chamadoInput) chamadoInput.addEventListener("change", async () => {
+    // registro de execução: o chamado de cada nível (salva sozinho ao sair do campo)
+    const salvarChamado = async (input, campo) => {
       try {
         const updated = await api(`/api/cases/${encodeURIComponent(code)}`, {
           method: "PATCH", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chamado: chamadoInput.value.trim() }),
+          body: JSON.stringify({ [campo]: input.value.trim() }),
         });
         patchCaseLocal(code, updated);
         toast("Chamado salvo");
       } catch (e) { toast("Erro ao salvar: " + e.message, true); }
-    });
+    };
+    const chamadoInput = $(".reg-chamado", card);
+    if (chamadoInput) chamadoInput.addEventListener("change", () => salvarChamado(chamadoInput, "chamado"));
+    const chamadoOpInput = $(".reg-chamado-op", card);
+    if (chamadoOpInput) chamadoOpInput.addEventListener("change", () => salvarChamado(chamadoOpInput, "chamado_operacao"));
 
+    // repinta o cartão pelo consolidado e a linha de "quem testou" de cada nível
     const updateMeta = (updated) => {
-      const whoEl = $(".case-meta .who", card);
-      const whenEl = $(".case-meta .when", card);
-      if (whoEl) whoEl.textContent = updated.testado_por ? updated.testado_por : "—";
-      if (whenEl) whenEl.textContent = updated.testado_por ? " · " + fmtWhen(updated.updated_at) : "";
+      NIVEIS.forEach((n) => {
+        const el = $(`[data-nivel-meta="${n.key}"]`, card);
+        if (!el) return;
+        const quem = updated[n.quem];
+        el.textContent = quem ? quem + (updated[n.quando] ? " · " + fmtWhen(updated[n.quando]) : "") : "—";
+      });
+      const geral = statusGeral(updated);
+      const chip = $("[data-status-geral]", card);
+      if (chip) {
+        chip.textContent = statusLabel(geral);
+        chip.className = `status-geral ${STATUS_CHIP_CLASS[geral] || "c-nt"}`;
+      }
+      card.className = card.className.replace(/\bst-\w+\b/, "") + ` st-${STATUS_CODE[geral] || "nt"}`;
+      card.dataset.status = geral;
     };
 
     $$(".sbtn", card).forEach((btn) => {
       btn.addEventListener("click", async () => {
         const s = btn.dataset.s;
-        $$(".sbtn", card).forEach((b) => b.classList.toggle("active", b.dataset.s === s));
-        card.className = card.className.replace(/\bst-\w+\b/, "") + ` st-${STATUS_CODE[s]}`;
-        card.dataset.status = s;
+        const nivel = NIVEIS.find((n) => n.key === btn.dataset.nivel) || NIVEIS[0];
+        // só os botões DAQUELE nível trocam de estado — o outro nível é outra conversa
+        $$(`.sbtn[data-nivel="${nivel.key}"]`, card).forEach((b) => b.classList.toggle("active", b.dataset.s === s));
+        const corpo = { [nivel.campo]: s };
+        corpo[nivel.quem] = testerName() || undefined;
         try {
           const updated = await api(`/api/cases/${encodeURIComponent(code)}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: s, testado_por: testerName() || undefined }),
+            body: JSON.stringify(corpo),
           });
           patchCaseLocal(code, updated);
           updateMeta(updated);
           updateStats();
-          toast(`${code} → ${s}`);
+          toast(`${code} · ${nivel.label} → ${s}`);
         } catch (e) { toast("Erro ao salvar: " + e.message, true); }
       });
     });
@@ -459,6 +546,7 @@
     const obsInput = $(".obs-input", card);
     const obsBtn = $(".obs-add-btn", card);
     const obsCor = wireCorPicker($(".obs-cores-add", card));
+    const obsNivel = wireNivelPicker($(".nivel-picker", card));
     const submitObs = async () => {
       const texto = obsInput.value.trim();
       if (!texto) return;
@@ -467,7 +555,7 @@
         const updated = await api(`/api/cases/${encodeURIComponent(code)}/observacoes`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ texto, cor: obsCor.get(), autor: testerName() || undefined }),
+          body: JSON.stringify({ texto, cor: obsCor.get(), nivel: obsNivel.get(), autor: testerName() || undefined }),
         });
         patchCaseLocal(code, updated);
         rerenderCard(code);
@@ -605,9 +693,13 @@
   // ---------------- stats ----------------
   function updateStats() {
     const flowCases = CASES.filter((c) => caseFlow(c) === currentFlow);
-    const counts = { "Não testado": 0, "Aprovado": 0, "Reprovado": 0, "Bloqueado": 0, "N/A": 0 };
-    flowCases.forEach((c) => { counts[c.status] = (counts[c.status] || 0) + 1; });
+    // os KPIs contam pelo consolidado — "Aprovado" aqui quer dizer aprovado nos dois níveis
+    const counts = {};
+    STATUS_GERAIS.forEach((st) => { counts[st] = 0; });
+    flowCases.forEach((c) => { const st = statusGeral(c); counts[st] = (counts[st] || 0) + 1; });
     $("#stat-nt").textContent = counts["Não testado"];
+    $("#stat-falta-op").textContent = counts["Validação interna"];
+    $("#stat-falta-meu").textContent = counts["Validação operação"];
     $("#stat-ok").textContent = counts["Aprovado"];
     $("#stat-bad").textContent = counts["Reprovado"];
     $("#stat-warn").textContent = counts["Bloqueado"];
@@ -654,13 +746,15 @@
   $$(".flow-tab").forEach((t) => t.addEventListener("click", () => setFlow(t.dataset.flow)));
 
   // ---------------- carrossel de evidências (modo apresentação) ----------------
-  const STATUS_CAP = { "Aprovado": "ok", "Reprovado": "bad", "Bloqueado": "warn", "N/A": "na", "Não testado": "nt" };
+  const STATUS_CAP = { "Aprovado": "ok", "Reprovado": "bad", "Bloqueado": "warn", "N/A": "na", "Não testado": "nt",
+                       "Validação interna": "part", "Validação operação": "part" };
   const carState = { slides: [], i: 0 };
 
   function slideOf(c, s) {
     return {
       id: s.id, filename: s.filename, uploaded_by: s.uploaded_by, created_at: s.created_at,
-      code: c.code, estagio: c.estagio, estagio_num: c.estagio_num, frente: c.frente, status: c.status,
+      code: c.code, estagio: c.estagio, estagio_num: c.estagio_num, frente: c.frente,
+      status: statusGeral(c),
       chamado: c.chamado,
     };
   }
@@ -731,7 +825,7 @@
       `<div class="cap-line">
         <span class="cap-stage">${esc(s.estagio)}</span>
         <span class="cap-tag">${esc(s.frente)}</span>
-        <span class="cap-tag cap-status ${stCode}">${esc(s.status)}</span>
+        <span class="cap-tag cap-status ${stCode}">${esc(statusLabel(s.status))}</span>
       </div>
       ${regBits ? `<div class="cap-reg">${regBits}</div>` : ""}
       <div class="cap-meta">${metaBits}</div>`;
@@ -2608,7 +2702,7 @@
   }
 
   function estagioCard(sit, e, idx) {
-    const stCode = STATUS_CODE[e.status] || "nt";
+    const stCode = STATUS_CODE[statusGeral(e)] || "nt";
     const frontCode = FRONT_CODE[e.frente] || "trv";
     const shots = (e.screenshots || []).map((s) => estagioShotThumb(s, sit.code, e.id)).join("");
     // o texto da situação (título/descrição) entra no search de cada estágio —
@@ -2617,11 +2711,12 @@
     const search = (sit.titulo + " " + sit.descricao + " " + e.nome + " " + e.resultado_esperado).toLowerCase();
     return `<article class="estagio st-${stCode}" data-sit="${esc(sit.code)}" data-estagio-id="${e.id}"
         data-paste-key="estagio:${e.id}"
-        data-frente="${esc(e.frente)}" data-status="${esc(e.status)}" data-search="${esc(search)}">
+        data-frente="${esc(e.frente)}" data-status="${esc(statusGeral(e))}" data-search="${esc(search)}">
       <div class="estagio-head">
         <span class="estagio-num">Estágio ${idx}</span>
         <span class="tag front-${frontCode}">${esc(e.frente)}</span>
         <span class="estagio-nome">${esc(e.nome)}</span>
+        ${statusGeralHtml(e)}
         <div class="estagio-actions">
           <button type="button" class="case-icon-btn" data-edit-estagio title="Editar estágio" aria-label="Editar">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
@@ -2634,23 +2729,25 @@
       ${e.passos ? `<div class="blk wide"><div class="k">Passos</div><div class="v">${esc(e.passos)}</div></div>` : ""}
       <div class="blk wide result"><div class="k">Resultado esperado</div><div class="v">${esc(e.resultado_esperado)}</div></div>
       <div class="estagio-foot">
-        <div class="status-row">
-          <div class="status-btns">
-            ${STATUSES.map((s) => `<button class="sbtn ${s === e.status ? "active" : ""}" data-s="${s}">${s}</button>`).join("")}
-          </div>
-          ${e.status === "Reprovado" ? `<button type="button" class="adjust-btn" data-adjust title="Marca como corrigido e devolve pra fila de reteste">
+        <div class="status-niveis">
+          ${NIVEIS.map((n) => nivelStatusHtml(e, n)).join("")}
+        </div>
+        ${statusGeral(e) === "Reprovado" ? `<div class="status-row">
+          <button type="button" class="adjust-btn" data-adjust title="Limpa os dois níveis e devolve pra fila de reteste">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
             Ajustado, retestar
-          </button>` : ""}
-        </div>
-        <div class="case-meta">Testado por <span class="who">${e.testado_por ? esc(e.testado_por) : "—"}</span><span class="when">${e.testado_por ? " · " + fmtWhen(e.updated_at) : ""}</span></div>
+          </button>
+        </div>` : ""}
         <div class="obs-row">
           <div class="obs-list">${estagioObsList(e.observations)}</div>
           <div class="obs-add">
             <textarea class="obs-input" rows="1" placeholder="Adicionar observação..."></textarea>
             <button type="button" class="obs-add-btn">Adicionar</button>
           </div>
-          ${corPickerHtml("", "obs-cores-add")}
+          <div class="obs-add-meta">
+            ${nivelPickerHtml()}
+            ${corPickerHtml("", "obs-cores-add")}
+          </div>
         </div>
         <div class="shots-row">
           <div class="shots-grid">${shots}</div>
@@ -2665,7 +2762,8 @@
 
   function situacaoProgress(sit) {
     const total = sit.estagios.length;
-    const done = sit.estagios.filter((e) => e.status !== "Não testado").length;
+    // "testado" aqui é o estágio com os DOIS níveis fechados — é o que a barra promete
+    const done = sit.estagios.filter((e) => ["Aprovado", "N/A"].includes(statusGeral(e))).length;
     const pct = total ? Math.round((done / total) * 100) : 0;
     return { total, done, pct };
   }
@@ -2696,7 +2794,7 @@
         <p class="situacao-desc">${esc(sit.descricao)}</p>
         <div class="situacao-progress">
           <div class="situacao-bar"><i style="width:${pct}%"></i></div>
-          <span class="situacao-progress-label">${done}/${total} estágios testados</span>
+          <span class="situacao-progress-label">${done}/${total} estágios validados nos dois níveis</span>
         </div>
         <div class="reg-row">
           <label class="reg-field">
@@ -2739,9 +2837,12 @@
   }
 
   function updateSituacaoStats(flowSits) {
-    const counts = { "Não testado": 0, "Aprovado": 0, "Reprovado": 0, "Bloqueado": 0, "N/A": 0 };
-    allEstagios(flowSits).forEach((e) => { counts[e.status] = (counts[e.status] || 0) + 1; });
+    const counts = {};
+    STATUS_GERAIS.forEach((st) => { counts[st] = 0; });
+    allEstagios(flowSits).forEach((e) => { const st = statusGeral(e); counts[st] = (counts[st] || 0) + 1; });
     $("#sit-stat-nt").textContent = counts["Não testado"];
+    $("#sit-stat-falta-op").textContent = counts["Validação interna"];
+    $("#sit-stat-falta-meu").textContent = counts["Validação operação"];
     $("#sit-stat-ok").textContent = counts["Aprovado"];
     $("#sit-stat-bad").textContent = counts["Reprovado"];
     $("#sit-stat-warn").textContent = counts["Bloqueado"];
@@ -2783,7 +2884,7 @@
       [{ label: "Todas", val: "" }, ...uniq(allEstagios(flowSits).map((e) => e.frente)).map((v) => ({ label: v, val: v }))],
       FRENT_CHIP_CLASS);
     buildSitChipGroup("sit-chips-status", "status",
-      [{ label: "Todos", val: "" }, ...STATUSES.map((v) => ({ label: v, val: v }))],
+      [{ label: "Todos", val: "" }, ...STATUS_GERAIS.map((v) => ({ label: statusLabel(v), val: v }))],
       STATUS_CHIP_CLASS);
   }
 
@@ -2888,14 +2989,17 @@
     $$(".sbtn", row).forEach((btn) => {
       btn.addEventListener("click", async () => {
         const s = btn.dataset.s;
+        const nivel = NIVEIS.find((n) => n.key === btn.dataset.nivel) || NIVEIS[0];
+        const corpo = { [nivel.campo]: s };
+        corpo[nivel.quem] = testerName() || undefined;
         try {
           await api(`/api/situacoes/${encodeURIComponent(sitCode)}/estagios/${estagioId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: s, testado_por: testerName() || undefined }),
+            body: JSON.stringify(corpo),
           });
           await refreshSituacao(sitCode);
-          toast(`Estágio → ${s}`);
+          toast(`Estágio · ${nivel.label} → ${s}`);
         } catch (e) { toast("Erro ao salvar: " + e.message, true); }
       });
     });
@@ -2906,7 +3010,7 @@
       try {
         await api(`/api/situacoes/${encodeURIComponent(sitCode)}/estagios/${estagioId}`, {
           method: "PATCH", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "Não testado" }),
+          body: JSON.stringify({ status: "Não testado", status_operacao: "Não testado" }),
         });
         await api(`/api/situacoes/${encodeURIComponent(sitCode)}/estagios/${estagioId}/observacoes`, {
           method: "POST", headers: { "Content-Type": "application/json" },
@@ -2920,6 +3024,7 @@
     const obsInput = $(".obs-input", row);
     const obsBtn = $(".obs-add-btn", row);
     const obsCor = wireCorPicker($(".obs-cores-add", row));
+    const obsNivel = wireNivelPicker($(".nivel-picker", row));
     const submitObs = async () => {
       const texto = obsInput.value.trim();
       if (!texto) return;
@@ -2928,7 +3033,7 @@
         await api(`/api/situacoes/${encodeURIComponent(sitCode)}/estagios/${estagioId}/observacoes`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ texto, cor: obsCor.get(), autor: testerName() || undefined }),
+          body: JSON.stringify({ texto, cor: obsCor.get(), nivel: obsNivel.get(), autor: testerName() || undefined }),
         });
         await refreshSituacao(sitCode);
         toast("Observação adicionada");
@@ -3376,7 +3481,8 @@
       html: `
         <ol class="guia-passos">
           <li><b>Abra o caso ou o estágio</b> que você vai testar e execute no NEXO.</li>
-          <li><b>Marque o status</b>: Aprovado, Reprovado, Bloqueado ou N/A. O seu nome vai junto.</li>
+          <li><b>Marque o status no nível certo</b>: <b>Meu teste</b> é a sua validação; <b>Operação</b> é o mesmo caso rodado por quem opera de verdade. Aprovado, Reprovado, Bloqueado ou N/A em cada um — o seu nome vai junto.</li>
+          <li><b>O caso só fica Aprovado quando os dois níveis passam.</b> Aprovado só no seu teste aparece como "Falta a operação" — é o que funciona pra você e ainda não foi provado na operação.</li>
           <li><b>Escreva o que aconteceu</b> na observação — principalmente quando reprovar. Uma linha objetiva já ajuda muito.</li>
           <li><b>Cole o print</b> com <span class="guia-kbd">Ctrl</span> + <span class="guia-kbd">V</span>: clique antes no card que vai receber a imagem (ele fica com a borda azul).</li>
           <li><b>Confira as Novidades</b> pra ver o que o outro time mexeu desde a sua última visita.</li>

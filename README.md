@@ -4,10 +4,41 @@ Sisteminha pra acompanhar a execução dos testes do Fluxo C (Despacho NEXO) —
 só as frentes que a Faiston precisa validar como cliente final: **Operador (web)**
 e **App do técnico**. Backend fica fora (responsabilidade do time de LP/NEXO).
 
-Cada caso de teste tem status (Não testado / Aprovado / Reprovado / Bloqueado / N/A),
-histórico de observações (com autor) e **upload de prints de tela** (ficam salvos no
-Postgres, então qualquer um do time com o link vê o andamento e as evidências — sem
-precisar de login).
+Cada caso de teste é validado em **dois níveis** — *Meu teste* e *Operação* — cada
+um com seu próprio status (Não testado / Aprovado / Reprovado / Bloqueado / N/A),
+além de histórico de observações (com autor) e **upload de prints de tela** (ficam
+salvos no Postgres, então qualquer um do time com o link vê o andamento e as
+evidências — sem precisar de login).
+
+## Os dois níveis de teste
+
+Um caso passar na minha mão não quer dizer que passa na operação: o caminho que eu
+faço é o caminho que eu conheço, e quem opera usa o sistema do jeito dele. Um caso
+aprovado só na validação técnica virava "Aprovado", sumia da pauta e voltava como
+problema depois — então o status foi desdobrado em dois:
+
+| Nível | Campo | Quem marca |
+|---|---|---|
+| **Meu teste** (interno) | `status`, `testado_por`, `testado_em`, `chamado` | quem valida tecnicamente |
+| **Operação** | `status_operacao`, `testado_por_operacao`, `testado_em_operacao`, `chamado_operacao` | quem roda o processo de verdade |
+
+O que vale pra fora (tela, exportação, pauta da reunião, KPIs) é o **consolidado**
+`status_geral`, derivado dos dois — nunca gravado. A regra está em `app/niveis.py`:
+
+1. **Reprovado** ou **Bloqueado** em qualquer nível derruba o caso (Reprovado ganha);
+2. **N/A** num nível = aquele nível não se aplica, quem decide é o outro;
+3. **Aprovado** só com os **dois** níveis aprovados;
+4. um lado aprovado e o outro em aberto vira um estado intermediário explícito:
+   **Validação interna** ("falta a operação") ou **Validação operação**
+   ("falta o meu teste").
+
+Esses dois estados intermediários continuam aparecendo na pauta da reunião e nos
+KPIs — é justamente o que não se quer perder de vista. As observações também dizem
+de qual teste vieram (`nivel`: `interno` ou `operacao`), e os estágios das situações
+seguem exatamente o mesmo modelo.
+
+Na migração, o que já estava gravado continua sendo o **meu teste**: todo caso
+antes "Aprovado" passa a aparecer como *Validação interna* até a operação validar.
 
 ## Stack
 
@@ -118,7 +149,9 @@ Depois disso as ferramentas (`listar_casos`, `obter_caso`,
 `listar_tarefas`, `criar_tarefa`, `listar_ajustes_ativos`, `criar_ajuste_ativos`)
 ficam disponíveis pra pedir direto na
 conversa, tipo "marca o FC-12 como aprovado" ou "lista os casos reprovados do
-Grupo B".
+Grupo B". As ferramentas de status e observação aceitam `nivel`
+(`interno`, o padrão, ou `operacao`) — "marca o FC-12 como aprovado na operação"
+mexe só no nível da operação.
 
 Detalhe técnico: o "login" fica guardado em memória do processo — se o
 serviço reiniciar no Railway, o conector pode precisar ser vinculado de novo
@@ -305,10 +338,14 @@ próprio banco e somem junto se o ajuste for excluído.
 ## API
 
 - `GET  /api/cases` — lista todos os casos com observações e prints
-- `PATCH /api/cases/{code}` — atualiza status / testado_por (não mexe mais em observação — ver abaixo)
+- `PATCH /api/cases/{code}` — atualiza qualquer um dos dois níveis (`status`/`testado_por`/`chamado`
+  para o meu teste, `status_operacao`/`testado_por_operacao`/`chamado_operacao` para a operação).
+  Mexer num nível nunca toca no outro; a resposta traz o `status_geral` recalculado.
+  (Não mexe mais em observação — ver abaixo.)
 - `POST /api/cases/{code}/observacoes` — adiciona uma nova observação ao histórico do caso
-  (body: `{"texto": "...", "autor": "..."}`). Cada nota guarda seu próprio autor — se outra
-  pessoa comentar depois, o nome dela aparece só naquela nota, sem apagar as anteriores.
+  (body: `{"texto": "...", "autor": "...", "nivel": "interno|operacao"}`). Cada nota guarda seu
+  próprio autor — se outra pessoa comentar depois, o nome dela aparece só naquela nota, sem
+  apagar as anteriores — e de qual nível de teste ela saiu (`nivel`, padrão `interno`).
 - `PATCH /api/observacoes/{id}` — atualiza o texto de uma observação
   (body: `{"texto": "...", "autor": "..."}`). O texto anterior não some: vira uma versão
   na trilha da observação — ver abaixo.
@@ -317,7 +354,8 @@ próprio banco e somem junto se o ajuste for excluído.
 - `POST /api/cases/{code}/screenshots` — upload de print (multipart, campo `file`)
 - `GET  /api/screenshots/{id}` — baixa/exibe o print
 - `DELETE /api/screenshots/{id}` — remove um print
-- `GET  /api/summary` — contagem por status e % executado
+- `GET  /api/summary` — contagem pelo status consolidado + `counts_interno` / `counts_operacao`
+  (cada nível separado) e os percentuais executados de cada um
 
 ### Observações com autor por nota
 

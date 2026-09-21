@@ -9,23 +9,30 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from sqlalchemy.orm import Session
 
-from .. import models
+from .. import models, niveis
 from ..database import get_db
 
 router = APIRouter(tags=["export"])
 
-HEADERS = ["#", "Estágio", "Problema encontrado", "Ajuste solicitado", "Status"]
+HEADERS = ["#", "Estágio", "Problema encontrado", "Ajuste solicitado",
+           "Meu teste", "Operação", "Status"]
 
 # pior status primeiro — o cabeçalho do estágio herda o pior status entre os itens dele,
-# igual à planilha original (um estágio só é "Concluido" se tudo dentro dele passou)
-STATUS_PRIORITY = ["Reprovado", "Bloqueado", "Não testado", "N/A", "Aprovado"]
+# igual à planilha original (um estágio só é "Concluido" se tudo dentro dele passou).
+# A coluna "Status" é o consolidado dos dois níveis (ver app/niveis.py): um item só
+# aparece Aprovado quando passou comigo E na operação.
+STATUS_PRIORITY = ["Reprovado", "Bloqueado", "Não testado",
+                   "Validação operação", "Validação interna", "N/A", "Aprovado"]
 STATUS_FILL = {
     "Aprovado": "D1FAE5",
+    "Validação interna": "DBEAFE",
+    "Validação operação": "FDE8D3",
     "Reprovado": "FEE2E2",
     "Bloqueado": "FEF3C7",
     "N/A": "E5E7EB",
     "Não testado": "F3F4F6",
 }
+STATUS_COL = len(HEADERS)   # a coluna pintada é sempre a do consolidado
 STAGE_PREFIX_RE = re.compile(r"^\s*\d+\s*·\s*(.+)$")
 
 
@@ -84,34 +91,38 @@ def export_excel(fluxo: str = Query("C"), db: Session = Depends(get_db)):
         cell.alignment = Alignment(vertical="center")
 
     if not cases:
-        ws.append(["", "Nenhum caso de teste ativo neste fluxo.", "", "", ""])
+        ws.append(["", "Nenhum caso de teste ativo neste fluxo.", "", "", "", "", ""])
     else:
         for key in order:
             items = groups[key]
             first = items[0]
             stage_num = first.estagio_num if first.estagio_num is not None else "-"
             stage_label = _stage_label(first.estagio, first.estagio_num)
-            stage_status = _stage_status({c.status for c in items})
+            stage_status = _stage_status({c.status_geral for c in items})
 
-            ws.append([stage_num, stage_label, "", "", stage_status])
+            ws.append([stage_num, stage_label, "", "",
+                       _stage_status({c.status for c in items}),
+                       _stage_status({c.status_operacao for c in items}),
+                       stage_status])
             r = ws.max_row
             for col_idx in range(1, len(HEADERS) + 1):
                 ws.cell(row=r, column=col_idx).font = Font(bold=True)
             fill = STATUS_FILL.get(stage_status)
             if fill:
-                ws.cell(row=r, column=5).fill = PatternFill(start_color=fill, end_color=fill, fill_type="solid")
+                ws.cell(row=r, column=STATUS_COL).fill = PatternFill(start_color=fill, end_color=fill, fill_type="solid")
 
             for c in items:
                 problema = c.problema_encontrado or c.passos
-                ws.append(["-", c.frente, problema, c.resultado_esperado, c.status])
+                ws.append(["-", c.frente, problema, c.resultado_esperado,
+                           c.status, c.status_operacao, c.status_geral])
                 r = ws.max_row
-                fill = STATUS_FILL.get(c.status)
+                fill = STATUS_FILL.get(c.status_geral)
                 if fill:
-                    ws.cell(row=r, column=5).fill = PatternFill(start_color=fill, end_color=fill, fill_type="solid")
+                    ws.cell(row=r, column=STATUS_COL).fill = PatternFill(start_color=fill, end_color=fill, fill_type="solid")
                 for col_idx in range(1, len(HEADERS) + 1):
                     ws.cell(row=r, column=col_idx).alignment = Alignment(vertical="top", wrap_text=True)
 
-    widths = {1: 6, 2: 24, 3: 46, 4: 46, 5: 15}
+    widths = {1: 6, 2: 24, 3: 42, 4: 42, 5: 15, 6: 15, 7: 18}
     for col_idx, w in widths.items():
         ws.column_dimensions[get_column_letter(col_idx)].width = w
     ws.freeze_panes = f"A{header_row + 1}"

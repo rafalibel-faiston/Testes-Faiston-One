@@ -33,6 +33,8 @@ class ObservationOut(BaseModel):
     autor: Optional[str] = None
     texto: str
     cor: Optional[str] = None   # "verde", "vermelho" ou None (sem marcação)
+    # de qual nível de teste veio: "interno" (meu teste) ou "operacao"
+    nivel: str = "interno"
     editado_por: Optional[str] = None
     editado_em: Optional[datetime] = None
     created_at: Optional[datetime] = None
@@ -44,6 +46,8 @@ class ObservationCreate(BaseModel):
     autor: Optional[str] = None
     # "verde" (deu certo) ou "vermelho" (problema). Vazio/ausente = sem cor.
     cor: Optional[str] = None
+    # "interno" (padrão) ou "operacao" — de qual teste saiu a anotação
+    nivel: Optional[str] = None
 
 
 class ObservationUpdate(BaseModel):
@@ -72,10 +76,19 @@ class TestCaseOut(BaseModel):
     passos: str
     resultado_esperado: str
     problema_encontrado: Optional[str] = None
+    # nível interno (o meu teste)
     status: str
     observacao: Optional[str] = ""
     testado_por: Optional[str] = None
+    testado_em: Optional[datetime] = None
     chamado: Optional[str] = None
+    # nível operação (o teste de quem opera)
+    status_operacao: str = "Não testado"
+    testado_por_operacao: Optional[str] = None
+    testado_em_operacao: Optional[datetime] = None
+    chamado_operacao: Optional[str] = None
+    # consolidado: só "Aprovado" quando os dois níveis passam (app/niveis.py)
+    status_geral: str = "Não testado"
     user_managed: Optional[bool] = False
     updated_at: Optional[datetime] = None
     screenshots: List[ScreenshotOut] = []
@@ -83,10 +96,15 @@ class TestCaseOut(BaseModel):
 
 
 class TestCaseUpdate(BaseModel):
+    # nível interno (o meu teste)
     status: Optional[str] = None
     testado_por: Optional[str] = None
     # dado de execução (do testador) — nunca tocado pelo seed
     chamado: Optional[str] = None
+    # nível operação — independente do meu teste
+    status_operacao: Optional[str] = None
+    testado_por_operacao: Optional[str] = None
+    chamado_operacao: Optional[str] = None
     # campos descritivos — editáveis na tela; ao mudar qualquer um, o caso
     # vira user_managed e o seed para de sobrescrevê-lo.
     fluxo: Optional[str] = None
@@ -146,6 +164,8 @@ class SitObservationOut(BaseModel):
     autor: Optional[str] = None
     texto: str
     cor: Optional[str] = None   # "verde", "vermelho" ou None (sem marcação)
+    # de qual nível de teste veio: "interno" (meu teste) ou "operacao"
+    nivel: str = "interno"
     editado_por: Optional[str] = None
     editado_em: Optional[datetime] = None
     created_at: Optional[datetime] = None
@@ -156,6 +176,8 @@ class SitObservationCreate(BaseModel):
     texto: str
     autor: Optional[str] = None
     cor: Optional[str] = None
+    # "interno" (padrão) ou "operacao" — de qual teste saiu a anotação
+    nivel: Optional[str] = None
 
 
 class SitObservationUpdate(BaseModel):
@@ -176,6 +198,11 @@ class SituacaoEstagioOut(BaseModel):
     resultado_esperado: str
     status: str
     testado_por: Optional[str] = None
+    testado_em: Optional[datetime] = None
+    status_operacao: str = "Não testado"
+    testado_por_operacao: Optional[str] = None
+    testado_em_operacao: Optional[datetime] = None
+    status_geral: str = "Não testado"
     updated_at: Optional[datetime] = None
     screenshots: List[SitScreenshotOut] = []
     observations: List[SitObservationOut] = []
@@ -197,6 +224,8 @@ class SituacaoEstagioUpdate(BaseModel):
     ordem: Optional[int] = None
     status: Optional[str] = None
     testado_por: Optional[str] = None
+    status_operacao: Optional[str] = None
+    testado_por_operacao: Optional[str] = None
 
 
 class SituacaoOut(BaseModel):
@@ -209,6 +238,7 @@ class SituacaoOut(BaseModel):
     descricao: str
     origem: Optional[str] = None
     chamado: Optional[str] = None
+    chamado_operacao: Optional[str] = None
     user_managed: Optional[bool] = False
     updated_at: Optional[datetime] = None
     estagios: List[SituacaoEstagioOut] = []
@@ -229,12 +259,19 @@ class SituacaoUpdate(BaseModel):
     origem: Optional[str] = None
     # dado de execução (do testador) — não é "conteúdo" da situação, não marca user_managed
     chamado: Optional[str] = None
+    chamado_operacao: Optional[str] = None
 
 
 class SummaryOut(BaseModel):
     total: int
+    # contagem pelo status consolidado (o que vale pra fora)
     counts: dict
     pct_executado: float
+    # contagem de cada nível separado — "como está o meu teste" x "como está na operação"
+    counts_interno: dict = {}
+    counts_operacao: dict = {}
+    pct_executado_interno: float = 0.0
+    pct_executado_operacao: float = 0.0
 
 
 class MeetingNoteOut(BaseModel):
