@@ -251,8 +251,8 @@ def listar_casos(
     (Não testado/Aprovado/Reprovado/Bloqueado/N/A), grupo (ex.: "Grupo A")
     ou frente (ex.: "Operador (web)", "App do técnico").
 
-    Cada caso tem DOIS status: "interno" (o meu teste) e "operacao" (o teste
-    de quem opera). `nivel` diz a qual deles o filtro de status se aplica —
+    Cada caso tem DOIS status: "interno" (a validação técnica) e "operacao"
+    (a validação de quem opera). `nivel` diz a qual deles o filtro de status se aplica —
     padrão "interno". O campo "status" devolvido é sempre o consolidado: só
     fica Aprovado quando os dois níveis passam."""
     db = SessionLocal()
@@ -307,8 +307,8 @@ def atualizar_status_caso(
     """Atualiza o status de um caso de teste NUM DOS DOIS NÍVEIS. Status válidos:
     Não testado, Aprovado, Reprovado, Bloqueado, N/A.
 
-    `nivel`: "interno" (o meu teste — padrão) ou "operacao" (o teste feito por
-    quem opera). O status consolidado do caso só vira Aprovado quando os dois
+    `nivel`: "interno" (validação técnica — padrão) ou "operacao" (validação
+    feita por quem opera). O status consolidado do caso só vira Aprovado quando os dois
     níveis estão aprovados."""
     if status not in VALID_STATUSES:
         return {"erro": f"Status inválido: {status}. Use um de {sorted(VALID_STATUSES)}"}
@@ -369,8 +369,8 @@ def adicionar_observacao(
     `cor` marca a observação na tela: "verde" (deu certo, resolvido) ou
     "vermelho" (problema, pendência). Sem cor é a observação normal.
 
-    `nivel` diz de qual teste saiu a anotação: "interno" (o meu — padrão) ou
-    "operacao" (o teste de quem opera).
+    `nivel` diz de qual teste saiu a anotação: "interno" (validação técnica —
+    padrão) ou "operacao" (validação de quem opera).
     """
     texto = (texto or "").strip()
     if not texto:
@@ -471,8 +471,8 @@ def atualizar_observacao(
 def resumo_execucao() -> dict:
     """Contagem dos casos de teste do Fluxo C por status e percentual executado.
 
-    `counts` é o consolidado dos dois níveis (só Aprovado quando o meu teste E
-    o da operação passaram); `counts_interno` e `counts_operacao` mostram cada
+    `counts` é o consolidado dos dois níveis (só Aprovado quando a validação
+    técnica E a da operação passaram); `counts_interno` e `counts_operacao` mostram cada
     nível separado."""
     db = SessionLocal()
     try:

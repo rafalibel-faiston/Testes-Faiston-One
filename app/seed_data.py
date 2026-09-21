@@ -352,7 +352,7 @@ def migrate_schema(engine):
             stmts.append("ALTER TABLE test_cases ADD COLUMN problema_encontrado TEXT")
         # nível operação: o mesmo caso rodado por quem opera (ver app/niveis.py).
         # Os casos que já existiam entram como "Não testado" na operação — o que
-        # estava gravado em `status` continua sendo o meu teste, nada se perde.
+        # estava gravado em `status` continua sendo a validação técnica, nada se perde.
         if "status_operacao" not in cols:
             stmts.append("ALTER TABLE test_cases ADD COLUMN status_operacao VARCHAR "
                          "NOT NULL DEFAULT 'Não testado'")

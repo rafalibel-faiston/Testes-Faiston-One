@@ -175,7 +175,7 @@ def update_estagio(code: str, estagio_id: int, payload: schemas.SituacaoEstagioU
     old_geral = est.status_geral
     mudancas = []   # (nível, status novo, quem testou)
 
-    # nível interno: o meu teste
+    # nível interno: a validação técnica
     if payload.status is not None:
         if payload.status not in VALID_STATUSES:
             raise HTTPException(status_code=400, detail=f"Status inválido: {payload.status}")

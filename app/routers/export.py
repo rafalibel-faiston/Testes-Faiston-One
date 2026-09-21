@@ -15,18 +15,18 @@ from ..database import get_db
 router = APIRouter(tags=["export"])
 
 HEADERS = ["#", "Estágio", "Problema encontrado", "Ajuste solicitado",
-           "Meu teste", "Operação", "Status"]
+           "Validação técnica", "Validação na operação", "Status"]
 
 # pior status primeiro — o cabeçalho do estágio herda o pior status entre os itens dele,
 # igual à planilha original (um estágio só é "Concluido" se tudo dentro dele passou).
 # A coluna "Status" é o consolidado dos dois níveis (ver app/niveis.py): um item só
-# aparece Aprovado quando passou comigo E na operação.
+# aparece Aprovado quando passou na validação técnica E na operação.
 STATUS_PRIORITY = ["Reprovado", "Bloqueado", "Não testado",
-                   "Validação operação", "Validação interna", "N/A", "Aprovado"]
+                   "Pendente na técnica", "Pendente na operação", "N/A", "Aprovado"]
 STATUS_FILL = {
     "Aprovado": "D1FAE5",
-    "Validação interna": "DBEAFE",
-    "Validação operação": "FDE8D3",
+    "Pendente na operação": "DBEAFE",
+    "Pendente na técnica": "FDE8D3",
     "Reprovado": "FEE2E2",
     "Bloqueado": "FEF3C7",
     "N/A": "E5E7EB",

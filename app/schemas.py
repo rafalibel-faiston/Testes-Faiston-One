@@ -33,7 +33,7 @@ class ObservationOut(BaseModel):
     autor: Optional[str] = None
     texto: str
     cor: Optional[str] = None   # "verde", "vermelho" ou None (sem marcação)
-    # de qual nível de teste veio: "interno" (meu teste) ou "operacao"
+    # de qual nível de teste veio: "interno" (técnica) ou "operacao"
     nivel: str = "interno"
     editado_por: Optional[str] = None
     editado_em: Optional[datetime] = None
@@ -76,13 +76,13 @@ class TestCaseOut(BaseModel):
     passos: str
     resultado_esperado: str
     problema_encontrado: Optional[str] = None
-    # nível interno (o meu teste)
+    # nível interno (validação técnica)
     status: str
     observacao: Optional[str] = ""
     testado_por: Optional[str] = None
     testado_em: Optional[datetime] = None
     chamado: Optional[str] = None
-    # nível operação (o teste de quem opera)
+    # nível operação (validação de quem opera)
     status_operacao: str = "Não testado"
     testado_por_operacao: Optional[str] = None
     testado_em_operacao: Optional[datetime] = None
@@ -96,12 +96,12 @@ class TestCaseOut(BaseModel):
 
 
 class TestCaseUpdate(BaseModel):
-    # nível interno (o meu teste)
+    # nível interno (validação técnica)
     status: Optional[str] = None
     testado_por: Optional[str] = None
     # dado de execução (do testador) — nunca tocado pelo seed
     chamado: Optional[str] = None
-    # nível operação — independente do meu teste
+    # nível operação — independente da validação técnica
     status_operacao: Optional[str] = None
     testado_por_operacao: Optional[str] = None
     chamado_operacao: Optional[str] = None
@@ -164,7 +164,7 @@ class SitObservationOut(BaseModel):
     autor: Optional[str] = None
     texto: str
     cor: Optional[str] = None   # "verde", "vermelho" ou None (sem marcação)
-    # de qual nível de teste veio: "interno" (meu teste) ou "operacao"
+    # de qual nível de teste veio: "interno" (técnica) ou "operacao"
     nivel: str = "interno"
     editado_por: Optional[str] = None
     editado_em: Optional[datetime] = None
@@ -267,7 +267,7 @@ class SummaryOut(BaseModel):
     # contagem pelo status consolidado (o que vale pra fora)
     counts: dict
     pct_executado: float
-    # contagem de cada nível separado — "como está o meu teste" x "como está na operação"
+    # contagem de cada nível separado — "como está na técnica" x "como está na operação"
     counts_interno: dict = {}
     counts_operacao: dict = {}
     pct_executado_interno: float = 0.0

@@ -15,7 +15,7 @@ router = APIRouter(tags=["cases"])
 
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8MB por print
 ALLOWED_CONTENT_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"}
-# os status gravaveis valem pra CADA nível de teste (meu teste / operação) —
+# os status gravaveis valem pra CADA nível de teste (técnica / operação) —
 # o consolidado é derivado, nunca gravado (ver app/niveis.py)
 VALID_STATUSES = niveis.VALID_STATUSES
 # campos descritivos que, ao serem editados, tornam o caso "do usuário"
@@ -142,7 +142,7 @@ def update_case(code: str, payload: schemas.TestCaseUpdate, db: Session = Depend
     old_geral = case.status_geral
     mudancas = []   # (nível, status novo, quem testou) — pra trilha de atividade
 
-    # nível interno: o meu teste
+    # nível interno: a validação técnica
     if payload.status is not None:
         if payload.status not in VALID_STATUSES:
             raise HTTPException(status_code=400, detail=f"Status inválido: {payload.status}")
@@ -336,8 +336,8 @@ def delete_screenshot(screenshot_id: int, db: Session = Depends(get_db)):
 @router.get("/summary", response_model=schemas.SummaryOut)
 def summary(db: Session = Depends(get_db)):
     """Resumo em três leituras: o consolidado (o que vale pra fora) e cada
-    nível separado — dá pra ver de um olho só o que já passou comigo e ainda
-    não foi validado na operação."""
+    nível separado — dá pra ver de um olho só o que já passou na validação
+    técnica e ainda não foi validado na operação."""
     cases = db.query(models.TestCase.status, models.TestCase.status_operacao).all()
     total = len(cases)
 

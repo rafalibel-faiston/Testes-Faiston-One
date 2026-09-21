@@ -97,8 +97,8 @@ def export_completo(db: Session = Depends(get_db)):
         wb, "Casos de teste",
         ["Fluxo", "Código", "Grupo", "Estágio", "Nº", "Frente", "Tipo", "Prioridade", "Origem",
          "Status (consolidado)",
-         "Meu teste", "Testado por", "Testado em", "Chamado",
-         "Operação", "Testado por (operação)", "Testado em (operação)", "Chamado (operação)",
+         "Validação técnica", "Testado por", "Testado em", "Chamado",
+         "Validação na operação", "Testado por (operação)", "Testado em (operação)", "Chamado (operação)",
          "Pré-condição", "Passos", "Resultado esperado",
          "Problema encontrado", "Qtd. observações", "Qtd. prints", "Ativo", "Atualizado em"],
         [
@@ -160,8 +160,8 @@ def export_completo(db: Session = Depends(get_db)):
         wb, "Estágios das situações",
         ["Situação", "Ordem", "Nome", "Frente", "Passos", "Resultado esperado",
          "Status (consolidado)",
-         "Meu teste", "Testado por", "Testado em",
-         "Operação", "Testado por (operação)", "Testado em (operação)", "Atualizado em"],
+         "Validação técnica", "Testado por", "Testado em",
+         "Validação na operação", "Testado por (operação)", "Testado em (operação)", "Atualizado em"],
         estagio_rows, [10, 8, 24, 16, 34, 34, 18, 12, 14, 16, 12, 18, 16, 16],
     )
     _add_sheet(

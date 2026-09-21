@@ -17,12 +17,12 @@ from pathlib import Path
 
 # Status de caso de teste que contam como resolvido — o resto entra na pauta.
 # Leia-se sempre o status CONSOLIDADO (`status_geral`): um caso que passou só
-# comigo e ainda não foi validado na operação continua na pauta, porque é
-# exatamente esse o ponto cego que a reunião precisa ver (ver app/niveis.py).
+# na validação técnica e ainda não foi validado na operação continua na pauta,
+# porque é exatamente esse o ponto cego que a reunião precisa ver (app/niveis.py).
 STATUS_OK = {"Aprovado", "N/A"}
 STATUS_PROBLEMA = {"Reprovado", "Bloqueado"}
 # passou num nível e falta o outro
-STATUS_PARCIAL = {"Validação interna", "Validação operação"}
+STATUS_PARCIAL = {"Pendente na operação", "Pendente na técnica"}
 
 # Ajuste da Gestão de Ativos: só sai da pauta quando validado (ou descartado).
 AJUSTE_FECHADO = {"validado", "descartado"}
@@ -43,19 +43,19 @@ AJUSTE_BADGE = {
 PRIORIDADE_ORDEM = {"Alta": 0, "Média": 1, "Media": 1, "Baixa": 2}
 PRIORIDADE_BADGE = {"Alta": "b-alert", "Média": "b-warn", "Media": "b-warn", "Baixa": "b-neutral"}
 STATUS_BADGE = {"Reprovado": "b-alert", "Bloqueado": "b-warn", "Não testado": "b-neutral",
-                "Validação interna": "b-info", "Validação operação": "b-info"}
+                "Pendente na operação": "b-info", "Pendente na técnica": "b-info"}
 
 # Cores da barra de status. Verde/vermelho/roxo passam no separador de daltonismo
 # (o magenta da marca ficava perto demais do vermelho pra distinguir); os dois
 # últimos são neutros de propósito — "sem resultado ainda" não é uma cor de dado.
 # Cada faixa vem com rótulo e contagem na legenda, nunca só a cor.
-STATUS_ORDEM = ["Aprovado", "Validação interna", "Validação operação",
+STATUS_ORDEM = ["Aprovado", "Pendente na operação", "Pendente na técnica",
                 "Reprovado", "Bloqueado", "N/A", "Não testado"]
 STATUS_COR = {
     "Aprovado": "#04795c",
     # os dois parciais são azuis: "está andando", nem sucesso nem falha
-    "Validação interna": "#1b5fa8",
-    "Validação operação": "#4a7fc1",
+    "Pendente na operação": "#1b5fa8",
+    "Pendente na técnica": "#4a7fc1",
     "Reprovado": "#c02234",
     "Bloqueado": "#960a9c",
     "N/A": "#9aa2b8",
@@ -71,11 +71,11 @@ def status_do(item: dict) -> str:
 
 
 def niveis_do(item: dict) -> str:
-    """Linha 'Meu teste: X · Operação: Y' — na reunião o que importa não é só
+    """Linha 'Técnica: X · Operação: Y' — na reunião o que importa não é só
     que o caso está pendente, é DE QUAL LADO ele está pendente."""
     interno = item.get("status") or "Não testado"
     operacao = item.get("status_operacao") or "Não testado"
-    return f"Meu teste: {interno} · Operação: {operacao}"
+    return f"Técnica: {interno} · Operação: {operacao}"
 
 BRT = timezone(timedelta(hours=-3))
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
@@ -505,7 +505,7 @@ def secao_piloto(piloto: dict) -> str:
 
 def secao_nao_executados(casos: list) -> str:
     """O que ainda não fechou os dois níveis: nem rodado, ou rodado só de um
-    lado. Um caso aprovado por mim e nunca visto pela operação aparece aqui —
+    lado. Um caso aprovado na técnica e nunca visto pela operação aparece aqui —
     antes ele sumia da pauta como se estivesse pronto."""
     pendentes = [c for c in casos
                  if status_do(c) == "Não testado" or status_do(c) in STATUS_PARCIAL]
@@ -628,8 +628,8 @@ def montar_html(dados: dict, fonte: str, editavel: bool = False) -> str:
     ]
     casos_pendentes = [c for c in casos
                        if status_do(c) == "Não testado" or status_do(c) in STATUS_PARCIAL]
-    # o ponto cego que motivou os dois níveis: passou comigo, a operação nunca viu
-    so_validacao_interna = [c for c in casos if status_do(c) == "Validação interna"]
+    # o ponto cego que motivou os dois níveis: passou na técnica, a operação nunca viu
+    so_tecnica = [c for c in casos if status_do(c) == "Pendente na operação"]
     ajustes_abertos = [a for a in ajustes if a.get("status") not in AJUSTE_FECHADO]
     situacoes_pendentes = sum(
         1 for s in situacoes
@@ -656,7 +656,7 @@ def montar_html(dados: dict, fonte: str, editavel: bool = False) -> str:
             f'{sum(1 for a in ajustes_abertos if a.get("tipo") == "Bug")} bugs',
             "b-warn" if ajustes_abertos else "b-ok"),
         kpi("Testes por executar", len(casos_pendentes), "○",
-            f"{len(so_validacao_interna)} só esperando a operação", "b-neutral"),
+            f"{len(so_tecnica)} só esperando a operação", "b-neutral"),
     ])
 
     nav = "".join(

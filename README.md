@@ -4,7 +4,8 @@ Sisteminha pra acompanhar a execução dos testes do Fluxo C (Despacho NEXO) —
 só as frentes que a Faiston precisa validar como cliente final: **Operador (web)**
 e **App do técnico**. Backend fica fora (responsabilidade do time de LP/NEXO).
 
-Cada caso de teste é validado em **dois níveis** — *Meu teste* e *Operação* — cada
+Cada caso de teste é validado em **dois níveis** — *Validação técnica* e *Validação
+na operação* — cada
 um com seu próprio status (Não testado / Aprovado / Reprovado / Bloqueado / N/A),
 além de histórico de observações (com autor) e **upload de prints de tela** (ficam
 salvos no Postgres, então qualquer um do time com o link vê o andamento e as
@@ -12,15 +13,15 @@ evidências — sem precisar de login).
 
 ## Os dois níveis de teste
 
-Um caso passar na minha mão não quer dizer que passa na operação: o caminho que eu
-faço é o caminho que eu conheço, e quem opera usa o sistema do jeito dele. Um caso
-aprovado só na validação técnica virava "Aprovado", sumia da pauta e voltava como
+Passar na validação técnica não quer dizer que passa na operação: quem acompanha o
+projeto percorre o caminho que conhece, e quem opera usa o sistema do jeito dele. Um
+caso aprovado só na validação técnica virava "Aprovado", sumia da pauta e voltava como
 problema depois — então o status foi desdobrado em dois:
 
 | Nível | Campo | Quem marca |
 |---|---|---|
-| **Meu teste** (interno) | `status`, `testado_por`, `testado_em`, `chamado` | quem valida tecnicamente |
-| **Operação** | `status_operacao`, `testado_por_operacao`, `testado_em_operacao`, `chamado_operacao` | quem roda o processo de verdade |
+| **Validação técnica** (`interno`) | `status`, `testado_por`, `testado_em`, `chamado` | quem acompanha o projeto de perto |
+| **Validação na operação** (`operacao`) | `status_operacao`, `testado_por_operacao`, `testado_em_operacao`, `chamado_operacao` | quem roda o processo no dia a dia |
 
 O que vale pra fora (tela, exportação, pauta da reunião, KPIs) é o **consolidado**
 `status_geral`, derivado dos dois — nunca gravado. A regra está em `app/niveis.py`:
@@ -29,7 +30,7 @@ O que vale pra fora (tela, exportação, pauta da reunião, KPIs) é o **consoli
 2. **N/A** num nível = aquele nível não se aplica, quem decide é o outro;
 3. **Aprovado** só com os **dois** níveis aprovados;
 4. um lado aprovado e o outro em aberto vira um estado intermediário explícito:
-   **Validação interna** ("falta a operação") ou **Validação operação**
+   **Pendente na operação** ("falta a operação") ou **Pendente na técnica**
    ("falta o meu teste").
 
 Esses dois estados intermediários continuam aparecendo na pauta da reunião e nos
@@ -38,7 +39,7 @@ de qual teste vieram (`nivel`: `interno` ou `operacao`), e os estágios das situ
 seguem exatamente o mesmo modelo.
 
 Na migração, o que já estava gravado continua sendo o **meu teste**: todo caso
-antes "Aprovado" passa a aparecer como *Validação interna* até a operação validar.
+antes "Aprovado" passa a aparecer como *Pendente na operação* até a operação validar.
 
 ## Stack
 
@@ -339,7 +340,7 @@ próprio banco e somem junto se o ajuste for excluído.
 
 - `GET  /api/cases` — lista todos os casos com observações e prints
 - `PATCH /api/cases/{code}` — atualiza qualquer um dos dois níveis (`status`/`testado_por`/`chamado`
-  para o meu teste, `status_operacao`/`testado_por_operacao`/`chamado_operacao` para a operação).
+  para a validação técnica, `status_operacao`/`testado_por_operacao`/`chamado_operacao` para a operação).
   Mexer num nível nunca toca no outro; a resposta traz o `status_geral` recalculado.
   (Não mexe mais em observação — ver abaixo.)
 - `POST /api/cases/{code}/observacoes` — adiciona uma nova observação ao histórico do caso

@@ -28,14 +28,14 @@ class TestCase(Base):
     # texto original do "problema encontrado" (planilha-mãe do projeto), quando existe —
     # usado na exportação Excel pra reproduzir o formato original com o status atualizado.
     problema_encontrado = Column(Text, nullable=True)
-    # NÍVEL INTERNO — o meu teste (ver app/niveis.py)
+    # NÍVEL INTERNO — a validação técnica (ver app/niveis.py)
     status = Column(String, nullable=False, default="Não testado")
     observacao = Column(Text, nullable=True, default="")
     testado_por = Column(String, nullable=True)
     testado_em = Column(DateTime(timezone=True), nullable=True)
     chamado = Column(String, nullable=True)     # chamado testado
     # NÍVEL OPERAÇÃO — o mesmo caso rodado por quem opera de verdade. Vive
-    # separado de propósito: passar comigo não é passar na operação.
+    # separado de propósito: passar na técnica não é passar na operação.
     status_operacao = Column(String, nullable=False, default="Não testado",
                              server_default="Não testado")
     testado_por_operacao = Column(String, nullable=True)
@@ -140,8 +140,8 @@ class SituacaoObservation(Base):
     # (problema, pendência). None é a observação normal, sem cor — o padrão de
     # quem só quer anotar algo.
     cor = Column(String, nullable=True)
-    # de qual nível de teste veio a observação: "interno" (meu teste) ou
-    # "operacao" (o teste na operação) — o padrão das antigas é interno.
+    # de qual nível de teste veio a observação: "interno" (validação técnica)
+    # ou "operacao" (validação na operação) — o padrão das antigas é interno.
     nivel = Column(String, nullable=False, default="interno", server_default="interno")
     # quem atualizou o texto pela última vez e quando — o texto original (e cada
     # versão intermediária) fica guardado em `revisions`, nada se perde na edição.
@@ -560,8 +560,8 @@ class Observation(Base):
     # (problema, pendência). None é a observação normal, sem cor — o padrão de
     # quem só quer anotar algo.
     cor = Column(String, nullable=True)
-    # de qual nível de teste veio a observação: "interno" (meu teste) ou
-    # "operacao" (o teste na operação) — o padrão das antigas é interno.
+    # de qual nível de teste veio a observação: "interno" (validação técnica)
+    # ou "operacao" (validação na operação) — o padrão das antigas é interno.
     nivel = Column(String, nullable=False, default="interno", server_default="interno")
     # a observação pode ser atualizada quando o ponto evolui (foi ajustado, mudou
     # de entendimento, ganhou detalhe). `texto` é sempre a versão vigente; quem

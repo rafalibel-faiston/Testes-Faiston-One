@@ -10,27 +10,23 @@
   // status que se marca em CADA nível de teste
   const STATUSES = ["Não testado", "Aprovado", "Reprovado", "Bloqueado", "N/A"];
   // NÍVEIS: todo caso (e todo estágio de situação) é testado duas vezes —
-  // por mim e pela operação. Passar comigo não é passar na operação, então os
-  // dois status vivem separados e o que vale pra fora é o consolidado.
+  // na validação técnica e na operação. Passar na técnica não é passar na
+  // operação, então os dois status vivem separados e o que vale pra fora é o
+  // consolidado. `curto` é o rótulo de onde o espaço é apertado.
   const NIVEIS = [
-    { key: "interno", label: "Meu teste", campo: "status", quem: "testado_por", quando: "testado_em" },
-    { key: "operacao", label: "Operação", campo: "status_operacao", quem: "testado_por_operacao", quando: "testado_em_operacao" },
+    { key: "interno", label: "Validação técnica", curto: "Técnica",
+      campo: "status", quem: "testado_por", quando: "testado_em" },
+    { key: "operacao", label: "Validação na operação", curto: "Operação",
+      campo: "status_operacao", quem: "testado_por_operacao", quando: "testado_em_operacao" },
   ];
   // o consolidado tem dois estados a mais: passou de um lado só
-  const STATUS_GERAIS = ["Não testado", "Validação interna", "Validação operação",
+  const STATUS_GERAIS = ["Não testado", "Pendente na operação", "Pendente na técnica",
                          "Aprovado", "Reprovado", "Bloqueado", "N/A"];
   const STATUS_CODE = {
     "Não testado": "nt", "Aprovado": "ok", "Reprovado": "bad", "Bloqueado": "warn", "N/A": "na",
-    "Validação interna": "part", "Validação operação": "part",
-  };
-  // como a tela chama cada estado parcial — o rótulo diz o que FALTA, que é o
-  // que a pessoa precisa fazer a seguir
-  const STATUS_LABEL = {
-    "Validação interna": "Falta a operação",
-    "Validação operação": "Falta o meu teste",
+    "Pendente na operação": "part", "Pendente na técnica": "part",
   };
   const statusGeral = (x) => x.status_geral || x.status || "Não testado";
-  const statusLabel = (st) => STATUS_LABEL[st] || st;
   const FRONT_CODE = { "App do técnico": "app", "Operador (web)": "opr", "Transversal": "trv", "A definir": "trv" };
   const TESTER_KEY = "fluxoc_tester_name";
 
@@ -39,7 +35,7 @@
 
   const FRENT_CHIP_CLASS = { "App do técnico": "c-app", "Operador (web)": "c-opr", "Transversal": "c-trv", "A definir": "c-trv" };
   const STATUS_CHIP_CLASS = { "Não testado": "c-nt", "Aprovado": "c-ok", "Reprovado": "c-bad", "Bloqueado": "c-warn", "N/A": "c-na",
-                              "Validação interna": "c-part", "Validação operação": "c-part" };
+                              "Pendente na operação": "c-part", "Pendente na técnica": "c-part" };
 
   const $ = (sel, root) => (root || document).querySelector(sel);
   const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
@@ -134,21 +130,18 @@
     const uniq = (arr) => [...new Set(arr)];
     buildChipGroup("chips-grupo", "grupo", ["Todos", ...uniq(src.map((c) => c.grupo))]);
     buildChipGroup("chips-frente", "frente", ["Todas", ...uniq(src.map((c) => c.frente))], FRENT_CHIP_CLASS);
-    buildChipGroup("chips-status", "status", ["Todos", ...STATUS_GERAIS], STATUS_CHIP_CLASS, statusLabel);
+    buildChipGroup("chips-status", "status", ["Todos", ...STATUS_GERAIS], STATUS_CHIP_CLASS);
     buildChipGroup("chips-estagio", "estagio", ["Todos", ...uniq(src.map((c) => c.estagio))]);
   }
 
-  // `rotulo` deixa o chip mostrar um texto diferente do valor filtrado (os
-  // status parciais filtram por "Validação interna" e leem "Falta a operação")
-  function buildChipGroup(containerId, filterKey, values, colorMap, rotulo) {
+  function buildChipGroup(containerId, filterKey, values, colorMap) {
     const el = document.getElementById(containerId);
     el.innerHTML = values.map((v, i) => {
       const isAll = i === 0;
       const val = isAll ? "" : v;
       const colorClass = colorMap && colorMap[v] ? colorMap[v] : "";
       const active = activeFilters[filterKey] === val;
-      const texto = isAll || !rotulo ? v : rotulo(v);
-      return `<button type="button" class="chip ${colorClass} ${active ? "active" : ""}" data-key="${filterKey}" data-val="${esc(val)}">${esc(texto)}</button>`;
+      return `<button type="button" class="chip ${colorClass} ${active ? "active" : ""}" data-key="${filterKey}" data-val="${esc(val)}">${esc(v)}</button>`;
     }).join("");
     $$(".chip", el).forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -328,7 +321,7 @@
     const quem = item[nivel.quem];
     const quando = item[nivel.quando];
     return `<div class="status-nivel" data-nivel="${nivel.key}">
-        <span class="nivel-k">${nivel.label}</span>
+        <span class="nivel-k" title="${nivel.label}">${nivel.curto}</span>
         <div class="status-btns">
           ${STATUSES.map((st) => `<button class="sbtn ${st === atual ? "active" : ""}" data-s="${st}" data-nivel="${nivel.key}">${st}</button>`).join("")}
         </div>
@@ -339,13 +332,13 @@
   function statusGeralHtml(item) {
     const st = statusGeral(item);
     return `<span class="status-geral ${STATUS_CHIP_CLASS[st] || "c-nt"}" data-status-geral
-        title="Status consolidado — só fica Aprovado quando os dois níveis passam">${esc(statusLabel(st))}</span>`;
+        title="Status consolidado — só fica Aprovado quando os dois níveis passam">${esc(st)}</span>`;
   }
 
   // de qual nível é a observação que está sendo escrita
   function nivelPickerHtml() {
     return `<div class="nivel-picker" role="group" aria-label="Nível da observação">
-        ${NIVEIS.map((n, i) => `<button type="button" class="nivel-opt ${i === 0 ? "active" : ""}" data-nivel-obs="${n.key}">${n.label}</button>`).join("")}
+        ${NIVEIS.map((n, i) => `<button type="button" class="nivel-opt ${i === 0 ? "active" : ""}" data-nivel-obs="${n.key}" title="Observação da ${n.label.toLowerCase()}">${n.curto}</button>`).join("")}
       </div>`;
   }
 
@@ -399,8 +392,8 @@
         </div>
         <div class="reg-row">
           <label class="reg-field">
-            <span class="reg-k">Chamado — meu teste</span>
-            <input class="reg-chamado" type="text" value="${esc(c.chamado || "")}" placeholder="qual chamado eu testei" autocomplete="off">
+            <span class="reg-k">Chamado — técnica</span>
+            <input class="reg-chamado" type="text" value="${esc(c.chamado || "")}" placeholder="qual chamado foi testado" autocomplete="off">
           </label>
           <label class="reg-field">
             <span class="reg-k">Chamado — operação</span>
@@ -514,7 +507,7 @@
       const geral = statusGeral(updated);
       const chip = $("[data-status-geral]", card);
       if (chip) {
-        chip.textContent = statusLabel(geral);
+        chip.textContent = geral;
         chip.className = `status-geral ${STATUS_CHIP_CLASS[geral] || "c-nt"}`;
       }
       card.className = card.className.replace(/\bst-\w+\b/, "") + ` st-${STATUS_CODE[geral] || "nt"}`;
@@ -698,8 +691,8 @@
     STATUS_GERAIS.forEach((st) => { counts[st] = 0; });
     flowCases.forEach((c) => { const st = statusGeral(c); counts[st] = (counts[st] || 0) + 1; });
     $("#stat-nt").textContent = counts["Não testado"];
-    $("#stat-falta-op").textContent = counts["Validação interna"];
-    $("#stat-falta-meu").textContent = counts["Validação operação"];
+    $("#stat-pend-op").textContent = counts["Pendente na operação"];
+    $("#stat-pend-tec").textContent = counts["Pendente na técnica"];
     $("#stat-ok").textContent = counts["Aprovado"];
     $("#stat-bad").textContent = counts["Reprovado"];
     $("#stat-warn").textContent = counts["Bloqueado"];
@@ -747,7 +740,7 @@
 
   // ---------------- carrossel de evidências (modo apresentação) ----------------
   const STATUS_CAP = { "Aprovado": "ok", "Reprovado": "bad", "Bloqueado": "warn", "N/A": "na", "Não testado": "nt",
-                       "Validação interna": "part", "Validação operação": "part" };
+                       "Pendente na operação": "part", "Pendente na técnica": "part" };
   const carState = { slides: [], i: 0 };
 
   function slideOf(c, s) {
@@ -825,7 +818,7 @@
       `<div class="cap-line">
         <span class="cap-stage">${esc(s.estagio)}</span>
         <span class="cap-tag">${esc(s.frente)}</span>
-        <span class="cap-tag cap-status ${stCode}">${esc(statusLabel(s.status))}</span>
+        <span class="cap-tag cap-status ${stCode}">${esc(s.status)}</span>
       </div>
       ${regBits ? `<div class="cap-reg">${regBits}</div>` : ""}
       <div class="cap-meta">${metaBits}</div>`;
@@ -2841,8 +2834,8 @@
     STATUS_GERAIS.forEach((st) => { counts[st] = 0; });
     allEstagios(flowSits).forEach((e) => { const st = statusGeral(e); counts[st] = (counts[st] || 0) + 1; });
     $("#sit-stat-nt").textContent = counts["Não testado"];
-    $("#sit-stat-falta-op").textContent = counts["Validação interna"];
-    $("#sit-stat-falta-meu").textContent = counts["Validação operação"];
+    $("#sit-stat-pend-op").textContent = counts["Pendente na operação"];
+    $("#sit-stat-pend-tec").textContent = counts["Pendente na técnica"];
     $("#sit-stat-ok").textContent = counts["Aprovado"];
     $("#sit-stat-bad").textContent = counts["Reprovado"];
     $("#sit-stat-warn").textContent = counts["Bloqueado"];
@@ -2884,7 +2877,7 @@
       [{ label: "Todas", val: "" }, ...uniq(allEstagios(flowSits).map((e) => e.frente)).map((v) => ({ label: v, val: v }))],
       FRENT_CHIP_CLASS);
     buildSitChipGroup("sit-chips-status", "status",
-      [{ label: "Todos", val: "" }, ...STATUS_GERAIS.map((v) => ({ label: statusLabel(v), val: v }))],
+      [{ label: "Todos", val: "" }, ...STATUS_GERAIS.map((v) => ({ label: v, val: v }))],
       STATUS_CHIP_CLASS);
   }
 
@@ -3481,8 +3474,8 @@
       html: `
         <ol class="guia-passos">
           <li><b>Abra o caso ou o estágio</b> que você vai testar e execute no NEXO.</li>
-          <li><b>Marque o status no nível certo</b>: <b>Meu teste</b> é a sua validação; <b>Operação</b> é o mesmo caso rodado por quem opera de verdade. Aprovado, Reprovado, Bloqueado ou N/A em cada um — o seu nome vai junto.</li>
-          <li><b>O caso só fica Aprovado quando os dois níveis passam.</b> Aprovado só no seu teste aparece como "Falta a operação" — é o que funciona pra você e ainda não foi provado na operação.</li>
+          <li><b>Marque o status no nível certo</b>: <b>Técnica</b> é a validação de quem acompanha o projeto; <b>Operação</b> é o mesmo caso rodado por quem usa o sistema no dia a dia. Aprovado, Reprovado, Bloqueado ou N/A em cada um — o seu nome vai junto.</li>
+          <li><b>O caso só fica Aprovado quando os dois níveis passam.</b> Aprovado só na técnica aparece como "Pendente na operação" — funciona pra quem testou e ainda não foi provado na operação.</li>
           <li><b>Escreva o que aconteceu</b> na observação — principalmente quando reprovar. Uma linha objetiva já ajuda muito.</li>
           <li><b>Cole o print</b> com <span class="guia-kbd">Ctrl</span> + <span class="guia-kbd">V</span>: clique antes no card que vai receber a imagem (ele fica com a borda azul).</li>
           <li><b>Confira as Novidades</b> pra ver o que o outro time mexeu desde a sua última visita.</li>
