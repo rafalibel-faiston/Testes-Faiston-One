@@ -390,6 +390,23 @@ def migrate_schema(engine):
 
     if "ativo_ajustes" in existing_tables:
         aj_cols = {c["name"] for c in insp.get_columns("ativo_ajustes")}
+        # validação em dois níveis, igual aos casos de teste (ver app/niveis.py)
+        if "validacao" not in aj_cols:
+            stmts.append("ALTER TABLE ativo_ajustes ADD COLUMN validacao VARCHAR "
+                         "NOT NULL DEFAULT 'Não testado'")
+            stmts.append("ALTER TABLE ativo_ajustes ADD COLUMN validado_por VARCHAR")
+            stmts.append("ALTER TABLE ativo_ajustes ADD COLUMN validado_em "
+                         + ("TIMESTAMP WITH TIME ZONE" if pg else "TIMESTAMP"))
+            stmts.append("ALTER TABLE ativo_ajustes ADD COLUMN validacao_operacao VARCHAR "
+                         "NOT NULL DEFAULT 'Não testado'")
+            stmts.append("ALTER TABLE ativo_ajustes ADD COLUMN validado_por_operacao VARCHAR")
+            stmts.append("ALTER TABLE ativo_ajustes ADD COLUMN validado_em_operacao "
+                         + ("TIMESTAMP WITH TIME ZONE" if pg else "TIMESTAMP"))
+            # o que já estava "validado" foi validado na técnica — volta pro ciclo
+            # como entregue, esperando a confirmação da operação. Só roda nesta
+            # criação das colunas; num boot seguinte o IF acima já é falso.
+            stmts.append("UPDATE ativo_ajustes SET status = 'entregue', validacao = 'Aprovado' "
+                         "WHERE status = 'validado'")
         if "retorno" not in aj_cols:
             stmts.append("ALTER TABLE ativo_ajustes ADD COLUMN retorno TEXT")
         if "prazo" not in aj_cols:
@@ -441,7 +458,7 @@ def migrate_schema(engine):
 
     # de qual nível de teste a observação veio — as que já existem são do
     # nível interno, que era o único até aqui
-    for tabela in ("observations", "situacao_observations"):
+    for tabela in ("observations", "situacao_observations", "ativo_ajuste_observations"):
         if tabela in existing_tables:
             if "nivel" not in {c["name"] for c in insp.get_columns(tabela)}:
                 stmts.append(f"ALTER TABLE {tabela} ADD COLUMN nivel VARCHAR "

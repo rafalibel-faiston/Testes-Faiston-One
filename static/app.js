@@ -4297,17 +4297,38 @@
   let ajusteVersao = "";                         // "" enquanto não carregou nada
   const ajusteFiltros = { tipo: "", status: "" };
 
+  // O ciclo de vida do pedido vai até "Entregue" — daí pra frente quem fecha o
+  // ajuste é a VALIDAÇÃO em dois níveis (técnica e operação), igual ao
+  // Dispatcher: entregue e conferido só na técnica não é ajuste pronto.
   const AJUSTE_STATUS = [
     { key: "levantado",       label: "Levantado",         cls: "st-levantado" },
     { key: "analise",         label: "Em análise",        cls: "st-analise" },
     { key: "desenvolvimento", label: "Em desenvolvimento", cls: "st-dev" },
     { key: "entregue",        label: "Entregue",           cls: "st-entregue" },
-    { key: "validado",        label: "Validado",           cls: "st-validado" },
     { key: "descartado",      label: "Descartado",         cls: "st-descartado" },
   ];
   const AJUSTE_STATUS_META = Object.fromEntries(AJUSTE_STATUS.map((s) => [s.key, s]));
-  // o que ainda dá trabalho — usado no contador da aba e no "em aberto" do resumo
-  const AJUSTE_ABERTO = new Set(["levantado", "analise", "desenvolvimento", "entregue"]);
+  // os dois níveis de validação do ajuste — mesmos campos do caso de teste
+  const AJUSTE_NIVEIS = [
+    { key: "interno", label: "Validação técnica", curto: "Técnica",
+      campo: "validacao", quem: "validado_por", quando: "validado_em" },
+    { key: "operacao", label: "Validação na operação", curto: "Operação",
+      campo: "validacao_operacao", quem: "validado_por_operacao", quando: "validado_em_operacao" },
+  ];
+  const ajusteValidacao = (a) => a.validacao_geral || "Não testado";
+  // em aberto = ainda dá trabalho: nem descartado, nem validado dos dois lados
+  const ajusteAberto = (a) => (
+    "fechado" in a ? !a.fechado
+      : a.status !== "descartado" && !["Aprovado", "N/A"].includes(ajusteValidacao(a))
+  );
+  // o rótulo que descreve o ajuste hoje: o passo do ciclo enquanto está sendo
+  // feito; depois de entregue, o que a validação diz
+  function ajusteSituacao(a) {
+    if (a.status === "descartado") return "Descartado";
+    const v = ajusteValidacao(a);
+    if (v !== "Não testado") return v === "Aprovado" ? "Validado" : v;
+    return (AJUSTE_STATUS_META[a.status] || AJUSTE_STATUS[0]).label;
+  }
 
   // a lista sai por prioridade: Alta primeiro, "A definir" por último. O número
   // do item não muda — ele é a identidade do ajuste ("o ajuste 4"), não a ordem.
@@ -4358,7 +4379,7 @@
     if (!versoes.length) { nav.innerHTML = ""; return; }
     nav.innerHTML = versoes.map((v) => {
       const itens = AJUSTES.filter((a) => a.versao === v);
-      const abertos = itens.filter((a) => AJUSTE_ABERTO.has(a.status)).length;
+      const abertos = itens.filter(ajusteAberto).length;
       return `<button type="button" class="ajuste-versao${v === ajusteVersao ? " active" : ""}" data-versao="${esc(v)}">
         <span class="ajuste-versao-name">Ajustes ${esc(v)}</span>
         <span class="ajuste-versao-sub">${itens.length} ${itens.length === 1 ? "item" : "itens"} · ${abertos} em aberto</span>
@@ -4374,14 +4395,33 @@
     const itens = ajustesDaVersao();
     const bugs = itens.filter((a) => a.tipo === "Bug").length;
     const melhorias = itens.filter((a) => a.tipo === "Melhoria").length;
-    const abertos = itens.filter((a) => AJUSTE_ABERTO.has(a.status)).length;
-    const prontos = itens.filter((a) => a.status === "validado").length;
+    const abertos = itens.filter(ajusteAberto).length;
+    const prontos = itens.filter((a) => ajusteValidacao(a) === "Aprovado").length;
+    const esperandoOp = itens.filter((a) => ajusteValidacao(a) === "Pendente na operação").length;
     $("#ajustes-stats").innerHTML = `
       <div class="stat"><span class="stat-n">${itens.length}</span><span class="stat-l">Ajustes</span></div>
       <div class="stat bad"><span class="stat-n">${bugs}</span><span class="stat-l">Bugs</span></div>
       <div class="stat"><span class="stat-n">${melhorias}</span><span class="stat-l">Melhorias</span></div>
       <div class="stat warn"><span class="stat-n">${abertos}</span><span class="stat-l">Em aberto</span></div>
+      <div class="stat part"><span class="stat-n">${esperandoOp}</span><span class="stat-l">Pendente na operação</span></div>
       <div class="stat ok"><span class="stat-n">${prontos}</span><span class="stat-l">Validados</span></div>`;
+  }
+
+  // Os chips misturam duas coisas de propósito, porque é assim que a pessoa
+  // procura: o passo do ciclo ("em desenvolvimento") e o resultado da validação
+  // ("pendente na operação"). Os de validação vêm prefixados com "v:".
+  const AJUSTE_CHIPS_VALIDACAO = ["Pendente na operação", "Pendente na técnica",
+                                  "Reprovado", "Validado"];
+  const filtroValidacao = (f) => (f || "").startsWith("v:") ? f.slice(2) : "";
+
+  function ajusteCasaFiltro(a) {
+    const f = ajusteFiltros.status;
+    if (!f) return true;
+    const validacao = filtroValidacao(f);
+    if (!validacao) return a.status === f;
+    return validacao === "Validado"
+      ? ajusteValidacao(a) === "Aprovado"
+      : ajusteValidacao(a) === validacao;
   }
 
   function renderAjusteStatusChips() {
@@ -4392,6 +4432,14 @@
       const n = itens.filter((a) => a.status === st.key).length;
       if (!n && ajusteFiltros.status !== st.key) return;   // só mostra situação que existe na versão
       chips.push(`<button type="button" class="chip${ajusteFiltros.status === st.key ? " active" : ""}" data-status="${st.key}">${esc(st.label)} <b>${n}</b></button>`);
+    });
+    AJUSTE_CHIPS_VALIDACAO.forEach((v) => {
+      const chave = "v:" + v;
+      const n = itens.filter((a) => (v === "Validado" ? ajusteValidacao(a) === "Aprovado"
+                                                      : ajusteValidacao(a) === v)).length;
+      if (!n && ajusteFiltros.status !== chave) return;
+      const cls = v === "Validado" ? "c-ok" : (v === "Reprovado" ? "c-bad" : "c-part");
+      chips.push(`<button type="button" class="chip ${cls}${ajusteFiltros.status === chave ? " active" : ""}" data-status="${esc(chave)}">${esc(v)} <b>${n}</b></button>`);
     });
     box.innerHTML = chips.join("");
     $$(".chip", box).forEach((c) => c.addEventListener("click", () => {
@@ -4405,7 +4453,7 @@
     const st = AJUSTE_STATUS_META[a.status] || AJUSTE_STATUS[0];
     const opts = AJUSTE_STATUS.map((s) =>
       `<option value="${s.key}"${s.key === a.status ? " selected" : ""}>${esc(s.label)}</option>`).join("");
-    return `<article class="ajuste-item ${tipoCls} ${st.cls}" data-id="${a.id}" data-paste-key="ajuste:${a.id}">
+    return `<article class="ajuste-item ${tipoCls} ${st.cls}" data-id="${a.id}" data-numero="${a.numero || ""}" data-paste-key="ajuste:${a.id}">
       <header class="ajuste-item-head">
         <span class="ajuste-num">${String(a.numero || 0).padStart(2, "0")}</span>
         <div class="ajuste-item-copy">
@@ -4415,6 +4463,8 @@
             ${a.area ? `<span class="ajuste-tag t-area">${esc(a.area)}</span>` : ""}
             <span class="ajuste-tag t-prio ${prioridadeCls(a.prioridade)}">${esc(a.prioridade)}</span>
             ${a.responsavel ? `<span class="ajuste-tag t-resp">${esc(a.responsavel)}</span>` : ""}
+            <span class="status-geral ${STATUS_CHIP_CLASS[ajusteValidacao(a)] || "c-nt"}"
+              title="Validação consolidada — só fecha com a técnica e a operação aprovando">${esc(ajusteSituacao(a))}</span>
           </div>
         </div>
         <select class="ajuste-status ${st.cls}" title="Situação do ajuste">${opts}</select>
@@ -4432,13 +4482,19 @@
       </div>
       ${a.observacao ? `<div class="ajuste-obs"><b>Obs.</b> ${esc(a.observacao)}</div>` : ""}
       ${retornoLinha(a)}
+      <div class="status-niveis">
+        ${AJUSTE_NIVEIS.map((n) => nivelStatusHtml(a, n)).join("")}
+      </div>
       <div class="ajuste-notas obs-row">
         <div class="obs-list">${obsList(a.observations)}</div>
         <div class="obs-add">
           <textarea class="obs-input" rows="1" placeholder="Adicionar nota..."></textarea>
           <button type="button" class="obs-add-btn">Adicionar</button>
         </div>
-        ${corPickerHtml("", "obs-cores-add")}
+        <div class="obs-add-meta">
+          ${nivelPickerHtml()}
+          ${corPickerHtml("", "obs-cores-add")}
+        </div>
       </div>
       <div class="ajuste-shots">
         <div class="ajuste-shots-grid">${(a.prints || []).map(ajustePrintThumb).join("")}</div>
@@ -4462,7 +4518,7 @@
     const lista = $("#ajustes-list");
     const itens = ajustesDaVersao()
       .filter((a) => !ajusteFiltros.tipo || a.tipo === ajusteFiltros.tipo)
-      .filter((a) => !ajusteFiltros.status || a.status === ajusteFiltros.status)
+      .filter(ajusteCasaFiltro)
       .sort((a, b) => prioridadeRank(a.prioridade) - prioridadeRank(b.prioridade)
                       || (a.numero || 0) - (b.numero || 0) || a.id - b.id);
 
@@ -4487,6 +4543,21 @@
       const notaInput = $(".obs-input", card);
       const notaBtn = $(".obs-add-btn", card);
       const notaCor = wireCorPicker($(".obs-cores-add", card));
+      const notaNivel = wireNivelPicker($(".nivel-picker", card));
+
+      $$(".sbtn", card).forEach((btn) => btn.addEventListener("click", async () => {
+        const nivel = AJUSTE_NIVEIS.find((n) => n.key === btn.dataset.nivel) || AJUSTE_NIVEIS[0];
+        const corpo = { [nivel.campo]: btn.dataset.s };
+        corpo[nivel.quem] = testerName() || undefined;
+        try {
+          substituiAjusteLocal(await api(`/api/ativos/ajustes/${id}`, {
+            method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(corpo),
+          }));
+          renderAjustes();
+          toast(`#${card.dataset.numero || id} · ${nivel.label} → ${btn.dataset.s}`);
+        } catch (e) { toast("Erro ao salvar: " + e.message, true); }
+      }));
       const submitNota = async () => {
         const texto = notaInput.value.trim();
         if (!texto) return;
@@ -4495,7 +4566,7 @@
           substituiAjusteLocal(await api(`/api/ativos/ajustes/${id}/observacoes`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ texto, cor: notaCor.get(), autor: testerName() || undefined }),
+            body: JSON.stringify({ texto, cor: notaCor.get(), nivel: notaNivel.get(), autor: testerName() || undefined }),
           }));
           renderAjustes();
           toast("Nota adicionada.");
@@ -4550,7 +4621,7 @@
   function atualizaContadorAba() {
     const badge = $("#module-tab-ativos-count");
     if (!badge) return;
-    const abertos = AJUSTES.filter((a) => AJUSTE_ABERTO.has(a.status)).length;
+    const abertos = AJUSTES.filter(ajusteAberto).length;
     badge.textContent = abertos;
     badge.hidden = !abertos;
   }

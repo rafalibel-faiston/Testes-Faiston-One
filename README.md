@@ -38,6 +38,21 @@ KPIs — é justamente o que não se quer perder de vista. As observações tamb
 de qual teste vieram (`nivel`: `interno` ou `operacao`), e os estágios das situações
 seguem exatamente o mesmo modelo.
 
+### Na Gestão de Ativos
+
+O mesmo mecanismo vale para os ajustes, só que no fim do ciclo de vida. O `status`
+do ajuste vai de `levantado` até `entregue` (ou `descartado`) — **"validado" não é
+mais um passo que se marca à mão**. Depois de entregue, o ajuste é validado nos dois
+níveis (`validacao` + `validado_por`/`validado_em` e `validacao_operacao` +
+`validado_por_operacao`/`validado_em_operacao`), e o `validacao_geral` sai da mesma
+regra de `app/niveis.py`. O ajuste só é dado como pronto — `fechado`, fora da pauta e
+do "em aberto" — quando foi descartado ou validado dos dois lados; entregue e
+conferido só na técnica continua na reunião.
+
+Na migração, ajuste que estava `validado` volta para `entregue` com a validação
+técnica aprovada, esperando a operação confirmar. Uma chamada antiga que ainda mande
+`status: "validado"` é traduzida para isso mesmo, em vez de fechar o item.
+
 Na migração, o que já estava gravado continua sendo o **meu teste**: todo caso
 antes "Aprovado" passa a aparecer como *Pendente na operação* até a operação validar.
 
@@ -147,7 +162,8 @@ Com o app rodando (local ou no domínio do Railway), a URL do servidor MCP é
 
 Depois disso as ferramentas (`listar_casos`, `obter_caso`,
 `atualizar_status_caso`, `adicionar_observacao`, `atualizar_observacao`, `resumo_execucao`,
-`listar_tarefas`, `criar_tarefa`, `listar_ajustes_ativos`, `criar_ajuste_ativos`)
+`listar_tarefas`, `criar_tarefa`, `listar_ajustes_ativos`, `criar_ajuste_ativos`,
+`validar_ajuste_ativos`)
 ficam disponíveis pra pedir direto na
 conversa, tipo "marca o FC-12 como aprovado" ou "lista os casos reprovados do
 Grupo B". As ferramentas de status e observação aceitam `nivel`
@@ -330,7 +346,9 @@ próprio banco e somem junto se o ajuste for excluído.
 
 - `GET  /api/ativos/ajustes` — lista os ajustes com seus prints (filtros opcionais: `versao`, `tipo`, `status`)
 - `POST /api/ativos/ajustes` — cadastra um ajuste (sem `numero`, ele entra na sequência da versão)
-- `PATCH /api/ativos/ajustes/{id}` — edita qualquer campo, inclusive mover de versão
+- `PATCH /api/ativos/ajustes/{id}` — edita qualquer campo, inclusive mover de versão, e
+  registra a validação de cada nível (`validacao`/`validado_por` e
+  `validacao_operacao`/`validado_por_operacao`)
 - `DELETE /api/ativos/ajustes/{id}` — remove o ajuste (e os prints dele)
 - `POST /api/ativos/ajustes/{id}/prints` — anexa um print (multipart, campo `file`; até 8MB, só imagem)
 - `GET  /api/ativos/prints/{id}` — exibe o print

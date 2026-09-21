@@ -24,8 +24,30 @@ STATUS_PROBLEMA = {"Reprovado", "Bloqueado"}
 # passou num nível e falta o outro
 STATUS_PARCIAL = {"Pendente na operação", "Pendente na técnica"}
 
-# Ajuste da Gestão de Ativos: só sai da pauta quando validado (ou descartado).
+# Ajuste da Gestão de Ativos: só sai da pauta quando descartado ou validado nos
+# DOIS níveis (técnica + operação) — entregue e conferido só na técnica continua
+# na reunião, mesma régua dos casos de teste.
 AJUSTE_FECHADO = {"validado", "descartado"}
+
+
+def ajuste_aberto(a: dict) -> bool:
+    """`fechado` vem calculado pela API; o fallback cobre JSON antigo, salvo
+    antes de a validação virar dois níveis."""
+    if "fechado" in a:
+        return not a["fechado"]
+    return a.get("status") not in AJUSTE_FECHADO
+
+
+def ajuste_situacao(a: dict) -> str:
+    """O rótulo que descreve o ajuste hoje: enquanto está sendo feito, o passo do
+    ciclo; depois de entregue, o que a validação dos dois níveis diz."""
+    status = a.get("status") or "levantado"
+    if status == "descartado":
+        return AJUSTE_LABEL["descartado"]
+    validacao = a.get("validacao_geral")
+    if validacao and validacao != "Não testado":
+        return "Validado" if validacao == "Aprovado" else validacao
+    return AJUSTE_LABEL.get(status, status)
 AJUSTE_LABEL = {
     "levantado": "Levantado",
     "analise": "Em análise",
@@ -387,7 +409,7 @@ def secao_ajustes(ajustes: list, editavel: bool = False) -> str:
     """Os ajustes pendentes em lista, na ordem em que o time ataca (prioridade e
     depois o número do item) — é por esse número que eles se referem ao ajuste na
     reunião."""
-    abertos = [a for a in ajustes if a.get("status") not in AJUSTE_FECHADO]
+    abertos = [a for a in ajustes if ajuste_aberto(a)]
     if not abertos:
         return vazio("Nenhum ajuste em aberto na Gestão de Ativos.")
     versoes: dict = {}
@@ -401,9 +423,11 @@ def secao_ajustes(ajustes: list, editavel: bool = False) -> str:
         linhas = ""
         for a in itens:
             status = a.get("status") or "levantado"
+            situacao = ajuste_situacao(a)
             etiquetas = badge(a.get("tipo"), "b-alert" if a.get("tipo") == "Bug" else "b-info")
             etiquetas += " " + badge(a.get("prioridade"), PRIORIDADE_BADGE.get(a.get("prioridade"), "b-neutral"))
-            etiquetas += " " + badge(AJUSTE_LABEL.get(status, status), AJUSTE_BADGE.get(status, "b-neutral"))
+            etiquetas += " " + badge(situacao, STATUS_BADGE.get(situacao,
+                                                               AJUSTE_BADGE.get(status, "b-neutral")))
             if a.get("area"):
                 etiquetas += f' <span class="item-meta">{e(a.get("area"))}</span>'
             if a.get("prints"):
@@ -630,7 +654,7 @@ def montar_html(dados: dict, fonte: str, editavel: bool = False) -> str:
                        if status_do(c) == "Não testado" or status_do(c) in STATUS_PARCIAL]
     # o ponto cego que motivou os dois níveis: passou na técnica, a operação nunca viu
     so_tecnica = [c for c in casos if status_do(c) == "Pendente na operação"]
-    ajustes_abertos = [a for a in ajustes if a.get("status") not in AJUSTE_FECHADO]
+    ajustes_abertos = [a for a in ajustes if ajuste_aberto(a)]
     situacoes_pendentes = sum(
         1 for s in situacoes
         if any(status_do(x) not in STATUS_OK for x in (s.get("estagios") or []))

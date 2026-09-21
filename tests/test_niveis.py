@@ -188,3 +188,81 @@ def test_pauta_cobra_o_que_so_passou_na_tecnica(client, caso):
     html = client.get("/relatorio").text
     assert code in html
     assert "Pendente na operação" in html or "esperando a operação" in html
+
+
+# --------------------------------------------------------------- gestão de ativos
+
+@pytest.fixture
+def ajuste(client):
+    """Um ajuste da Gestão de Ativos recém-levantado."""
+    resp = client.post("/api/ativos/ajustes", json={
+        "titulo": "Entrada não calcula o total",
+        "atual": "Soma errado quando tem desconto",
+        "esperado": "Somar certo",
+        "tipo": "Bug",
+        "versao": "v9",
+    })
+    assert resp.status_code == 201
+    yield resp.json()
+    client.delete(f"/api/ativos/ajustes/{resp.json()['id']}")
+
+
+def test_ajuste_entregue_nao_fecha_so_com_a_validacao_tecnica(client, ajuste):
+    """O mesmo ponto cego do Dispatcher: a LP entrega, a técnica confere e o
+    item sumia da pauta sem a operação ter usado."""
+    aid = ajuste["id"]
+    assert ajuste["validacao_geral"] == "Não testado"
+    assert ajuste["fechado"] is False
+
+    client.patch(f"/api/ativos/ajustes/{aid}", json={"status": "entregue"})
+    dados = client.patch(f"/api/ativos/ajustes/{aid}", json={
+        "validacao": "Aprovado", "validado_por": "Rafael",
+    }).json()
+    assert dados["validacao_geral"] == "Pendente na operação"
+    assert dados["fechado"] is False        # continua na pauta
+    assert dados["validado_em"] is not None
+
+    dados = client.patch(f"/api/ativos/ajustes/{aid}", json={
+        "validacao_operacao": "Aprovado", "validado_por_operacao": "Estoque",
+    }).json()
+    assert dados["validacao_geral"] == "Aprovado"
+    assert dados["fechado"] is True
+    assert dados["validado_por"] == "Rafael"
+    assert dados["validado_por_operacao"] == "Estoque"
+
+
+def test_reprovado_na_operacao_reabre_o_ajuste(client, ajuste):
+    aid = ajuste["id"]
+    client.patch(f"/api/ativos/ajustes/{aid}", json={"validacao": "Aprovado"})
+    dados = client.patch(f"/api/ativos/ajustes/{aid}", json={"validacao_operacao": "Reprovado"}).json()
+    assert dados["validacao_geral"] == "Reprovado"
+    assert dados["fechado"] is False
+
+
+def test_status_validado_antigo_vira_entregue_mais_validacao_tecnica(client, ajuste):
+    """Quem ainda manda o status "validado" (chamada antiga) está dizendo que a
+    técnica aprovou — o ajuste não pode fechar por isso sozinho."""
+    dados = client.patch(f"/api/ativos/ajustes/{ajuste['id']}", json={"status": "validado"}).json()
+    assert dados["status"] == "entregue"
+    assert dados["validacao"] == "Aprovado"
+    assert dados["fechado"] is False
+
+
+def test_validacao_invalida_e_recusada(client, ajuste):
+    resp = client.patch(f"/api/ativos/ajustes/{ajuste['id']}", json={"validacao_operacao": "Mais ou menos"})
+    assert resp.status_code == 400
+
+
+def test_nota_do_ajuste_sabe_de_qual_validacao_veio(client, ajuste):
+    aid = ajuste["id"]
+    client.post(f"/api/ativos/ajustes/{aid}/observacoes", json={"texto": "Conferido na tela"})
+    dados = client.post(f"/api/ativos/ajustes/{aid}/observacoes", json={
+        "texto": "No estoque continua somando errado", "nivel": "operacao",
+    }).json()
+    assert [o["nivel"] for o in dados["observations"]] == ["interno", "operacao"]
+
+
+def test_pauta_mantem_ajuste_que_so_a_tecnica_validou(client, ajuste):
+    aid = ajuste["id"]
+    client.patch(f"/api/ativos/ajustes/{aid}", json={"status": "entregue", "validacao": "Aprovado"})
+    assert ajuste["titulo"] in client.get("/relatorio").text

@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session, joinedload
 
-from .. import models, schemas
+from .. import models, niveis, schemas
 from ..activity import log as log_activity, normaliza_cor, normaliza_prazo, snippet
 from ..database import get_db
 from ..relatorio import AJUSTE_LABEL
@@ -22,8 +22,23 @@ router = APIRouter(tags=["ativos"])
 
 TIPOS = {"Bug", "Melhoria"}
 PRIORIDADES = {"Alta", "Média", "Baixa", "A definir"}
-# ciclo de vida do ajuste, do levantamento até a validação na tela do Faiston One
-STATUSES = {"levantado", "analise", "desenvolvimento", "entregue", "validado", "descartado"}
+# ciclo de vida do pedido, do levantamento até a entrega da LP (ou o descarte).
+# "validado" saiu daqui: depois de entregue, o ajuste é validado nos DOIS níveis
+# (técnica e operação), igual aos casos de teste — ver app/niveis.py.
+STATUSES = {"levantado", "analise", "desenvolvimento", "entregue", "descartado"}
+# status de validação, gravável em cada nível
+VALIDACOES = niveis.VALID_STATUSES
+
+
+def _status_do_payload(valor, padrao="levantado"):
+    """Traduz o "validado" antigo: quem ainda manda esse status (integração ou
+    chamada velha) está dizendo que a técnica aprovou o que foi entregue."""
+    status = (valor or padrao).strip()
+    if status == "validado":
+        return "entregue", niveis.APROVADO
+    if status not in STATUSES:
+        return padrao, None
+    return status, None
 
 # mesmos limites dos prints dos casos de teste
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
@@ -88,9 +103,7 @@ def create_ajuste(payload: schemas.AtivoAjusteCreate, db: Session = Depends(get_
     prioridade = (payload.prioridade or "Média").strip()
     if prioridade not in PRIORIDADES:
         prioridade = "Média"
-    status = (payload.status or "levantado").strip()
-    if status not in STATUSES:
-        status = "levantado"
+    status, validacao = _status_do_payload(payload.status)
     ajuste = models.AtivoAjuste(
         versao=versao,
         numero=payload.numero if payload.numero else _next_numero(db, versao),
@@ -102,6 +115,7 @@ def create_ajuste(payload: schemas.AtivoAjusteCreate, db: Session = Depends(get_
         esperado=payload.esperado or "",
         observacao=payload.observacao or "",
         status=status,
+        validacao=validacao or niveis.NAO_TESTADO,
         responsavel=(payload.responsavel or "").strip() or None,
         autor=(payload.autor or "").strip() or None,
     )
@@ -149,9 +163,44 @@ def update_ajuste(ajuste_id: int, payload: schemas.AtivoAjusteUpdate, db: Sessio
     if payload.observacao is not None:
         ajuste.observacao = payload.observacao
     if payload.status is not None:
-        if payload.status not in STATUSES:
+        status, validacao_legada = _status_do_payload(payload.status, ajuste.status)
+        if status != payload.status.strip() and validacao_legada is None:
             raise HTTPException(status_code=400, detail="Status inválido.")
-        ajuste.status = payload.status
+        ajuste.status = status
+        if validacao_legada:
+            ajuste.validacao = validacao_legada
+            ajuste.validado_em = sa_func.now()
+
+    # validação em dois níveis — cada um com seu status, autor e data
+    validacao_antiga = ajuste.validacao_geral
+    for campo, nivel in (("validacao", niveis.NIVEL_INTERNO),
+                         ("validacao_operacao", niveis.NIVEL_OPERACAO)):
+        novo_status = getattr(payload, campo)
+        if novo_status is None:
+            continue
+        if novo_status not in VALIDACOES:
+            raise HTTPException(status_code=400, detail=f"Validação inválida: {novo_status}")
+        campo_quem = "validado_por" if nivel == niveis.NIVEL_INTERNO else "validado_por_operacao"
+        campo_quando = "validado_em" if nivel == niveis.NIVEL_INTERNO else "validado_em_operacao"
+        if novo_status != getattr(ajuste, campo):
+            setattr(ajuste, campo_quando,
+                    sa_func.now() if novo_status != niveis.NAO_TESTADO else None)
+            log_activity(db, FLUXO_ATIVOS, "ajuste",
+                         f'Ajuste #{ajuste.numero} ({ajuste.versao}) · '
+                         f'{niveis.NIVEL_LABEL[nivel]}: {novo_status} — {ajuste.titulo}',
+                         autor=getattr(payload, campo_quem) or getattr(ajuste, campo_quem),
+                         case_code=f"AJT-{ajuste.id}")
+        setattr(ajuste, campo, novo_status)
+    for campo in ("validado_por", "validado_por_operacao"):
+        if getattr(payload, campo) is not None:
+            setattr(ajuste, campo, (getattr(payload, campo) or "").strip() or None)
+    validacao_nova = niveis.status_geral(ajuste.validacao, ajuste.validacao_operacao)
+    if validacao_nova != validacao_antiga:
+        log_activity(db, FLUXO_ATIVOS, "ajuste",
+                     f'Ajuste #{ajuste.numero} ({ajuste.versao}) agora está '
+                     f'{validacao_nova.lower()}: {ajuste.titulo}',
+                     case_code=f"AJT-{ajuste.id}")
+
     if payload.responsavel is not None:
         ajuste.responsavel = payload.responsavel.strip() or None
     if payload.retorno is not None:
@@ -213,11 +262,17 @@ def add_ajuste_observation(ajuste_id: int, payload: schemas.ObservationCreate, d
     texto = (payload.texto or "").strip()
     if not texto:
         raise HTTPException(status_code=400, detail="Nota vazia.")
+    try:
+        nivel = niveis.normaliza_nivel(payload.nivel)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
     db.add(models.AtivoAjusteObservation(
         ajuste_id=ajuste.id, autor=payload.autor, texto=texto, cor=normaliza_cor(payload.cor),
+        nivel=nivel,
     ))
     log_activity(db, FLUXO_ATIVOS, "ajuste-obs",
-                 f'Nota em ajuste #{ajuste.numero} ({ajuste.versao}): "{snippet(texto)}"',
+                 f'Nota ({niveis.NIVEL_LABEL[nivel]}) em ajuste #{ajuste.numero} '
+                 f'({ajuste.versao}): "{snippet(texto)}"',
                  autor=payload.autor, case_code=f"AJT-{ajuste.id}")
     db.commit()
     db.refresh(ajuste)

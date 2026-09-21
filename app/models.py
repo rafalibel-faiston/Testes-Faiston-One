@@ -330,9 +330,22 @@ class AtivoAjuste(Base):
     atual = Column(Text, nullable=False, default="")      # como está hoje
     esperado = Column(Text, nullable=False, default="")   # como deve ser
     observacao = Column(Text, nullable=True, default="")  # detalhes, decisões, links
+    # ciclo de vida do pedido: levantado -> analise -> desenvolvimento -> entregue
+    # (-> descartado, quando o item morre). "Validado" NÃO mora aqui: entregue o
+    # ajuste, a validação acontece nos dois níveis abaixo, igual ao Dispatcher.
     status = Column(String, nullable=False, default="levantado", server_default="levantado")
     responsavel = Column(String, nullable=True)
     autor = Column(String, nullable=True)
+    # VALIDAÇÃO TÉCNICA — a conferência de quem acompanha o projeto (ver app/niveis.py)
+    validacao = Column(String, nullable=False, default="Não testado",
+                       server_default="Não testado")
+    validado_por = Column(String, nullable=True)
+    validado_em = Column(DateTime(timezone=True), nullable=True)
+    # VALIDAÇÃO NA OPERAÇÃO — o mesmo ajuste usado por quem mexe em ativo todo dia
+    validacao_operacao = Column(String, nullable=False, default="Não testado",
+                                server_default="Não testado")
+    validado_por_operacao = Column(String, nullable=True)
+    validado_em_operacao = Column(DateTime(timezone=True), nullable=True)
     # retorno do time de dev na reunião e a data prometida — mesma ideia do
     # MeetingNote: o que eles responderam, separado do que a gente pediu.
     retorno = Column(Text, nullable=True, default="")
@@ -340,6 +353,18 @@ class AtivoAjuste(Base):
     retorno_em = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+    @property
+    def validacao_geral(self) -> str:
+        """A validação consolidada: só "Aprovado" quando a técnica E a operação
+        aprovaram o que a LP entregou."""
+        return niveis.status_geral(self.validacao, self.validacao_operacao)
+
+    @property
+    def fechado(self) -> bool:
+        """O ajuste saiu da pauta? Só quando foi descartado ou validado dos dois
+        lados — entregue e conferido só na técnica continua em aberto."""
+        return self.status == "descartado" or self.validacao_geral in niveis.STATUS_OK
 
     prints = relationship(
         "AtivoAjustePrint", back_populates="ajuste", cascade="all, delete-orphan",
@@ -381,6 +406,8 @@ class AtivoAjusteObservation(Base):
     # marcação de cor da nota: "verde" (deu certo, resolvido) ou "vermelho"
     # (problema, pendência). None é a nota normal, sem cor.
     cor = Column(String, nullable=True)
+    # de qual validação veio a nota: "interno" (técnica) ou "operacao"
+    nivel = Column(String, nullable=False, default="interno", server_default="interno")
     editado_por = Column(String, nullable=True)
     editado_em = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

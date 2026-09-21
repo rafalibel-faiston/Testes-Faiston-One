@@ -651,6 +651,8 @@ class AtivoAjusteObservationOut(BaseModel):
     autor: Optional[str] = None
     texto: str
     cor: Optional[str] = None   # "verde", "vermelho" ou None (sem marcação)
+    # de qual validação veio: "interno" (técnica) ou "operacao"
+    nivel: str = "interno"
     editado_por: Optional[str] = None
     editado_em: Optional[datetime] = None
     created_at: Optional[datetime] = None
@@ -670,9 +672,21 @@ class AtivoAjusteOut(BaseModel):
     atual: Optional[str] = ""
     esperado: Optional[str] = ""
     observacao: Optional[str] = ""
+    # ciclo de vida do pedido (a validação vive nos dois campos abaixo)
     status: str = "levantado"
     responsavel: Optional[str] = None
     autor: Optional[str] = None
+    # validação técnica
+    validacao: str = "Não testado"
+    validado_por: Optional[str] = None
+    validado_em: Optional[datetime] = None
+    # validação na operação
+    validacao_operacao: str = "Não testado"
+    validado_por_operacao: Optional[str] = None
+    validado_em_operacao: Optional[datetime] = None
+    # consolidado dos dois + se o ajuste já pode sair da pauta
+    validacao_geral: str = "Não testado"
+    fechado: bool = False
     retorno: Optional[str] = ""
     prazo: Optional[str] = None
     retorno_em: Optional[datetime] = None
@@ -709,5 +723,10 @@ class AtivoAjusteUpdate(BaseModel):
     observacao: Optional[str] = None
     status: Optional[str] = None
     responsavel: Optional[str] = None
+    # validação em dois níveis — mexer num nunca toca no outro
+    validacao: Optional[str] = None
+    validado_por: Optional[str] = None
+    validacao_operacao: Optional[str] = None
+    validado_por_operacao: Optional[str] = None
     retorno: Optional[str] = None
     prazo: Optional[str] = None

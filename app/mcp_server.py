@@ -593,7 +593,13 @@ def listar_ajustes_ativos(versao: Optional[str] = None, tipo: Optional[str] = No
                 "prioridade": a.prioridade,
                 "atual": a.atual,
                 "esperado": a.esperado,
+                # ciclo de vida do pedido (levantado -> ... -> entregue/descartado)
                 "status": a.status,
+                # e como está a validação do que foi entregue, nos dois níveis
+                "validacao_tecnica": a.validacao,
+                "validacao_operacao": a.validacao_operacao,
+                "validacao": a.validacao_geral,
+                "em_aberto": not a.fechado,
                 "responsavel": a.responsavel,
                 "retorno": a.retorno,
                 "prazo": a.prazo,
@@ -652,6 +658,69 @@ def criar_ajuste_ativos(
         db.refresh(ajuste)
         return {"id": ajuste.id, "versao": ajuste.versao, "numero": ajuste.numero,
                 "titulo": ajuste.titulo, "tipo": ajuste.tipo}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def validar_ajuste_ativos(
+    ajuste_id: int, status: str, nivel: Optional[str] = None, validado_por: Optional[str] = None,
+) -> dict:
+    """Registra a validação de um ajuste da Gestão de Ativos NUM DOS DOIS NÍVEIS.
+
+    Depois que a LP entrega, o ajuste é validado duas vezes: `nivel="interno"`
+    (validação técnica — padrão) e `nivel="operacao"` (quem mexe em ativo no dia
+    a dia). Status válidos: Não testado, Aprovado, Reprovado, Bloqueado, N/A. O
+    ajuste só fecha e sai da pauta quando os dois aprovam."""
+    if status not in VALID_STATUSES:
+        return {"erro": f"Status inválido: {status}. Use um de {sorted(VALID_STATUSES)}"}
+    try:
+        alvo = niveis.normaliza_nivel(nivel)
+    except ValueError as err:
+        return {"erro": str(err)}
+    db = SessionLocal()
+    try:
+        ajuste = db.query(models.AtivoAjuste).filter(models.AtivoAjuste.id == ajuste_id).first()
+        if not ajuste:
+            return {"erro": f"Ajuste {ajuste_id} não encontrado"}
+        antes = ajuste.validacao_geral
+        if alvo == niveis.NIVEL_INTERNO:
+            mudou = status != ajuste.validacao
+            ajuste.validacao = status
+            if validado_por is not None:
+                ajuste.validado_por = validado_por
+            if mudou:
+                ajuste.validado_em = func.now() if status != niveis.NAO_TESTADO else None
+            autor = validado_por or ajuste.validado_por
+        else:
+            mudou = status != ajuste.validacao_operacao
+            ajuste.validacao_operacao = status
+            if validado_por is not None:
+                ajuste.validado_por_operacao = validado_por
+            if mudou:
+                ajuste.validado_em_operacao = func.now() if status != niveis.NAO_TESTADO else None
+            autor = validado_por or ajuste.validado_por_operacao
+        if mudou:
+            log_activity(
+                db, "ATIVOS", "ajuste",
+                f"Ajuste #{ajuste.numero} ({ajuste.versao}) · "
+                f"{niveis.NIVEL_LABEL[alvo]}: {status} — {ajuste.titulo}",
+                autor=autor, case_code=f"AJT-{ajuste.id}",
+            )
+        depois = niveis.status_geral(ajuste.validacao, ajuste.validacao_operacao)
+        if depois != antes:
+            log_activity(db, "ATIVOS", "ajuste",
+                         f"Ajuste #{ajuste.numero} ({ajuste.versao}) agora está "
+                         f"{depois.lower()}: {ajuste.titulo}", case_code=f"AJT-{ajuste.id}")
+        db.commit()
+        db.refresh(ajuste)
+        return {
+            "id": ajuste.id, "numero": ajuste.numero, "titulo": ajuste.titulo,
+            "validacao_tecnica": ajuste.validacao,
+            "validacao_operacao": ajuste.validacao_operacao,
+            "validacao": ajuste.validacao_geral,
+            "em_aberto": not ajuste.fechado,
+        }
     finally:
         db.close()
 
