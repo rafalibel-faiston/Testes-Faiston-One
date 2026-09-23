@@ -120,8 +120,8 @@
 
   // ---------------- nome do chamado no Tiflux ----------------
   // Todo teste ganha um nome padrão pra abrir o chamado no Tiflux:
-  // "[TESTE IA] - FC-04-APP-02 - T01 - RESUMO". Refazer o teste gera a próxima
-  // rodada (T02, T03… na técnica; O01, O02… na operação) — parecido, nunca igual.
+  // "[TESTE IA] - ASSUNTO DO TESTE - T01". Refazer o teste gera a próxima
+  // rodada (T02, T03… na técnica; OP01, OP02… na operação) — parecido, nunca igual.
   // A regra fica no servidor (app/nomes_tiflux.py); aqui só pede e mostra.
   let NOMES_TIFLUX = [];
 
@@ -172,6 +172,59 @@
     } catch (e) {
       btn.disabled = false;
       toast("Erro ao gerar o nome: " + e.message, true);
+    }
+  });
+
+  // gerador avulso: teste que não é card nenhum (ou o nome de uma rodada com outro assunto)
+  const nomeTifluxModal = $("#nome-tiflux-modal");
+  let nivelTifluxAvulso = "interno";
+
+  function renderNomesRecentes() {
+    const recentes = NOMES_TIFLUX.slice(-12).reverse();
+    $("#nome-tiflux-lista").innerHTML = recentes.length
+      ? recentes.map((n) => `<li><span class="tiflux-nome-txt" title="${n.gerado_por ? "Gerado por " + esc(n.gerado_por) + " · " : ""}${esc(fmtWhen(n.created_at))}">${esc(n.nome)}</span>
+          <button type="button" class="tiflux-btn" data-copiar-nome="${n.id}">Copiar</button></li>`).join("")
+      : `<li class="vazio">Nenhum nome gerado ainda.</li>`;
+  }
+
+  function abrirNomeTiflux() {
+    renderNomesRecentes();
+    nomeTifluxModal.hidden = false;
+    $("#nome-tiflux-assunto").focus();
+  }
+
+  $("#btn-nome-tiflux").addEventListener("click", abrirNomeTiflux);
+  $("#nome-tiflux-close").addEventListener("click", () => { nomeTifluxModal.hidden = true; });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !nomeTifluxModal.hidden) nomeTifluxModal.hidden = true; });
+  nomeTifluxModal.addEventListener("click", (e) => { if (e.target === nomeTifluxModal) nomeTifluxModal.hidden = true; });
+  $$("[data-nivel-tiflux]").forEach((b) => b.addEventListener("click", () => {
+    nivelTifluxAvulso = b.dataset.nivelTiflux;
+    $$("[data-nivel-tiflux]").forEach((x) => x.classList.toggle("active", x === b));
+  }));
+  $("#nome-tiflux-lista").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-copiar-nome]");
+    const n = btn && NOMES_TIFLUX.find((x) => String(x.id) === btn.dataset.copiarNome);
+    if (n) copiarTexto(n.nome, "Nome copiado — cole no título do chamado");
+  });
+  $("#nome-tiflux-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const assunto = $("#nome-tiflux-assunto").value.trim();
+    if (!assunto) return;
+    const btn = $("#nome-tiflux-gerar");
+    btn.disabled = true;
+    try {
+      const novo = await api("/api/nomes-tiflux", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assunto, nivel: nivelTifluxAvulso, gerado_por: testerName() || null }),
+      });
+      NOMES_TIFLUX.push(novo);
+      renderNomesRecentes();
+      $("#nome-tiflux-assunto").value = "";
+      copiarTexto(novo.nome, "Nome gerado e copiado — cole no título do chamado");
+    } catch (err) {
+      toast("Erro ao gerar o nome: " + err.message, true);
+    } finally {
+      btn.disabled = false;
     }
   });
 

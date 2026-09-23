@@ -623,6 +623,11 @@ main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
 .tiflux-btn.primary { background:var(--f-blue); border-color:var(--f-blue); color:#fff; }
 .tiflux-btn.primary:hover { filter:brightness(1.08); color:#fff; }
 .tiflux-btn:disabled { opacity:.6; cursor:wait; }
+.nome-tiflux-nivel { display:flex; align-items:center; gap:10px; margin:10px 0 4px; }
+.nome-tiflux-recentes { margin-top:16px; border-top:1px solid var(--line-2); padding-top:12px; }
+#nome-tiflux-lista { list-style:none; margin:8px 0 0; padding:0; display:flex; flex-direction:column; gap:6px; max-height:260px; overflow:auto; }
+#nome-tiflux-lista li { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+#nome-tiflux-lista li.vazio { font-size:12px; font-style:italic; color:var(--text-3); }
 
 /* linha de chamado na legenda do carrossel */
 .carousel-caption .cap-reg {

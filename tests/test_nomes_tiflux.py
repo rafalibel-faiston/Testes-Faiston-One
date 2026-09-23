@@ -1,7 +1,8 @@
 """O nome padrão do chamado de teste no Tiflux.
 
-A promessa: todo teste do console tem um nome no mesmo formato, e refazer o
-teste gera um nome parecido mas nunca igual a um já usado.
+A promessa: todo teste — de um card do console ou avulso — tem um nome no
+mesmo formato, e refazer o teste gera um nome parecido mas nunca igual a um
+já usado.
 """
 import pytest
 
@@ -11,28 +12,51 @@ from app import nomes_tiflux
 # --------------------------------------------------------------- a regra
 
 def test_formato_padrao():
-    nome = nomes_tiflux.montar("fc-04-app-02", "interno", 1, 'Mostra "Aguardando início" (não "Em rota")')
-    assert nome == "[TESTE IA] - FC-04-APP-02 - T01 - MOSTRA AGUARDANDO INÍCIO (NÃO EM ROTA)"
+    nome = nomes_tiflux.montar('Mostra "Aguardando início" (não "Em rota")', "interno", 1)
+    assert nome == "[TESTE IA] - MOSTRA AGUARDANDO INÍCIO (NÃO EM ROTA) - T01"
 
 
-def test_operacao_tem_letra_propria():
-    assert " - O03 - " in nomes_tiflux.montar("SIT-01", "operacao", 3, "Chamado sem aceite")
+def test_operacao_tem_marca_propria():
+    assert nomes_tiflux.montar("Chamado sem aceite", "operacao", 3).endswith(" - OP03")
 
 
-def test_resumo_longo_e_cortado_numa_palavra_inteira():
+def test_assunto_longo_e_cortado_numa_palavra_inteira():
     texto = "O técnico registra Acesso Liberado e então toca Iniciar Atendimento — sem etapa de liberação pelo operador"
-    nome = nomes_tiflux.montar("FC-06-APP-04", "interno", 12, texto)
-    assert len(nome) <= nomes_tiflux.MAX_TITULO
-    assert nome.startswith("[TESTE IA] - FC-06-APP-04 - T12 - O TÉCNICO REGISTRA")
-    # termina numa palavra do texto original, não no meio dela
-    assert texto.upper().replace("—", "").split().count(nome.split()[-1]) >= 1
+    tec = nomes_tiflux.montar(texto, "interno", 12)
+    op = nomes_tiflux.montar(texto, "operacao", 12)
+    assert len(op) <= nomes_tiflux.MAX_TITULO
+    assert tec.startswith("[TESTE IA] - O TÉCNICO REGISTRA ACESSO LIBERADO")
+    # o assunto sai igual nos dois níveis, só a rodada muda
+    assert tec.rsplit(" - ", 1)[0] == op.rsplit(" - ", 1)[0]
+    assunto = tec[len("[TESTE IA] - "):].rsplit(" - ", 1)[0]
+    assert (texto.upper() + " ").startswith(assunto + " ")
 
 
-def test_sem_descricao_fica_so_a_base():
-    assert nomes_tiflux.montar("FC-MAN-01", "interno", 1, "") == "[TESTE IA] - FC-MAN-01 - T01"
+def test_nome_antigo_colado_nao_duplica_o_prefixo():
+    assert nomes_tiflux.montar("[TESTE IA] - Teste distância", "interno", 1) == "[TESTE IA] - TESTE DISTÂNCIA - T01"
+
+
+def test_chave_ignora_acento_e_caixa():
+    assert nomes_tiflux.chave("Teste distância") == nomes_tiflux.chave("TESTE DISTANCIA")
 
 
 # --------------------------------------------------------------- a API
+
+@pytest.fixture(autouse=True)
+def sem_nomes_gerados():
+    """A rodada conta pelo assunto e nunca volta — sem limpar, um teste
+    continuaria a sequência do anterior."""
+    from app import models
+    from app.database import SessionLocal
+
+    yield
+    db = SessionLocal()
+    try:
+        db.query(models.NomeTiflux).delete(synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
+
 
 @pytest.fixture
 def caso(client):
@@ -45,45 +69,64 @@ def caso(client):
     client.delete(f"/api/cases/{resp.json()['code']}")
 
 
-def _gerar(client, code, nivel="interno"):
-    resp = client.post("/api/nomes-tiflux", json={"code": code, "nivel": nivel, "gerado_por": "Rafa"})
+def _gerar(client, **body):
+    body.setdefault("gerado_por", "Rafa")
+    resp = client.post("/api/nomes-tiflux", json=body)
     assert resp.status_code == 201, resp.text
     return resp.json()
 
 
-def test_refazer_o_teste_gera_a_proxima_rodada(client, caso):
-    code = caso["code"]
-    primeiro = _gerar(client, code)
-    segundo = _gerar(client, code)
-    assert primeiro["nome"] == f"[TESTE IA] - {code} - T01 - AO ACEITAR, O CHAMADO SAI DA LISTA E O PASSO AVANÇA"
-    assert segundo["seq"] == 2 and " - T02 - " in segundo["nome"]
-    assert primeiro["nome"] != segundo["nome"]
+def test_card_gera_o_nome_sem_o_codigo(client, caso):
+    nome = _gerar(client, code=caso["code"])
+    assert nome["nome"] == "[TESTE IA] - AO ACEITAR, O CHAMADO SAI DA LISTA E O PASSO AVANÇA - T01"
+    assert caso["code"] not in nome["nome"]
+    assert nome["alvo"] == caso["code"] and nome["tipo"] == "caso"
 
 
-def test_operacao_conta_separado_da_tecnica(client, caso):
-    code = caso["code"]
-    _gerar(client, code)
-    _gerar(client, code)
-    op = _gerar(client, code, "operação")
-    assert op["nivel"] == "operacao" and op["seq"] == 1 and " - O01 - " in op["nome"]
+def test_refazer_o_teste_gera_a_proxima_rodada(client):
+    primeiro = _gerar(client, assunto="Atribuir técnico manualmente")
+    segundo = _gerar(client, assunto="atribuir tecnico manualmente")
+    assert primeiro["nome"] == "[TESTE IA] - ATRIBUIR TÉCNICO MANUALMENTE - T01"
+    # digitado sem acento, mas sai com o texto da primeira rodada: só o número muda
+    assert segundo["nome"] == "[TESTE IA] - ATRIBUIR TÉCNICO MANUALMENTE - T02"
+    assert primeiro["tipo"] == "avulso" and primeiro["alvo"] is None
+
+
+def test_operacao_conta_separado_da_tecnica(client):
+    _gerar(client, assunto="Chat com N2")
+    _gerar(client, assunto="Chat com N2")
+    op = _gerar(client, assunto="Chat com N2", nivel="operação")
+    assert op["nivel"] == "operacao" and op["nome"] == "[TESTE IA] - CHAT COM N2 - OP01"
+
+
+def test_dois_testes_com_o_mesmo_assunto_nunca_repetem_o_nome(client, caso):
+    """O código saiu do nome, então a rodada conta pelo assunto: um teste
+    avulso com o mesmo texto do card continua a sequência dele."""
+    do_card = _gerar(client, code=caso["code"])
+    avulso = _gerar(client, assunto=caso["resultado_esperado"])
+    assert do_card["nome"] != avulso["nome"]
+    assert avulso["nome"].endswith(" - T02")
 
 
 def test_situacao_usa_o_titulo(client):
     sit = client.get("/api/situacoes").json()[0]
-    nome = _gerar(client, sit["code"])
+    nome = _gerar(client, code=sit["code"])
     assert nome["tipo"] == "situacao"
-    assert nome["nome"].startswith(f"[TESTE IA] - {sit['code']} - T")
+    assert nome["nome"].startswith("[TESTE IA] - " + nomes_tiflux.assunto(sit["titulo"]))
+    assert sit["code"] not in nome["nome"]
 
 
-def test_historico_por_teste(client, caso):
+def test_historico_por_card(client, caso):
     code = caso["code"]
-    _gerar(client, code)
-    _gerar(client, code)
+    _gerar(client, code=code)
+    _gerar(client, code=code)
     nomes = client.get("/api/nomes-tiflux", params={"code": code.lower()}).json()
     assert [n["seq"] for n in nomes] == [1, 2]
     assert all(n["gerado_por"] == "Rafa" for n in nomes)
 
 
-def test_teste_inexistente_e_nivel_invalido(client, caso):
+def test_pedidos_invalidos(client, caso):
     assert client.post("/api/nomes-tiflux", json={"code": "FC-NAO-EXISTE"}).status_code == 404
-    assert client.post("/api/nomes-tiflux", json={"code": caso["code"], "nivel": "xyz"}).status_code == 400
+    assert client.post("/api/nomes-tiflux", json={"assunto": "x", "nivel": "xyz"}).status_code == 400
+    assert client.post("/api/nomes-tiflux", json={"assunto": "  --  "}).status_code == 400
+    assert client.post("/api/nomes-tiflux", json={}).status_code == 400

@@ -469,16 +469,21 @@ def atualizar_observacao(
 
 
 @mcp.tool()
-def gerar_nome_tiflux(code: str, nivel: Optional[str] = None, autor: Optional[str] = None) -> dict:
-    """Gera o nome padrão do chamado de teste no Tiflux pra um caso (FC-…) ou
-    situação (SIT-…), no formato `[TESTE IA] - FC-04-APP-02 - T01 - RESUMO`.
+def gerar_nome_tiflux(
+    assunto: Optional[str] = None, code: Optional[str] = None,
+    nivel: Optional[str] = None, autor: Optional[str] = None,
+) -> dict:
+    """Gera o nome padrão do chamado de teste no Tiflux, no formato
+    `[TESTE IA] - ATRIBUIR TÉCNICO MANUALMENTE - T01`.
 
-    Cada chamada reserva a próxima rodada daquele teste (T01, T02… na
-    validação técnica; O01, O02… com `nivel="operacao"`), então o nome nunca
+    Passe o `assunto` do teste (qualquer teste, mesmo fora do console) ou o
+    `code` de um caso (FC-…) / situação (SIT-…) pra usar o texto do card.
+    Cada chamada reserva a próxima rodada daquele assunto (T01, T02… na
+    validação técnica; OP01, OP02… com `nivel="operacao"`), então o nome nunca
     repete um já usado. Use antes de abrir o chamado no Tiflux."""
     db = SessionLocal()
     try:
-        row = gerar_nome_tiflux_db(db, code, nivel, autor)
+        row = gerar_nome_tiflux_db(db, code, assunto, nivel, autor)
         return {"nome": row.nome, "code": row.alvo, "nivel": row.nivel, "rodada": row.seq}
     except HTTPException as err:
         return {"erro": err.detail}
@@ -488,7 +493,7 @@ def gerar_nome_tiflux(code: str, nivel: Optional[str] = None, autor: Optional[st
 
 @mcp.tool()
 def listar_nomes_tiflux(code: Optional[str] = None) -> list[dict]:
-    """Nomes de chamado de teste já gerados pro Tiflux (todos, ou só os de um teste)."""
+    """Nomes de chamado de teste já gerados pro Tiflux (todos, ou só os de um card)."""
     db = SessionLocal()
     try:
         q = db.query(models.NomeTiflux)

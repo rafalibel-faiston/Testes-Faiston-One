@@ -732,9 +732,13 @@ class AtivoAjusteUpdate(BaseModel):
     prazo: Optional[str] = None
 
 
+
 class NomeTifluxIn(BaseModel):
-    """Pedido de um nome novo de chamado de teste pro Tiflux."""
-    code: str                            # FC-… (caso) ou SIT-… (situação)
+    """Pedido de um nome novo de chamado de teste pro Tiflux: de um card
+    (`code`) ou de um teste avulso (`assunto`). Com os dois, o assunto
+    digitado vale no lugar do texto do card."""
+    code: Optional[str] = None           # FC-… (caso) ou SIT-… (situação)
+    assunto: Optional[str] = None
     nivel: Optional[str] = "interno"     # interno (técnica) ou operacao
     gerado_por: Optional[str] = None
 
@@ -744,7 +748,7 @@ class NomeTifluxOut(BaseModel):
 
     id: int
     tipo: str
-    alvo: str
+    alvo: Optional[str] = None
     nivel: str
     seq: int
     nome: str

@@ -132,6 +132,10 @@
       </button>
     </div>
     <div class="global-actions">
+      <button type="button" class="btn-ghost" id="btn-nome-tiflux" title="Gera o nome padrão do chamado de teste no Tiflux — pra qualquer teste, mesmo os que não estão numa situação">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+        Nome p/ Tiflux
+      </button>
       <a class="btn-ghost" id="btn-export-completo" href="/api/export/completo" download title="Baixa um .xlsx com todos os dados do sistema: casos de teste, situações, ajustes de ativos, técnicos, agenda, tarefas e mais, cada tipo na sua aba">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Exportar tudo
@@ -1137,6 +1141,39 @@
       <div class="modal-actions">
         <button type="button" class="btn-ghost" id="tecnico-msg-copiar">Copiar texto</button>
         <a class="btn-primary" id="tecnico-msg-abrir" target="_blank" rel="noopener">Abrir no WhatsApp</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="nome-tiflux-modal" hidden aria-modal="true" role="dialog" aria-labelledby="nome-tiflux-titulo">
+  <div class="modal-card ajuste-card">
+    <div class="modal-head">
+      <h3 id="nome-tiflux-titulo">Nome do chamado de teste</h3>
+      <button type="button" class="modal-close" id="nome-tiflux-close" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="notes-hint">Pra qualquer teste, mesmo os que não estão numa situação. Descreva o que vai ser
+      testado; o nome sai no padrão e já vai copiado. Refazer o mesmo teste gera a próxima rodada
+      (<b>T01</b>, <b>T02</b>… na técnica; <b>OP01</b>, <b>OP02</b>… na operação).</p>
+      <form id="nome-tiflux-form" autocomplete="off">
+        <label class="fld fld-wide">O que vai ser testado
+          <input type="text" id="nome-tiflux-assunto" maxlength="200" placeholder="ex.: atribuir técnico manualmente" required>
+        </label>
+        <div class="nome-tiflux-nivel">
+          <span class="reg-k">Validação</span>
+          <div class="nivel-picker" role="group" aria-label="Nível do teste">
+            <button type="button" class="nivel-opt active" data-nivel-tiflux="interno">Técnica</button>
+            <button type="button" class="nivel-opt" data-nivel-tiflux="operacao">Operação</button>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="submit" class="btn-primary" id="nome-tiflux-gerar">Gerar e copiar</button>
+        </div>
+      </form>
+      <div class="nome-tiflux-recentes">
+        <span class="reg-k">Últimos nomes gerados</span>
+        <ul id="nome-tiflux-lista"></ul>
       </div>
     </div>
   </div>

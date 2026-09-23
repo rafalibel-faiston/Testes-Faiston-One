@@ -108,7 +108,7 @@ app/
   routers/cases.py        # API: listar/atualizar casos, observações, upload/download/remover print, resumo
   routers/ativos.py        # API: ajustes do módulo Gestão de Ativos (v2 e as próximas levas)
   routers/nomes_tiflux.py  # API: nome padrão do chamado de teste no Tiflux
-  nomes_tiflux.py          # a regra do nome ([TESTE IA] - código - rodada - resumo)
+  nomes_tiflux.py          # a regra do nome ([TESTE IA] - assunto - rodada)
   routers/relatorio.py      # página /relatorio — a pauta da reunião semanal
   relatorio.py               # monta o HTML da pauta (usado pela rota e pelo script)
   assets/                     # CSS e logo da marca Faiston embutidos na pauta
@@ -276,33 +276,43 @@ caindo direto na tela, como antes.
 Cada teste rodado vira um chamado na mesa **TESTE - FAISTON ONE** do Tiflux, e cada
 um vinha com um título diferente (`[TESTE IA] - TESTE`, `[TESTE IA] - `, sem
 prefixo nenhum…) — depois não dava pra saber qual chamado foi de qual teste.
-Agora todo teste do console tem um nome no mesmo formato:
+Agora todo teste tem um nome no mesmo formato:
 
 ```
-[TESTE IA] - SIT-01 - T01 - CHAMADO AGENDADO — TÉCNICO ACEITA, SEM OCORRÊNCIA
-[TESTE IA] - FC-04-APP-02 - O02 - MOSTRA AGUARDANDO INÍCIO (NÃO EM ROTA)
+[TESTE IA] - CHAMADO AGENDADO — TÉCNICO ACEITA, SEM OCORRÊNCIA - T01
+[TESTE IA] - ATRIBUIR TÉCNICO MANUALMENTE - T02
+[TESTE IA] - CHAT COM N2 - OP01
 ```
 
 | Parte | O que é |
 |---|---|
 | `[TESTE IA]` | o prefixo que o time já usa na mesa de teste |
-| `SIT-01` / `FC-04-APP-02` | o código do teste no console — liga o chamado ao card |
-| `T01` / `O01` | a rodada: **T** = validação técnica, **O** = validação na operação, e o número da vez |
-| resumo | título da situação (ou resultado esperado do caso), em maiúscula e cortado numa palavra inteira |
+| assunto | o título da situação, o resultado esperado do caso ou o que a pessoa digitou — em maiúscula e cortado numa palavra inteira |
+| `T01` / `OP01` | a rodada: **T** = validação técnica, **OP** = validação na operação, e o número da vez |
 
 Refazer o mesmo teste gera a **próxima rodada** (`T02`, `T03`…): nome parecido, nunca
-igual a um já usado. Cada rodada gerada fica gravada na tabela `nomes_tiflux`, e o
-número nunca volta — por isso a tela pede confirmação antes de gerar uma rodada nova.
-O título inteiro fica em até 90 caracteres. A regra está em `app/nomes_tiflux.py`.
+igual a um já usado. A rodada conta **pelo assunto**, sem ligar pra acento e caixa
+("distancia" e "Distância" são o mesmo teste) — e a partir da segunda rodada o texto
+da primeira é reaproveitado, então só o número muda. Cada rodada fica gravada na
+tabela `nomes_chamado_tiflux` e o número nunca volta. O título inteiro fica em até 90
+caracteres. A regra está em `app/nomes_tiflux.py`.
 
-Na tela, cada situação tem o bloco **Nome do chamado no Tiflux**, com uma linha pra
-técnica e outra pra operação: **Gerar nome** / **Novo nome** gera e já copia pra área de
-transferência, **Copiar** copia de novo o último. Os casos soltos (`FC-…`) têm o mesmo
-bloco embaixo de cada campo de chamado.
+Na tela:
 
-- `GET  /api/nomes-tiflux` — todos os nomes já gerados (`?code=SIT-01` filtra um teste)
-- `POST /api/nomes-tiflux` — gera a próxima rodada (body: `{"code": "SIT-01", "nivel": "interno|operacao", "gerado_por": "..."}`)
-- MCP: `gerar_nome_tiflux` e `listar_nomes_tiflux` — "gera o nome do Tiflux pra SIT-03 na operação"
+- **Nome p/ Tiflux** (no topo, ao lado de *Exportar tudo*) — o gerador avulso, pra
+  qualquer teste, inclusive os que não estão numa situação: descreve o que vai ser
+  testado, escolhe técnica ou operação, e o nome sai copiado. Embaixo ficam os
+  últimos nomes gerados, com botão de copiar.
+- Em cada **situação**, o bloco *Nome do chamado no Tiflux*, com uma linha pra técnica
+  e outra pra operação, usando o título da situação. Os casos soltos (`FC-…`) têm o
+  mesmo bloco embaixo de cada campo de chamado.
+
+Gerar uma rodada nova num card pede confirmação, porque o número fica reservado.
+
+- `GET  /api/nomes-tiflux` — todos os nomes já gerados (`?code=SIT-01` filtra os de um card)
+- `POST /api/nomes-tiflux` — gera a próxima rodada (body: `{"assunto": "..."}` ou `{"code": "SIT-01"}`,
+  mais `"nivel": "interno|operacao"` e `"gerado_por"`)
+- MCP: `gerar_nome_tiflux` e `listar_nomes_tiflux` — "gera o nome do Tiflux pro teste de chat com N2 na operação"
 
 ## Entrar não tem senha
 
