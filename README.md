@@ -108,7 +108,7 @@ app/
   routers/cases.py        # API: listar/atualizar casos, observações, upload/download/remover print, resumo
   routers/ativos.py        # API: ajustes do módulo Gestão de Ativos (v2 e as próximas levas)
   routers/nomes_tiflux.py  # API: nome padrão do chamado de teste no Tiflux
-  nomes_tiflux.py          # a regra do nome ([TESTE IA] - assunto - rodada)
+  nomes_tiflux.py          # a regra do nome ([TESTE IA] - rodada - assunto)
   routers/relatorio.py      # página /relatorio — a pauta da reunião semanal
   relatorio.py               # monta o HTML da pauta (usado pela rota e pelo script)
   assets/                     # CSS e logo da marca Faiston embutidos na pauta
@@ -279,16 +279,16 @@ prefixo nenhum…) — depois não dava pra saber qual chamado foi de qual teste
 Agora todo teste tem um nome no mesmo formato:
 
 ```
-[TESTE IA] - CHAMADO AGENDADO — TÉCNICO ACEITA, SEM OCORRÊNCIA - T01
-[TESTE IA] - ATRIBUIR TÉCNICO MANUALMENTE - T02
-[TESTE IA] - CHAT COM N2 - OP01
+[TESTE IA] - T01 - CHAMADO AGENDADO — TÉCNICO ACEITA, SEM OCORRÊNCIA
+[TESTE IA] - T02 - ATRIBUIR TÉCNICO MANUALMENTE
+[TESTE IA] - OP01 - CHAT COM N2
 ```
 
 | Parte | O que é |
 |---|---|
 | `[TESTE IA]` | o prefixo que o time já usa na mesa de teste |
+| `T01` / `OP01` | a rodada, logo no começo: **T** = validação técnica, **OP** = validação na operação, e o número da vez |
 | assunto | o título da situação, o resultado esperado do caso ou o que a pessoa digitou — em maiúscula e cortado numa palavra inteira |
-| `T01` / `OP01` | a rodada: **T** = validação técnica, **OP** = validação na operação, e o número da vez |
 
 Refazer o mesmo teste gera a **próxima rodada** (`T02`, `T03`…): nome parecido, nunca
 igual a um já usado. A rodada conta **pelo assunto**, sem ligar pra acento e caixa

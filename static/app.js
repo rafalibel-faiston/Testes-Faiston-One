@@ -120,7 +120,7 @@
 
   // ---------------- nome do chamado no Tiflux ----------------
   // Todo teste ganha um nome padrão pra abrir o chamado no Tiflux:
-  // "[TESTE IA] - ASSUNTO DO TESTE - T01". Refazer o teste gera a próxima
+  // "[TESTE IA] - T01 - ASSUNTO DO TESTE". Refazer o teste gera a próxima
   // rodada (T02, T03… na técnica; OP01, OP02… na operação) — parecido, nunca igual.
   // A regra fica no servidor (app/nomes_tiflux.py); aqui só pede e mostra.
   let NOMES_TIFLUX = [];

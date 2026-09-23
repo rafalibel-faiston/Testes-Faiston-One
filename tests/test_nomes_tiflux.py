@@ -13,11 +13,11 @@ from app import nomes_tiflux
 
 def test_formato_padrao():
     nome = nomes_tiflux.montar('Mostra "Aguardando início" (não "Em rota")', "interno", 1)
-    assert nome == "[TESTE IA] - MOSTRA AGUARDANDO INÍCIO (NÃO EM ROTA) - T01"
+    assert nome == "[TESTE IA] - T01 - MOSTRA AGUARDANDO INÍCIO (NÃO EM ROTA)"
 
 
 def test_operacao_tem_marca_propria():
-    assert nomes_tiflux.montar("Chamado sem aceite", "operacao", 3).endswith(" - OP03")
+    assert nomes_tiflux.montar("Chamado sem aceite", "operacao", 3).startswith("[TESTE IA] - OP03 - ")
 
 
 def test_assunto_longo_e_cortado_numa_palavra_inteira():
@@ -25,15 +25,21 @@ def test_assunto_longo_e_cortado_numa_palavra_inteira():
     tec = nomes_tiflux.montar(texto, "interno", 12)
     op = nomes_tiflux.montar(texto, "operacao", 12)
     assert len(op) <= nomes_tiflux.MAX_TITULO
-    assert tec.startswith("[TESTE IA] - O TÉCNICO REGISTRA ACESSO LIBERADO")
+    assert tec.startswith("[TESTE IA] - T12 - O TÉCNICO REGISTRA ACESSO LIBERADO")
     # o assunto sai igual nos dois níveis, só a rodada muda
-    assert tec.rsplit(" - ", 1)[0] == op.rsplit(" - ", 1)[0]
-    assunto = tec[len("[TESTE IA] - "):].rsplit(" - ", 1)[0]
+    assunto = nomes_tiflux.assunto_do_nome(tec)
+    assert assunto == nomes_tiflux.assunto_do_nome(op)
     assert (texto.upper() + " ").startswith(assunto + " ")
 
 
+def test_assunto_com_hifen_se_mantem_inteiro():
+    nome = nomes_tiflux.montar("Fluxo B - técnico retira", "interno", 1)
+    assert nome == "[TESTE IA] - T01 - FLUXO B - TÉCNICO RETIRA"
+    assert nomes_tiflux.assunto_do_nome(nome) == "FLUXO B - TÉCNICO RETIRA"
+
+
 def test_nome_antigo_colado_nao_duplica_o_prefixo():
-    assert nomes_tiflux.montar("[TESTE IA] - Teste distância", "interno", 1) == "[TESTE IA] - TESTE DISTÂNCIA - T01"
+    assert nomes_tiflux.montar("[TESTE IA] - Teste distância", "interno", 1) == "[TESTE IA] - T01 - TESTE DISTÂNCIA"
 
 
 def test_chave_ignora_acento_e_caixa():
@@ -78,7 +84,7 @@ def _gerar(client, **body):
 
 def test_card_gera_o_nome_sem_o_codigo(client, caso):
     nome = _gerar(client, code=caso["code"])
-    assert nome["nome"] == "[TESTE IA] - AO ACEITAR, O CHAMADO SAI DA LISTA E O PASSO AVANÇA - T01"
+    assert nome["nome"] == "[TESTE IA] - T01 - AO ACEITAR, O CHAMADO SAI DA LISTA E O PASSO AVANÇA"
     assert caso["code"] not in nome["nome"]
     assert nome["alvo"] == caso["code"] and nome["tipo"] == "caso"
 
@@ -86,9 +92,9 @@ def test_card_gera_o_nome_sem_o_codigo(client, caso):
 def test_refazer_o_teste_gera_a_proxima_rodada(client):
     primeiro = _gerar(client, assunto="Atribuir técnico manualmente")
     segundo = _gerar(client, assunto="atribuir tecnico manualmente")
-    assert primeiro["nome"] == "[TESTE IA] - ATRIBUIR TÉCNICO MANUALMENTE - T01"
+    assert primeiro["nome"] == "[TESTE IA] - T01 - ATRIBUIR TÉCNICO MANUALMENTE"
     # digitado sem acento, mas sai com o texto da primeira rodada: só o número muda
-    assert segundo["nome"] == "[TESTE IA] - ATRIBUIR TÉCNICO MANUALMENTE - T02"
+    assert segundo["nome"] == "[TESTE IA] - T02 - ATRIBUIR TÉCNICO MANUALMENTE"
     assert primeiro["tipo"] == "avulso" and primeiro["alvo"] is None
 
 
@@ -96,7 +102,7 @@ def test_operacao_conta_separado_da_tecnica(client):
     _gerar(client, assunto="Chat com N2")
     _gerar(client, assunto="Chat com N2")
     op = _gerar(client, assunto="Chat com N2", nivel="operação")
-    assert op["nivel"] == "operacao" and op["nome"] == "[TESTE IA] - CHAT COM N2 - OP01"
+    assert op["nivel"] == "operacao" and op["nome"] == "[TESTE IA] - OP01 - CHAT COM N2"
 
 
 def test_dois_testes_com_o_mesmo_assunto_nunca_repetem_o_nome(client, caso):
@@ -105,14 +111,14 @@ def test_dois_testes_com_o_mesmo_assunto_nunca_repetem_o_nome(client, caso):
     do_card = _gerar(client, code=caso["code"])
     avulso = _gerar(client, assunto=caso["resultado_esperado"])
     assert do_card["nome"] != avulso["nome"]
-    assert avulso["nome"].endswith(" - T02")
+    assert avulso["nome"].startswith("[TESTE IA] - T02 - ")
 
 
 def test_situacao_usa_o_titulo(client):
     sit = client.get("/api/situacoes").json()[0]
     nome = _gerar(client, code=sit["code"])
     assert nome["tipo"] == "situacao"
-    assert nome["nome"].startswith("[TESTE IA] - " + nomes_tiflux.assunto(sit["titulo"]))
+    assert nome["nome"] == "[TESTE IA] - T01 - " + nomes_tiflux.assunto(sit["titulo"])
     assert sit["code"] not in nome["nome"]
 
 

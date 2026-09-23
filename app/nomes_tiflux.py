@@ -8,14 +8,14 @@ chamado foi de qual teste.
 A regra aqui é uma só, pra qualquer teste — de uma situação do console, de um
 caso, ou um teste avulso que não está cadastrado em lugar nenhum:
 
-    [TESTE IA] - ATRIBUIR TÉCNICO MANUALMENTE - T01
+    [TESTE IA] - T01 - ATRIBUIR TÉCNICO MANUALMENTE
 
 * `[TESTE IA]` — o prefixo que o time já usa na mesa de teste;
+* a rodada, logo no começo pra bater o olho na lista: `T` pra validação
+  técnica, `OP` pra validação na operação, e o número da vez. Refazer o mesmo
+  teste gera `T02`, `T03`… — nome parecido, mas nunca igual a um já usado;
 * o assunto: o título da situação, o resultado esperado do caso ou o que a
-  pessoa digitou, em maiúscula e cortado numa palavra inteira;
-* a rodada: `T` pra validação técnica, `OP` pra validação na operação, e o
-  número da vez. Refazer o mesmo teste gera `T02`, `T03`… — nome parecido,
-  mas nunca igual a um que já foi usado.
+  pessoa digitou, em maiúscula e cortado numa palavra inteira.
 
 A rodada conta pelo assunto (sem ligar pra acento e caixa), não pelo card: dois
 testes com o mesmo assunto dividem a sequência, então o nome final nunca se
@@ -33,7 +33,7 @@ SEP = " - "
 MARCA_NIVEL = {niveis.NIVEL_INTERNO: "T", niveis.NIVEL_OPERACAO: "OP"}
 # título inteiro, pra caber na listagem do Tiflux sem cortar o que importa
 MAX_TITULO = 90
-# espaço reservado pra rodada mais longa (" - OP99"), assim o assunto sai
+# espaço reservado pra rodada mais longa ("OP99 - "), assim o assunto sai
 # igual nos dois níveis e a sequência não se divide por causa de um corte
 _RESERVA_RODADA = len(SEP) + 4
 _LIMITE_ASSUNTO = MAX_TITULO - len(PREFIXO) - len(SEP) - _RESERVA_RODADA
@@ -71,11 +71,11 @@ def chave(texto_assunto: str) -> str:
 
 
 def montar(texto_assunto: str, nivel: str, seq: int) -> str:
-    return SEP.join([PREFIXO, assunto(texto_assunto), rodada(nivel, seq)])
+    return SEP.join([PREFIXO, rodada(nivel, seq), assunto(texto_assunto)])
 
 
 def assunto_do_nome(nome: str) -> str:
-    """O assunto de um nome já gerado — o que fica entre o prefixo e a rodada.
+    """O assunto de um nome já gerado — o que vem depois da rodada.
     As rodadas seguintes reaproveitam o texto da primeira, então só o número
     muda, mesmo que a pessoa digite sem acento ou com outra caixa."""
-    return nome[len(PREFIXO) + len(SEP):].rsplit(SEP, 1)[0]
+    return nome[len(PREFIXO) + len(SEP):].split(SEP, 1)[1]

@@ -474,7 +474,7 @@ def gerar_nome_tiflux(
     nivel: Optional[str] = None, autor: Optional[str] = None,
 ) -> dict:
     """Gera o nome padrão do chamado de teste no Tiflux, no formato
-    `[TESTE IA] - ATRIBUIR TÉCNICO MANUALMENTE - T01`.
+    `[TESTE IA] - T01 - ATRIBUIR TÉCNICO MANUALMENTE`.
 
     Passe o `assunto` do teste (qualquer teste, mesmo fora do console) ou o
     `code` de um caso (FC-…) / situação (SIT-…) pra usar o texto do card.
