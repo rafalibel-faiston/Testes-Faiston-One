@@ -21,6 +21,7 @@ from .routers import todo as todo_router
 from .routers import ativos as ativos_router
 from .routers import relatorio as relatorio_router
 from .routers import tecnicos as tecnicos_router
+from .routers import nomes_tiflux as nomes_tiflux_router
 from .mcp_server import mcp as mcp_server, oauth_provider, MCP_TOKEN
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -69,6 +70,7 @@ app.include_router(agenda_router.router, prefix="/api")
 app.include_router(todo_router.router, prefix="/api")
 app.include_router(ativos_router.router, prefix="/api")
 app.include_router(tecnicos_router.router, prefix="/api")
+app.include_router(nomes_tiflux_router.router, prefix="/api")
 # páginas pra abrir no navegador (sem prefixo /api): a pauta da reunião e o
 # formulário de feedback que o técnico recebe por WhatsApp
 app.include_router(tecnicos_router.pagina_router)

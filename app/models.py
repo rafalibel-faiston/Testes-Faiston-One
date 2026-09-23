@@ -635,3 +635,24 @@ class Screenshot(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     test_case = relationship("TestCase", back_populates="screenshots")
+
+
+class NomeTiflux(Base):
+    """Um nome de chamado de teste gerado pro Tiflux (ver app/nomes_tiflux.py).
+
+    Guarda cada rodada que já saiu pra um teste — é daqui que vem o próximo
+    número, então o mesmo teste refeito nunca repete um nome já usado. O
+    `alvo` é o código do caso (`FC-…`) ou da situação (`SIT-…`); não é chave
+    estrangeira de propósito: o histórico do Tiflux continua valendo mesmo se
+    o card sair do console."""
+    __tablename__ = "nomes_tiflux"
+    __table_args__ = (UniqueConstraint("alvo", "nivel", "seq", name="uq_nome_tiflux_rodada"),)
+
+    id = Column(Integer, primary_key=True)
+    tipo = Column(String, nullable=False)           # "caso" / "situacao"
+    alvo = Column(String, nullable=False, index=True)
+    nivel = Column(String, nullable=False, default="interno", server_default="interno")
+    seq = Column(Integer, nullable=False)
+    nome = Column(String, nullable=False)
+    gerado_por = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

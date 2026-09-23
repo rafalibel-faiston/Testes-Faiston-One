@@ -33,6 +33,7 @@ from fastapi import HTTPException
 from . import models, niveis
 from .activity import log as log_activity, snippet, normaliza_cor
 from .database import SessionLocal
+from .routers.nomes_tiflux import gerar as gerar_nome_tiflux_db
 from .routers.tecnicos import PAPEIS as TECNICO_PAPEIS
 from .routers.tecnicos import STATUSES as TECNICO_STATUSES
 from .routers.tecnicos import TIPOS_OBS as TECNICO_TIPOS_OBS
@@ -463,6 +464,42 @@ def atualizar_observacao(
         db.commit()
         db.refresh(case)
         return _case_to_dict(case)
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def gerar_nome_tiflux(code: str, nivel: Optional[str] = None, autor: Optional[str] = None) -> dict:
+    """Gera o nome padrão do chamado de teste no Tiflux pra um caso (FC-…) ou
+    situação (SIT-…), no formato `[TESTE IA] - FC-04-APP-02 - T01 - RESUMO`.
+
+    Cada chamada reserva a próxima rodada daquele teste (T01, T02… na
+    validação técnica; O01, O02… com `nivel="operacao"`), então o nome nunca
+    repete um já usado. Use antes de abrir o chamado no Tiflux."""
+    db = SessionLocal()
+    try:
+        row = gerar_nome_tiflux_db(db, code, nivel, autor)
+        return {"nome": row.nome, "code": row.alvo, "nivel": row.nivel, "rodada": row.seq}
+    except HTTPException as err:
+        return {"erro": err.detail}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def listar_nomes_tiflux(code: Optional[str] = None) -> list[dict]:
+    """Nomes de chamado de teste já gerados pro Tiflux (todos, ou só os de um teste)."""
+    db = SessionLocal()
+    try:
+        q = db.query(models.NomeTiflux)
+        if code:
+            q = q.filter(models.NomeTiflux.alvo == code.strip().upper())
+        return [
+            {"nome": r.nome, "code": r.alvo, "nivel": r.nivel, "rodada": r.seq,
+             "gerado_por": r.gerado_por,
+             "gerado_em": r.created_at.isoformat() if r.created_at else None}
+            for r in q.order_by(models.NomeTiflux.id).all()
+        ]
     finally:
         db.close()
 

@@ -118,9 +118,70 @@
     if (file) enviar(alvoPrint.id, file);
   });
 
+  // ---------------- nome do chamado no Tiflux ----------------
+  // Todo teste ganha um nome padrão pra abrir o chamado no Tiflux:
+  // "[TESTE IA] - FC-04-APP-02 - T01 - RESUMO". Refazer o teste gera a próxima
+  // rodada (T02, T03… na técnica; O01, O02… na operação) — parecido, nunca igual.
+  // A regra fica no servidor (app/nomes_tiflux.py); aqui só pede e mostra.
+  let NOMES_TIFLUX = [];
+
+  function ultimoNomeTiflux(code, nivel) {
+    let ultimo = null;
+    NOMES_TIFLUX.forEach((n) => { if (n.alvo === code && n.nivel === nivel && (!ultimo || n.seq > ultimo.seq)) ultimo = n; });
+    return ultimo;
+  }
+
+  function nomeTifluxHtml(code, nivel, rotulo) {
+    const ultimo = ultimoNomeTiflux(code, nivel);
+    const attrs = `data-tiflux-code="${esc(code)}" data-tiflux-nivel="${nivel}"${rotulo ? ` data-tiflux-rotulo="${esc(rotulo)}"` : ""}`;
+    return `<div class="tiflux-nome" ${attrs}>
+        ${rotulo ? `<span class="tiflux-rotulo">${esc(rotulo)}</span>` : ""}
+        <span class="tiflux-nome-txt ${ultimo ? "" : "vazio"}" title="${ultimo ? "Último nome gerado" + (ultimo.gerado_por ? " por " + esc(ultimo.gerado_por) : "") : ""}">${ultimo ? esc(ultimo.nome) : "Nome p/ Tiflux ainda não gerado"}</span>
+        ${ultimo ? `<button type="button" class="tiflux-btn" data-tiflux-copiar title="Copiar este nome">Copiar</button>` : ""}
+        <button type="button" class="tiflux-btn primary" data-tiflux-gerar title="Gera o nome do próximo chamado de teste e copia">${ultimo ? "Novo nome" : "Gerar nome"}</button>
+      </div>`;
+  }
+
+  async function copiarTexto(texto, ok) {
+    try { await navigator.clipboard.writeText(texto); toast(ok); }
+    catch (e) { toast("Não deu pra copiar automaticamente: " + texto, true); }
+  }
+
+  document.addEventListener("click", async (ev) => {
+    const btn = ev.target.closest("[data-tiflux-gerar], [data-tiflux-copiar]");
+    if (!btn) return;
+    const box = btn.closest(".tiflux-nome");
+    const code = box.dataset.tifluxCode;
+    const nivel = box.dataset.tifluxNivel;
+    const ultimo = ultimoNomeTiflux(code, nivel);
+    if (btn.hasAttribute("data-tiflux-copiar")) {
+      if (ultimo) copiarTexto(ultimo.nome, "Nome copiado — cole no título do chamado");
+      return;
+    }
+    // cada rodada gerada fica reservada pra sempre: só vale gerar se vai abrir chamado novo
+    if (ultimo && !confirm(`Já existe "${ultimo.nome}".\n\nGerar o nome de uma NOVA rodada? Use só se for abrir um chamado novo no Tiflux.`)) return;
+    btn.disabled = true;
+    try {
+      const novo = await api("/api/nomes-tiflux", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, nivel, gerado_por: testerName() || null }),
+      });
+      NOMES_TIFLUX.push(novo);
+      box.outerHTML = nomeTifluxHtml(code, nivel, box.dataset.tifluxRotulo);
+      copiarTexto(novo.nome, "Nome gerado e copiado — cole no título do chamado");
+    } catch (e) {
+      btn.disabled = false;
+      toast("Erro ao gerar o nome: " + e.message, true);
+    }
+  });
+
   // ---------------- load ----------------
   async function loadCases() {
-    CASES = await api("/api/cases");
+    // os nomes do Tiflux não podem travar a tela: se falharem, os cards abrem sem eles
+    [CASES, NOMES_TIFLUX] = await Promise.all([
+      api("/api/cases"),
+      api("/api/nomes-tiflux").catch(() => []),
+    ]);
     $("#cases-loading").hidden = true;
     render();
   }
@@ -391,14 +452,20 @@
           ${NIVEIS.map((n) => nivelStatusHtml(c, n)).join("")}
         </div>
         <div class="reg-row">
-          <label class="reg-field">
-            <span class="reg-k">Chamado — técnica</span>
-            <input class="reg-chamado" type="text" value="${esc(c.chamado || "")}" placeholder="qual chamado foi testado" autocomplete="off">
-          </label>
-          <label class="reg-field">
-            <span class="reg-k">Chamado — operação</span>
-            <input class="reg-chamado-op" type="text" value="${esc(c.chamado_operacao || "")}" placeholder="qual chamado a operação testou" autocomplete="off">
-          </label>
+          <div class="reg-col">
+            <label class="reg-field">
+              <span class="reg-k">Chamado — técnica</span>
+              <input class="reg-chamado" type="text" value="${esc(c.chamado || "")}" placeholder="qual chamado foi testado" autocomplete="off">
+            </label>
+            ${nomeTifluxHtml(c.code, "interno")}
+          </div>
+          <div class="reg-col">
+            <label class="reg-field">
+              <span class="reg-k">Chamado — operação</span>
+              <input class="reg-chamado-op" type="text" value="${esc(c.chamado_operacao || "")}" placeholder="qual chamado a operação testou" autocomplete="off">
+            </label>
+            ${nomeTifluxHtml(c.code, "operacao")}
+          </div>
         </div>
         <div class="obs-row">
           <div class="obs-list">${obsList(c.observations)}</div>
@@ -2794,6 +2861,11 @@
             <span class="reg-k">Chamado testado</span>
             <input class="situacao-chamado" type="text" value="${esc(sit.chamado || "")}" placeholder="qual chamado foi testado nesta situação" autocomplete="off">
           </label>
+        </div>
+        <div class="tiflux-bloco">
+          <span class="reg-k">Nome do chamado no Tiflux</span>
+          ${nomeTifluxHtml(sit.code, "interno", "Técnica")}
+          ${nomeTifluxHtml(sit.code, "operacao", "Operação")}
         </div>
         <div class="situacao-stages">${stages}</div>
         <button type="button" class="add-btn situacao-add-estagio" data-add-estagio="${esc(sit.code)}">

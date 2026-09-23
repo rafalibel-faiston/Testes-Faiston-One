@@ -604,6 +604,26 @@ main { max-width:1160px; margin:0 auto; padding:28px 24px 40px; }
 }
 .reg-field input:focus { outline:none; border-color:var(--f-blue); box-shadow:0 0 0 3px rgba(0,84,236,.10); }
 
+/* nome padrão do chamado no Tiflux (embaixo do campo de chamado) */
+.reg-col { display:flex; flex-direction:column; gap:6px; flex:1; min-width:150px; }
+.tiflux-nome { display:flex; align-items:center; gap:6px; flex-wrap:wrap; min-width:0; }
+.tiflux-bloco { display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+.tiflux-rotulo { font-size:11px; font-weight:700; color:var(--text-3); min-width:62px; }
+.tiflux-nome-txt {
+  flex:1 1 240px; min-width:0; font-family:'Roboto Mono',ui-monospace,monospace; font-size:11.5px;
+  color:var(--text-2); background:var(--surface-2); border:1px dashed var(--line-2);
+  border-radius:6px; padding:4px 8px; overflow-wrap:anywhere; user-select:all;
+}
+.tiflux-nome-txt.vazio { font-family:'Roboto',sans-serif; font-style:italic; color:var(--text-3); user-select:none; }
+.tiflux-btn {
+  border:1px solid var(--line-2); background:var(--surface); color:var(--text-2);
+  border-radius:6px; padding:4px 9px; font-size:11.5px; font-weight:600; cursor:pointer; white-space:nowrap;
+}
+.tiflux-btn:hover { border-color:var(--f-blue); color:var(--f-blue); }
+.tiflux-btn.primary { background:var(--f-blue); border-color:var(--f-blue); color:#fff; }
+.tiflux-btn.primary:hover { filter:brightness(1.08); color:#fff; }
+.tiflux-btn:disabled { opacity:.6; cursor:wait; }
+
 /* linha de chamado na legenda do carrossel */
 .carousel-caption .cap-reg {
   font-size:12.5px; font-weight:600; color:#fff;

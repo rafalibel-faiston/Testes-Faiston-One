@@ -730,3 +730,23 @@ class AtivoAjusteUpdate(BaseModel):
     validado_por_operacao: Optional[str] = None
     retorno: Optional[str] = None
     prazo: Optional[str] = None
+
+
+class NomeTifluxIn(BaseModel):
+    """Pedido de um nome novo de chamado de teste pro Tiflux."""
+    code: str                            # FC-… (caso) ou SIT-… (situação)
+    nivel: Optional[str] = "interno"     # interno (técnica) ou operacao
+    gerado_por: Optional[str] = None
+
+
+class NomeTifluxOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    tipo: str
+    alvo: str
+    nivel: str
+    seq: int
+    nome: str
+    gerado_por: Optional[str] = None
+    created_at: Optional[datetime] = None
