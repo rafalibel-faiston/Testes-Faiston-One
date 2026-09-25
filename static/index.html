@@ -459,6 +459,11 @@
             Importar
             <input type="file" id="tecnico-import-input" accept=".xlsx,.xlsm" hidden>
           </label>
+          <label class="tool-btn" title="Subir o APK do Track One pra ir como link dentro do convite">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M12 7.5v7"/><path d="m9 11.5 3 3 3-3"/><path d="M10.5 18.5h3"/></svg>
+            <span id="apk-status">Subir APK</span>
+            <input type="file" id="apk-input" accept=".apk,application/vnd.android.package-archive" hidden>
+          </label>
           <a class="tool-btn" id="btn-exportar-piloto" href="/api/tecnicos/exportar" download title="Exportar a fase aberta em .xlsx">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><path d="M3.5 9.5h17M9.5 9.5v11"/></svg>
             Exportar
@@ -1133,8 +1138,7 @@
       <button type="button" class="modal-close" id="tecnico-msg-close" aria-label="Fechar">✕</button>
     </div>
     <div class="modal-body">
-      <p class="notes-hint" id="tecnico-msg-dica">O link abre o WhatsApp já com o texto preenchido. Ele só leva o texto —
-      envie o <b>APK</b> e o <b>manual</b> como anexo direto na conversa, já que o link não anexa arquivo.</p>
+      <p class="notes-hint" id="tecnico-msg-dica"></p>
       <label class="fld fld-wide">Mensagem
         <textarea id="tecnico-msg-texto" rows="10" readonly></textarea>
       </label>

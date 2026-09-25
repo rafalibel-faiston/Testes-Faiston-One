@@ -15,7 +15,7 @@ from typing import List, Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
@@ -147,24 +147,58 @@ def _norm_telefone(valor: str) -> str:
     return digitos
 
 
-def _mensagem_para(tecnico: models.Tecnico, tipo: str = "convite", base_url: str = "") -> str:
+# o APK sobe pela tela e fica sempre neste endereço — é o link que vai no convite
+CAMINHO_APK = "/app/track-one.apk"
+APK_TAMANHO_MAX = 200 * 1024 * 1024
+APK_CONTENT_TYPE = "application/vnd.android.package-archive"
+# trecho dos templates que promete o link do app — com APK no sistema, vira o link
+PROMESSA_LINK_APK = "(o link será enviado a seguir)"
+
+
+def _link_apk(db: Session, base_url: str) -> Optional[str]:
+    """Link de download do APK do Track One, ou None se ninguém subiu ainda."""
+    if not db.query(models.InstaladorApp.id).first():
+        return None
+    return f"{(base_url or '').rstrip('/')}{CAMINHO_APK}"
+
+
+def _com_apk(texto: str, apk_link: Optional[str]) -> str:
+    """Põe o link do APK dentro da mensagem: no lugar do "(o link será enviado a
+    seguir)" quando o template promete o link, ou no fim quando não promete."""
+    if not apk_link:
+        return texto
+    if PROMESSA_LINK_APK in texto:
+        return texto.replace(PROMESSA_LINK_APK, f"— baixe e instale pelo link:\n{apk_link}")
+    return f"{texto}\n\nLink pra instalar o Track One:\n{apk_link}"
+
+
+def _mensagem_para(
+    tecnico: models.Tecnico, tipo: str = "convite", base_url: str = "", apk_link: Optional[str] = None,
+) -> str:
     """Monta o texto pronto pra mandar: o convite (antes do teste, conforme o
     papel), o pedido de feedback com o link do formulário (depois dele) ou a
-    cobrança de quem travou no meio (que muda conforme a etapa onde parou)."""
+    cobrança de quem travou no meio (que muda conforme a etapa onde parou).
+
+    `apk_link` (ver _link_apk) vai embutido em toda mensagem que pede pra
+    instalar o app — o wa.me não anexa arquivo, então o APK vai como link."""
     primeiro_nome = (tecnico.nome or "").strip().split(" ")[0] or tecnico.nome
     link = f"{(base_url or '').rstrip('/')}/formulario/{tecnico.token or ''}"
     if tipo == "cobranca":
         # quem ainda nem foi convidado não tem o que cobrar: recebe o convite
         template = TEMPLATES_COBRANCA.get(tecnico.status)
         if not template:
-            return _mensagem_para(tecnico, "convite", base_url)
-        return template.format(nome=primeiro_nome, link=link)
+            return _mensagem_para(tecnico, "convite", base_url, apk_link)
+        texto = template.format(nome=primeiro_nome, link=link)
+        # só quem ainda não instalou precisa do APK de novo
+        return _com_apk(texto, apk_link) if tecnico.status == "convidado" else texto
     if tipo == "feedback":
         return TEMPLATE_FEEDBACK.format(nome=primeiro_nome, link=link)
     if tipo == "acionamento":
-        return TEMPLATE_ACIONAMENTO.format(nome=primeiro_nome)
-    template = TEMPLATE_LIDER if tecnico.papel == "lider" else TEMPLATE_TECNICO
-    return template.format(nome=primeiro_nome)
+        return _com_apk(TEMPLATE_ACIONAMENTO.format(nome=primeiro_nome), apk_link)
+    if tecnico.papel == "lider":
+        # o líder só avisa o time — quem instala é cada técnico, no convite dele
+        return TEMPLATE_LIDER.format(nome=primeiro_nome)
+    return _com_apk(TEMPLATE_TECNICO.format(nome=primeiro_nome), apk_link)
 
 
 def _versao_da_fase(tecnico: models.Tecnico) -> Optional[str]:
@@ -741,6 +775,77 @@ def create_tecnico(payload: schemas.TecnicoCreate, db: Session = Depends(get_db)
     return tecnico
 
 
+# --------------------------------------------------------------- APK do Track One
+# antes das rotas /tecnicos/{tecnico_id}: senão "apk" cai como id de técnico
+
+
+def _apk_out(instalador: models.InstaladorApp, base_url: str) -> schemas.InstaladorAppOut:
+    return schemas.InstaladorAppOut(
+        filename=instalador.filename, tamanho=instalador.tamanho, uploaded_by=instalador.uploaded_by,
+        created_at=instalador.created_at, link=f"{base_url.rstrip('/')}{CAMINHO_APK}",
+    )
+
+
+@router.get("/tecnicos/apk", response_model=Optional[schemas.InstaladorAppOut])
+def info_apk(request: Request, db: Session = Depends(get_db)):
+    """Qual APK está indo no convite agora (null = nenhum ainda)."""
+    instalador = db.query(models.InstaladorApp).order_by(models.InstaladorApp.id.desc()).first()
+    return _apk_out(instalador, str(request.base_url)) if instalador else None
+
+
+@router.post("/tecnicos/apk", response_model=schemas.InstaladorAppOut, status_code=201)
+async def subir_apk(
+    request: Request,
+    file: UploadFile = File(...),
+    autor: Optional[str] = Form(default=None),
+    db: Session = Depends(get_db),
+):
+    """Sobe o APK do Track One. Substitui o anterior — o link da mensagem é fixo,
+    então quem recebe o convite depois já baixa a build nova."""
+    nome = (file.filename or "").strip()
+    if not nome.lower().endswith(".apk"):
+        raise HTTPException(status_code=400, detail="Envie o arquivo .apk do Track One.")
+    conteudo = await file.read(APK_TAMANHO_MAX + 1)
+    if len(conteudo) > APK_TAMANHO_MAX:
+        raise HTTPException(status_code=413, detail="APK maior que 200 MB.")
+    # APK é um zip: sem a assinatura "PK" no começo, não é um instalador válido
+    if not conteudo.startswith(b"PK"):
+        raise HTTPException(status_code=400, detail="Esse arquivo não é um APK válido.")
+    db.query(models.InstaladorApp).delete(synchronize_session=False)
+    instalador = models.InstaladorApp(
+        filename=nome, tamanho=len(conteudo), data=conteudo, uploaded_by=(autor or "").strip() or None,
+    )
+    db.add(instalador)
+    db.commit()
+    db.refresh(instalador)
+    return _apk_out(instalador, str(request.base_url))
+
+
+@router.delete("/tecnicos/apk")
+def remover_apk(db: Session = Depends(get_db)):
+    """Tira o APK — a mensagem volta a prometer o link "a seguir"."""
+    removidos = db.query(models.InstaladorApp).delete(synchronize_session=False)
+    db.commit()
+    return {"deleted": removidos}
+
+
+@pagina_router.get(CAMINHO_APK)
+def baixar_apk(db: Session = Depends(get_db)):
+    """O link que o técnico toca no WhatsApp: baixa o APK direto no celular."""
+    instalador = db.query(models.InstaladorApp).order_by(models.InstaladorApp.id.desc()).first()
+    if not instalador:
+        raise HTTPException(status_code=404, detail="O APK do Track One ainda não foi disponibilizado.")
+    return Response(
+        content=instalador.data,
+        media_type=APK_CONTENT_TYPE,
+        headers={
+            "Content-Disposition": 'attachment; filename="track-one.apk"',
+            # o link é fixo e a build muda: nada de cache servindo APK velho
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 @router.patch("/tecnicos/{tecnico_id}", response_model=schemas.TecnicoOut)
 def update_tecnico(tecnico_id: int, payload: schemas.TecnicoUpdate, db: Session = Depends(get_db)):
     tecnico = _get_tecnico_or_404(db, tecnico_id)
@@ -793,13 +898,16 @@ def mensagem_tecnico(tecnico_id: int, request: Request, tipo: str = "convite", d
     `tipo=convite` (padrão) chama pra instalação, `tipo=acionamento` avisa que a
     fase passou a rodar com chamados reais (ex.: Fase 2 - Acionamento SP) e
     `tipo=feedback` pede o retorno depois do atendimento e leva o link do
-    formulário. O link do WhatsApp só pré-preenche texto; o APK/manual vai por
-    fora, na própria conversa, já que o wa.me não anexa arquivo."""
+    formulário. O wa.me só pré-preenche texto, então o APK vai embutido como
+    link de download (quando já subiram um em /tecnicos/apk)."""
     tecnico = _get_tecnico_or_404(db, tecnico_id)
-    mensagem = _mensagem_para(tecnico, tipo=tipo, base_url=str(request.base_url))
+    base_url = str(request.base_url)
+    apk_link = _link_apk(db, base_url)
+    mensagem = _mensagem_para(tecnico, tipo=tipo, base_url=base_url, apk_link=apk_link)
     wa_link = f"https://wa.me/{tecnico.telefone}?text={quote(mensagem)}"
     return schemas.TecnicoMensagemOut(
         tecnico_id=tecnico.id, telefone=tecnico.telefone, mensagem=mensagem, wa_link=wa_link,
+        apk_link=apk_link,
     )
 
 

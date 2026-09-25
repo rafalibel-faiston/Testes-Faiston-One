@@ -2,7 +2,7 @@ from sqlalchemy import (
     Column, Integer, Float, String, Text, LargeBinary, DateTime, ForeignKey, Boolean,
     UniqueConstraint, case,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import deferred, relationship
 from sqlalchemy.sql import func, expression
 
 from .database import Base
@@ -658,4 +658,23 @@ class NomeTiflux(Base):
     seq = Column(Integer, nullable=False)
     nome = Column(String, nullable=False)
     gerado_por = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class InstaladorApp(Base):
+    """O APK do Track One que vai junto no convite dos técnicos.
+
+    O wa.me só pré-preenche texto — não anexa arquivo. Então o APK fica guardado
+    aqui e a mensagem leva um link de download (/app/track-one.apk) que o técnico
+    toca no WhatsApp e instala. Fica no banco (e não em disco) porque o
+    filesystem do Railway some a cada deploy. Só a versão mais recente vale:
+    subir um APK novo substitui o anterior, e o link da mensagem continua o mesmo."""
+    __tablename__ = "instaladores_app"
+
+    id = Column(Integer, primary_key=True)
+    filename = Column(String, nullable=False)
+    tamanho = Column(Integer, nullable=False)     # bytes — mostrado na tela antes de mandar
+    # o binário só é lido no download: listar/checar se existe não puxa dezenas de MB
+    data = deferred(Column(LargeBinary, nullable=False))
+    uploaded_by = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

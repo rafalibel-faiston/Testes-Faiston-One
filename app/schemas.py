@@ -521,6 +521,17 @@ class TecnicoMensagemOut(BaseModel):
     telefone: str
     mensagem: str
     wa_link: str
+    # link de download do APK do Track One, quando já subiram um — é o que vai
+    # dentro do convite no lugar do anexo que o wa.me não consegue levar
+    apk_link: Optional[str] = None
+
+
+class InstaladorAppOut(BaseModel):
+    filename: str
+    tamanho: int
+    uploaded_by: Optional[str] = None
+    created_at: Optional[datetime] = None
+    link: str
 
 
 class PilotoFaseOut(BaseModel):

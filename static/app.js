@@ -3992,7 +3992,7 @@
     if (mod === "ativos") loadAjustes();
     if (mod === "agenda") loadAgenda();
     if (mod === "todo") loadTodo();
-    if (mod === "tecnicos") loadTecnicos();
+    if (mod === "tecnicos") { loadTecnicos(); loadApkInfo(); }
     loadActivities();   // o badge de Novidades segue o "fluxo" do módulo aberto
   }
 
@@ -4939,75 +4939,32 @@
   const PAGINA_CARDS = 40;
   let tecnicosVisiveis = PAGINA_CARDS;
 
-  // mesmos textos combinados com o Rafa — espelham app/routers/tecnicos.py
-  // (TEMPLATE_TECNICO / TEMPLATE_LIDER). Mudou o texto lá, muda aqui também.
-  const TECNICO_TEMPLATE_TECNICO = `Fala, {nome}! Tudo certo?
-Estamos lançando um app novo pra técnicos (Track One) e você foi selecionado pra testar antes de liberar geral.
-O que ele faz:
-
-• Acompanha o fluxo inteiro do atendimento, desde o chamado atribuído a você até o fechamento da RAT, tudo pelo app
-• Mostra rastreio e previsão de entrega quando o atendimento precisa de peça
-• Você confirma o recebimento do equipamento direto por lá
-
-Vou te chamar pra fazer a instalação e já passo o manual de uso na hora. Depois é só usar normal no seu próximo atendimento, do começo ao fim, e qualquer coisa estranha (tela que não atualiza, notificação que não chega, informação que falta) me avisa direto — print ajuda muito.
-Bora marcar a instalação?`;
-
-  const TECNICO_TEMPLATE_LIDER = `Fala, {nome}! Tudo certo?
-Estamos lançando um app novo pra técnicos (Track One) e já vou entrar em contato direto com o seu time pra fazer a instalação. Só queria te avisar antes.
-O que ele faz:
-
-• Acompanha o fluxo inteiro do atendimento, desde o chamado atribuído ao técnico até o fechamento da RAT, tudo pelo app
-• Mostra rastreio e previsão de entrega quando precisa de peça
-• O técnico confirma o recebimento do equipamento direto por lá
-
-Tem manual de uso, vou passar junto na instalação com cada um. Pode avisar o pessoal que eu vou chamar eles nos próximos dias pra instalar e usar no próximo atendimento?`;
-
-  // mandada DEPOIS do atendimento, com o link do formulário (espelha TEMPLATE_FEEDBACK)
-  const TECNICO_TEMPLATE_FEEDBACK = `Fala, {nome}! Tudo certo?
-Vi que você usou o Track One no atendimento — me conta rapidinho como foi?
-São 2 minutinhos, direto no link:
-
-{link}
-
-Pode ser sincero, é justamente pra ajustar o que estiver ruim antes de liberar pra todo mundo. Valeu demais!`;
-
-  // cobrança de quem parou no meio — espelha TEMPLATES_COBRANCA do router
-  const TECNICO_TEMPLATES_COBRANCA = {
-    convidado: `Fala, {nome}! Tudo certo?
-Passando pra lembrar do Track One — ficou de marcar a instalação comigo e ainda não conseguimos fechar.
-São 10 minutinhos pra instalar e eu te passo o manual na hora. Quando fica bom pra você?`,
-    instalado: `Fala, {nome}! Tudo certo?
-Você já está com o Track One instalado — é só usar no seu próximo atendimento, do começo ao fim.
-Qualquer coisa estranha me chama, e no fim eu te mando um link rapidinho pra contar como foi. Fechou?`,
-    em_teste: `Fala, {nome}! Tudo certo?
-Vi que você já usou o Track One no atendimento — só falta me contar como foi, são 2 minutinhos:
-
-{link}
-
-Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
-  };
-
   function linkFormulario(t) {
     return `${window.location.origin}/formulario/${t.token || ""}`;
   }
 
-  function mensagemTecnico(t, tipo) {
-    const primeiroNome = (t.nome || "").trim().split(" ")[0] || t.nome;
-    if (tipo === "cobranca") {
-      const template = TECNICO_TEMPLATES_COBRANCA[t.status];
-      // quem ainda nem foi convidado não tem o que cobrar: recebe o convite
-      if (!template) return mensagemTecnico(t, "convite");
-      return template.replace("{nome}", primeiroNome).replace("{link}", linkFormulario(t));
-    }
-    if (tipo === "feedback") {
-      return TECNICO_TEMPLATE_FEEDBACK.replace("{nome}", primeiroNome).replace("{link}", linkFormulario(t));
-    }
-    const template = t.papel === "lider" ? TECNICO_TEMPLATE_LIDER : TECNICO_TEMPLATE_TECNICO;
-    return template.replace("{nome}", primeiroNome);
+  // APK do Track One que vai embutido (como link de download) no convite — o
+  // wa.me só leva texto, então é o link que substitui o anexo
+  let APK_INFO = null;
+
+  function formatBytes(n) {
+    if (!n) return "0 MB";
+    return n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1).replace(".", ",")} MB` : `${Math.ceil(n / 1024)} KB`;
   }
 
-  function waLink(t, tipo) {
-    return `https://wa.me/${t.telefone}?text=${encodeURIComponent(mensagemTecnico(t, tipo))}`;
+  function renderApkInfo() {
+    const label = $("#apk-status");
+    if (!label) return;
+    label.textContent = APK_INFO ? `APK · ${formatBytes(APK_INFO.tamanho)}` : "Subir APK";
+    label.closest("label").title = APK_INFO
+      ? `${APK_INFO.filename} — vai como link no convite. Clique pra trocar pela build nova.`
+      : "Subir o APK do Track One pra ir como link dentro do convite";
+    label.closest("label").classList.toggle("tool-ok", !!APK_INFO);
+  }
+
+  async function loadApkInfo() {
+    try { APK_INFO = await api("/api/tecnicos/apk"); } catch (e) { APK_INFO = null; }
+    renderApkInfo();
   }
 
   function formatTelefone(digits) {
@@ -5789,23 +5746,29 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
     } catch (e) { toast("Erro ao atualizar: " + e.message, true); }
   }
 
-  function abrirMensagemTecnico(id, tipo) {
+  async function abrirMensagemTecnico(id, tipo) {
     const t = TECNICOS.find((x) => x.id === id);
     if (!t) return;
     if (tipo === "feedback" && !t.token) {
       toast("Esse técnico ainda não tem link de formulário — recarregue a página.", true);
       return;
     }
+    let msg;
+    try {
+      msg = await api(`/api/tecnicos/${id}/mensagem?tipo=${encodeURIComponent(tipo || "convite")}`);
+    } catch (e) { toast("Não deu pra montar a mensagem: " + e.message, true); return; }
     const TITULOS = { feedback: "Pedir feedback", cobranca: "Cobrar retorno", convite: "Convite pronto" };
     const DICAS = {
       feedback: "O link abre o formulário no celular dele. O que ele responder cai direto aqui no card — nota, o que achou bom, o que precisa melhorar e os problemas.",
-      cobranca: "A mensagem muda conforme onde ele parou: quem não instalou é chamado pra instalação, quem instalou é lembrado de usar no próximo atendimento, e quem já usou recebe o link do formulário.",
-      convite: "O link abre o WhatsApp já com o texto preenchido. Ele só leva o texto — envie o <b>APK</b> e o <b>manual</b> como anexo direto na conversa.",
+      cobranca: "A mensagem muda conforme onde ele parou: quem não instalou é chamado pra instalação (com o link do APK), quem instalou é lembrado de usar no próximo atendimento, e quem já usou recebe o link do formulário.",
+      convite: msg.apk_link
+        ? "O APK do Track One já vai <b>embutido na mensagem</b> como link de download — o técnico toca no link, baixa e instala. Só o <b>manual</b> continua indo como anexo."
+        : "Ainda não tem APK no sistema — suba em <b>Subir APK</b> (no topo da tela) pra ele ir embutido na mensagem. Sem isso, envie o APK como anexo na conversa.",
     };
     $("#tecnico-msg-titulo").textContent = TITULOS[tipo] || TITULOS.convite;
     $("#tecnico-msg-dica").innerHTML = DICAS[tipo] || DICAS.convite;
-    $("#tecnico-msg-texto").value = mensagemTecnico(t, tipo);
-    $("#tecnico-msg-abrir").href = waLink(t, tipo);
+    $("#tecnico-msg-texto").value = msg.mensagem;
+    $("#tecnico-msg-abrir").href = msg.wa_link;
     $("#tecnico-msg-modal").hidden = false;
     // primeira vez que o convite é gerado, já sai de "a contatar"
     if (tipo !== "feedback" && t.status === "a_contatar") setTecnicoStatus(id, "convidado");
@@ -5895,6 +5858,22 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
     tecnicoModal.hidden = false;
   }
   function closeTecnicoModal() { tecnicoModal.hidden = true; editingTecnicoId = null; }
+
+  $("#apk-input").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".apk")) { toast("Escolha o arquivo .apk do Track One.", true); return; }
+    try {
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+      if (testerName()) fd.append("autor", testerName());
+      toast(`Enviando ${file.name} (${formatBytes(file.size)})…`);
+      APK_INFO = await api("/api/tecnicos/apk", { method: "POST", body: fd });
+      renderApkInfo();
+      toast("APK no ar — os convites já saem com o link de download.");
+    } catch (err) { toast("Erro ao subir o APK: " + err.message, true); }
+  });
 
   $("#tecnico-import-input").addEventListener("change", async (e) => {
     const file = e.target.files[0];
@@ -6110,4 +6089,5 @@ Seu retorno é o que ajusta o app antes de liberar pra todo mundo. Valeu!`,
   loadSituacoes();
   loadAjustes();
   loadTecnicos();
+  loadApkInfo();
 })();

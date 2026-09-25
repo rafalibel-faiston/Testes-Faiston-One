@@ -37,6 +37,7 @@ from .routers.nomes_tiflux import gerar as gerar_nome_tiflux_db
 from .routers.tecnicos import PAPEIS as TECNICO_PAPEIS
 from .routers.tecnicos import STATUSES as TECNICO_STATUSES
 from .routers.tecnicos import TIPOS_OBS as TECNICO_TIPOS_OBS
+from .routers.tecnicos import _link_apk as link_apk
 from .routers.tecnicos import _mensagem_para as mensagem_para_tecnico
 from .routers.tecnicos import _norm_telefone as norm_telefone_tecnico
 
@@ -959,9 +960,9 @@ def gerar_mensagem_tecnico(tecnico_id: int, tipo: str = "convite") -> dict:
     WhatsApp já preenchido. tipo="convite" (padrão) chama pra instalação
     conforme o papel dele; tipo="acionamento" avisa que a fase passou a rodar
     com chamados reais (ex.: Fase 2 - Acionamento SP); tipo="feedback" pede o
-    retorno depois do atendimento e leva o link do formulário. O link do
-    WhatsApp só leva o texto — o APK e o manual são enviados à parte na
-    conversa."""
+    retorno depois do atendimento e leva o link do formulário. O wa.me só leva
+    texto, então o APK do Track One vai embutido como link de download (quando
+    já subiram um pela tela de Técnicos)."""
     from urllib.parse import quote
 
     db = SessionLocal()
@@ -969,11 +970,13 @@ def gerar_mensagem_tecnico(tecnico_id: int, tipo: str = "convite") -> dict:
         tecnico = db.query(models.Tecnico).filter(models.Tecnico.id == tecnico_id).first()
         if not tecnico:
             return {"erro": f"Técnico {tecnico_id} não encontrado"}
-        mensagem = mensagem_para_tecnico(tecnico, tipo=tipo, base_url=PUBLIC_BASE_URL)
+        apk_link = link_apk(db, PUBLIC_BASE_URL)
+        mensagem = mensagem_para_tecnico(tecnico, tipo=tipo, base_url=PUBLIC_BASE_URL, apk_link=apk_link)
         return {
             "tecnico_id": tecnico.id,
             "telefone": tecnico.telefone,
             "mensagem": mensagem,
+            "apk_link": apk_link,
             "wa_link": f"https://wa.me/{tecnico.telefone}?text={quote(mensagem)}",
             "link_formulario": f"{PUBLIC_BASE_URL}/formulario/{tecnico.token}" if tecnico.token else None,
         }

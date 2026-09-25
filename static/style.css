@@ -2250,6 +2250,7 @@ body.inline-connecting * { cursor:crosshair !important; }
 .tool-danger { color:var(--text-3); }
 .tool-danger:hover { color:var(--bad); border-color:var(--bad-ln); background:var(--bad-bg); }
 .tool-danger:hover svg { opacity:1; }
+.tool-ok { color:var(--ok); border-color:var(--ok-ln); background:var(--ok-bg); }
 .tecnicos-head-actions .add-btn { padding:9px 16px; border-radius:10px; font-size:12.5px; }
 .tecnicos-mais {
   width:100%; padding:11px; border-radius:var(--radius); cursor:pointer;
