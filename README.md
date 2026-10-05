@@ -518,7 +518,8 @@ numa capital não tem a mesma régua de uma de 60 no interior.
 
 O fluxo é: **Nova fase** (ex.: *Fase 1 — SP capital*) → aba **Base completa** →
 filtra por regional ou busca pelo nome → marca quem entra (ou usa *adicionar a
-regional inteira à fase*) → a fase sai de "planejada" e vira "em andamento"
+regional inteira à fase*) → escolhe a **fase de destino** no seletor ao lado do
+botão (por padrão, a que está em andamento) → a fase sai de "planejada" e vira "em andamento"
 sozinha. O painel e os critérios passam a ser daquela fase, e quando a régua
 fecha aparece o botão **marcar como liberada** — aí é só abrir a próxima região.
 Técnico que ainda não foi chamado fica na base geral; excluir uma fase não apaga

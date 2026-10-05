@@ -5163,7 +5163,26 @@
     atualizaBotaoAdicionar();
   }
 
+  // fase que recebe a seleção: o operador escolhe; se ainda não escolheu (ou a
+  // escolhida foi excluída), cai na que está rodando, ou na última criada
+  let baseDestinoId = null;
+
+  function faseDestino() {
+    return FASES.find((f) => f.id === baseDestinoId)
+      || FASES.find((f) => f.status === "em_andamento")
+      || FASES[FASES.length - 1];
+  }
+
+  function renderDestino() {
+    const sel = $("#base-destino");
+    const destino = faseDestino();
+    sel.hidden = !FASES.length;
+    sel.innerHTML = FASES.map((f) =>
+      `<option value="${f.id}"${destino && f.id === destino.id ? " selected" : ""}>→ ${esc(f.nome)}</option>`).join("");
+  }
+
   function atualizaBotaoAdicionar() {
+    renderDestino();
     const btn = $("#base-add");
     btn.disabled = !baseSelecao.size || !FASES.length;
     btn.textContent = baseSelecao.size
@@ -5173,8 +5192,7 @@
 
   async function adicionarNaFase(payload) {
     if (!FASES.length) { toast("Crie uma fase antes de escolher quem entra.", true); return; }
-    // a fase de destino é a que está rodando; se não houver, a última criada
-    const destino = FASES.find((f) => f.status === "em_andamento") || FASES[FASES.length - 1];
+    const destino = faseDestino();
     const aviso = payload.incluir_de_outras_fases
       ? `Adicionar à "${destino.nome}"? Quem já testou outra fase tem o progresso resetado (status, nota, link do formulário) — o relato antigo continua guardado.`
       : `Adicionar à "${destino.nome}"?`;
@@ -5195,6 +5213,7 @@
     tecnico_ids: [...baseSelecao], incluir_de_outras_fases: $("#base-reaproveitar").checked,
   }));
   $("#base-reaproveitar").addEventListener("change", () => { BASE_PAGINA = 0; loadBase(); });
+  $("#base-destino").addEventListener("change", (e) => { baseDestinoId = Number(e.target.value); });
   $("#base-regional").addEventListener("change", (e) => {
     baseFiltro.regional = e.target.value; BASE_PAGINA = 0; loadBase();
   });
