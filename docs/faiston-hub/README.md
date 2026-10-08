@@ -49,7 +49,12 @@ Vamos começar o Faiston Hub neste repositório (vazio).
    1 a 4 nesta sessão, cada um num commit separado, com testes passando
    (ruff, pytest, bandit) antes de cada commit.
 4. Trabalhe só na branch que esta sessão indicar. Não mexa na main.
-5. No fim, me mostre o que ficou pronto, o que falta do checklist de segurança
+5. Antes de cadastrar ou integrar qualquer sistema no hub, me peça os repos e
+   os arquivos de cada um (seção "Sistemas que você precisa me mandar" do
+   README). Não invente URL, stack ou estrutura de sistema que eu ainda não
+   mandei. Quando eu mandar um repo, adicione só com acesso de leitura e
+   não altere nada nele.
+6. No fim, me mostre o que ficou pronto, o que falta do checklist de segurança
    (seção 6) e como eu rodo localmente.
 ```
 
@@ -88,8 +93,32 @@ status checks to pass* (o job de CI) e *Do not allow force pushes*.
 - O Console de Testes continua aberto para a LPD. O papel `parceiro` já está
   previsto no modelo de dados para quando ele entrar atrás do login.
 
+## Sistemas que você precisa me mandar
+
+**Obrigatório:** antes de o hub cadastrar ou integrar qualquer sistema, mande
+para o Claude **todos os repositórios e arquivos** de cada um. Sem isso, ele não
+tem como conferir a stack, as rotas, o `/health`, a URL de produção nem o jeito
+de autenticar de cada sistema, e não vai chutar nada disso.
+
+| Sistema | O que mandar | Status |
+|---|---|---|
+| Faiston One — Console de Testes | repo `rafalibel-faiston/Testes-Faiston-One` + URL de produção (Railway) | repo já conhecido; falta a URL |
+| Faiston Ops | repo `rafalibel-faiston/Dashboard-Faiston` + URL de produção | pendente |
+| Giro | repo `rafalibel-faiston/Sistema-Giro` + URL de produção | pendente |
+| Painéis gerenciais | repos e/ou arquivos (`.pbix`, links do Power BI, planilhas) de cada painel | pendente (você ainda vai pegar) |
+| RH — Automação | o que já existir: levantamento do processo, planilhas, fluxos, documentos | pendente |
+| Outros candidatos | `Apresenta-o-Indicadores`, `Overviwe-Logistica-Faiston`, `Consolidado-MC-s`, `sgb-operation`: confirmar se entram | a confirmar |
+
+Como mandar:
+- **Repo do GitHub:** diga o nome (`dono/repo`) na conversa e o Claude adiciona
+  com acesso de leitura. Se for privado, o app Claude no GitHub precisa ter
+  acesso a ele (ver o passo 2).
+- **Arquivos soltos** (`.pbix`, planilhas, PDFs, prints): anexe na conversa.
+- Junto com cada sistema, informe: a URL de produção, quem usa, se tem login e
+  se tem dado sensível (cliente, colaborador, contrato).
+
 ## Pendências suas
 
-- [ ] Mandar os arquivos/links dos **painéis gerenciais**.
-- [ ] Levantar as URLs de produção do Dashboard-Faiston e do Sistema-Giro.
+- [ ] **Mandar todos os repos e arquivos dos sistemas** (tabela acima), incluindo os dos painéis gerenciais e do RH.
+- [ ] Levantar as URLs de produção do Console, do Dashboard-Faiston e do Sistema-Giro.
 - [ ] Decidir provedor de e-mail (SMTP do M365 ou Resend) para o "esqueci minha senha" na fase 2.
