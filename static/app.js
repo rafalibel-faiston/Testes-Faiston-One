@@ -125,9 +125,12 @@
   // A regra fica no servidor (app/nomes_tiflux.py); aqui só pede e mostra.
   let NOMES_TIFLUX = [];
 
+  // o último é o gerado por último (maior id), não a maior rodada: se o título
+  // da situação muda, o assunto novo recomeça em T01 e precisa aparecer no lugar
+  // do nome antigo, mesmo que ele estivesse em T05
   function ultimoNomeTiflux(code, nivel) {
     let ultimo = null;
-    NOMES_TIFLUX.forEach((n) => { if (n.alvo === code && n.nivel === nivel && (!ultimo || n.seq > ultimo.seq)) ultimo = n; });
+    NOMES_TIFLUX.forEach((n) => { if (n.alvo === code && n.nivel === nivel && (!ultimo || n.id > ultimo.id)) ultimo = n; });
     return ultimo;
   }
 
