@@ -5572,6 +5572,8 @@
     if (t.status === "a_contatar" || t.status === "sem_retorno") {
       return { tipo: "convite", label: "Chamar pra instalar" };
     }
+    // convidou e ainda não confirmou: pergunta se instalou e fez o cadastro
+    if (t.status === "convidado") return { tipo: "followup", label: "Follow-up instalação" };
     if (t.status === "concluido") return { tipo: "feedback", label: "Pedir novo retorno" };
     return { tipo: "feedback", label: "Pedir feedback" };
   }
@@ -5642,6 +5644,7 @@
           <button type="button" class="tecnico-menu-btn" aria-label="Mais ações" title="Mais ações">⋯</button>
           <div class="tecnico-menu" hidden>
             <button type="button" data-acao="convite">Mensagem de convite</button>
+            <button type="button" data-acao="followup">Follow-up: instalou e cadastrou?</button>
             <button type="button" data-acao="feedback">Pedir feedback</button>
             <button type="button" data-acao="link">Copiar link do formulário</button>
             <button type="button" data-acao="sem_retorno">Marcar sem retorno</button>
@@ -5713,7 +5716,7 @@
       $$("button", menu).forEach((b) => b.addEventListener("click", () => {
         menu.hidden = true;
         const acao = b.dataset.acao;
-        if (acao === "convite" || acao === "feedback") abrirMensagemTecnico(id, acao);
+        if (acao === "convite" || acao === "feedback" || acao === "followup") abrirMensagemTecnico(id, acao);
         else if (acao === "link") copiarLinkFormulario(id);
         else if (acao === "sem_retorno") setTecnicoStatus(id, "sem_retorno");
         else if (acao === "editar") openTecnicoModal(id);
@@ -5779,8 +5782,10 @@
     try {
       msg = await api(`/api/tecnicos/${id}/mensagem?tipo=${encodeURIComponent(tipo || "convite")}`);
     } catch (e) { toast("Não deu pra montar a mensagem: " + e.message, true); return; }
-    const TITULOS = { feedback: "Pedir feedback", cobranca: "Cobrar retorno", convite: "Convite pronto" };
+    const TITULOS = { feedback: "Pedir feedback", cobranca: "Cobrar retorno", convite: "Convite pronto", followup: "Follow-up da instalação" };
     const DICAS = {
+      followup: "Pergunta se ele conseguiu <b>instalar</b> o Track One e <b>fazer o cadastro</b> (competências e especialidades). Quando ele confirmar, avance o status pra <b>App instalado</b>."
+        + (msg.apk_link ? " O link do APK vai junto, caso ele não tenha conseguido instalar." : ""),
       feedback: "O link abre o formulário no celular dele. O que ele responder cai direto aqui no card — nota, o que achou bom, o que precisa melhorar e os problemas.",
       cobranca: "A mensagem muda conforme onde ele parou: quem não instalou é chamado pra instalação (com o link do APK), quem instalou é lembrado de usar no próximo atendimento, e quem já usou recebe o link do formulário.",
       convite: msg.apk_link

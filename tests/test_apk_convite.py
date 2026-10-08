@@ -93,3 +93,15 @@ def test_remover_apk_volta_a_promessa(client, tecnico):
     _sobe_apk(client)
     assert client.delete("/api/tecnicos/apk").json() == {"deleted": 1}
     assert "(o link será enviado a seguir)" in client.get(f"/api/tecnicos/{tecnico['id']}/mensagem").json()["mensagem"]
+
+
+def test_followup_pergunta_instalacao_e_cadastro(client, tecnico):
+    msg = client.get(f"/api/tecnicos/{tecnico['id']}/mensagem?tipo=followup").json()
+    assert "Conseguiu instalar" in msg["mensagem"]
+    assert "cadastro" in msg["mensagem"]
+    assert msg["wa_link"].startswith("https://wa.me/")
+
+    # com APK no sistema, o link vai junto pra quem não conseguiu instalar
+    _sobe_apk(client)
+    msg = client.get(f"/api/tecnicos/{tecnico['id']}/mensagem?tipo=followup").json()
+    assert msg["apk_link"] in msg["mensagem"]

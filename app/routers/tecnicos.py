@@ -108,6 +108,17 @@ Importante: trata-se apenas de um teste — a forma de atendimento continua a me
 
 Qualquer dúvida ou dificuldade no aplicativo, pode me chamar diretamente por aqui. Peço que confirme quando concluir a instalação."""
 
+# follow-up logo depois do convite: confirma se o técnico conseguiu instalar o
+# Track One E fazer o cadastro (competências) — sem o cadastro completo o
+# chamado não é direcionado pra ele, então instalar sozinho não basta
+TEMPLATE_FOLLOWUP = """Fala, {nome}! Tudo certo?
+Passando pra saber como foi com o Track One:
+
+1. Conseguiu instalar o aplicativo?
+2. Conseguiu fazer o cadastro e preencher suas competências e especialidades? Sem esse cadastro completo o chamado não é direcionado pra você.
+
+Se travou em alguma etapa, me fala onde que eu te ajudo por aqui."""
+
 # cobrança de quem parou no meio do caminho — muda conforme onde ele travou, que
 # é a diferença entre "instala aí" e "usa no próximo atendimento"
 TEMPLATES_COBRANCA = {
@@ -193,6 +204,9 @@ def _mensagem_para(
         return _com_apk(texto, apk_link) if tecnico.status == "convidado" else texto
     if tipo == "feedback":
         return TEMPLATE_FEEDBACK.format(nome=primeiro_nome, link=link)
+    if tipo == "followup":
+        # vai com o APK de novo: se ele não conseguiu instalar, o link já está ali
+        return _com_apk(TEMPLATE_FOLLOWUP.format(nome=primeiro_nome), apk_link)
     if tipo == "acionamento":
         return _com_apk(TEMPLATE_ACIONAMENTO.format(nome=primeiro_nome), apk_link)
     if tecnico.papel == "lider":
@@ -897,7 +911,8 @@ def mensagem_tecnico(tecnico_id: int, request: Request, tipo: str = "convite", d
     """Monta a mensagem pronta (texto + link do WhatsApp) pra esse técnico:
     `tipo=convite` (padrão) chama pra instalação, `tipo=acionamento` avisa que a
     fase passou a rodar com chamados reais (ex.: Fase 2 - Acionamento SP) e
-    `tipo=feedback` pede o retorno depois do atendimento e leva o link do
+    `tipo=followup` pergunta se o técnico conseguiu instalar e fazer o cadastro
+    e `tipo=feedback` pede o retorno depois do atendimento e leva o link do
     formulário. O wa.me só pré-preenche texto, então o APK vai embutido como
     link de download (quando já subiram um em /tecnicos/apk)."""
     tecnico = _get_tecnico_or_404(db, tecnico_id)
