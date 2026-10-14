@@ -482,6 +482,13 @@ def migrate_schema(engine):
         # cruzado com a base de Agentes (PARC + REPASSE); NULL = ainda não cruzado
         if "repasse" not in tec_cols:
             stmts.append("ALTER TABLE tecnicos ADD COLUMN repasse BOOLEAN")
+        # hierarquia pai (PARC) / filho (PARC REPASSE) da base de Agentes
+        if "codigo_parc" not in tec_cols:
+            stmts.append("ALTER TABLE tecnicos ADD COLUMN codigo_parc VARCHAR")
+        if "pai_id" not in tec_cols:
+            stmts.append("ALTER TABLE tecnicos ADD COLUMN pai_id INTEGER")
+        if "numero_do_pai" not in tec_cols:
+            stmts.append("ALTER TABLE tecnicos ADD COLUMN numero_do_pai BOOLEAN")
 
     # relato do técnico: vínculo com o backlog, build testada e chamado de origem
     if "tecnico_observacoes" in existing_tables:
@@ -525,6 +532,7 @@ def migrate_schema(engine):
         ("ativo_ajuste_prints", "ajuste_id"),
         ("tecnico_observacoes", "tecnico_id"),
         ("tecnico_observacoes", "ajuste_id"),
+        ("tecnicos", "pai_id"),
     ]
     for tabela, coluna in fk_indexes:
         if tabela not in existing_tables:

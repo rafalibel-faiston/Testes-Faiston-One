@@ -523,6 +523,15 @@ class Tecnico(Base):
     # True = prestador de repasse (PARC + REPASSE na base de Agentes), False = PARC
     # direto ou CLT, NULL = não cruzado com a base de Agentes ainda
     repasse = Column(Boolean, nullable=True)
+    # código de PARC como veio da base ("PARC 123" = técnico pai; "PARC 123
+    # REPASSE" = filho, que trabalha debaixo de um pai)
+    codigo_parc = Column(String, nullable=True)
+    # o pai do filho de repasse — achado pelo número: na base, o filho costuma vir
+    # com o número do pai no lugar do dele
+    pai_id = Column(Integer, ForeignKey("tecnicos.id", ondelete="SET NULL"), nullable=True, index=True)
+    # True = o número cadastrado não é dele, é do pai (filho com número repetido);
+    # o telefone fica gravado só pra ter por onde chegar nele (via pai)
+    numero_do_pai = Column(Boolean, nullable=True)
     status = Column(String, nullable=False, default="a_contatar", server_default="a_contatar")
     autor = Column(String, nullable=True)         # quem cadastrou/está conduzindo o teste
     # em qual leva do piloto ele entrou; NULL = ainda na base geral, sem ser chamado
@@ -546,6 +555,12 @@ class Tecnico(Base):
         order_by="TecnicoObservacao.id",
     )
     fase = relationship("PilotoFase", back_populates="tecnicos")
+    pai = relationship("Tecnico", remote_side=[id], back_populates="filhos")
+    filhos = relationship("Tecnico", back_populates="pai", order_by="Tecnico.nome")
+
+    @property
+    def pai_nome(self):
+        return self.pai.nome if self.pai is not None else None
 
 
 class TecnicoObservacao(Base):

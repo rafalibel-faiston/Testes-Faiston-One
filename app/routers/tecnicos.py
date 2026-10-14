@@ -20,7 +20,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from sqlalchemy import func as sa_func
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from .. import formulario, models, schemas
 from ..database import get_db
@@ -249,7 +249,11 @@ def list_tecnicos(
     """
     q = (
         db.query(models.Tecnico)
-        .options(joinedload(models.Tecnico.observacoes).joinedload(models.TecnicoObservacao.ajuste))
+        .options(
+            joinedload(models.Tecnico.observacoes).joinedload(models.TecnicoObservacao.ajuste),
+            selectinload(models.Tecnico.pai),
+            selectinload(models.Tecnico.filhos),
+        )
     )
     if fase_id is not None:
         q = q.filter(models.Tecnico.fase_id == (fase_id if fase_id > 0 else None))
@@ -1172,6 +1176,8 @@ COLUNAS_IMPORTACAO = {
     "papel": {"papel", "funcao", "função", "cargo", "tipo"},
     "regional": {"regional", "cidade", "regiao", "praca"},
     "lider_nome": {"lider", "lider_nome", "lider direto", "responde a", "supervisor"},
+    # "PARC 123" = técnico pai; "PARC 123 REPASSE" = filho de repasse
+    "codigo_parc": {"codigo de parc", "codigo parc", "cod parc", "codigo do parc", "parc", "codigo_parc"},
 }
 # coluna opcional que distribui a planilha entre as fases. Só casa pelo nome
 # exato (sem o fallback por "contém"): base exportada de outro sistema pode ter
@@ -1193,7 +1199,9 @@ def exportar_piloto(fase_id: Optional[int] = None, db: Session = Depends(get_db)
             raise HTTPException(status_code=404, detail="Fase não encontrada")
 
     q = db.query(models.Tecnico).options(
-        joinedload(models.Tecnico.observacoes).joinedload(models.TecnicoObservacao.ajuste)
+        joinedload(models.Tecnico.observacoes).joinedload(models.TecnicoObservacao.ajuste),
+        selectinload(models.Tecnico.pai),
+        selectinload(models.Tecnico.filhos),
     )
     if fase_id:
         q = q.filter(models.Tecnico.fase_id == fase_id)
@@ -1218,12 +1226,19 @@ def exportar_piloto(fase_id: Optional[int] = None, db: Session = Depends(get_db)
     escreve_cabecalho(
         ws,
         ["Nome", "Telefone", "Papel", "Regional", "Líder", "Situação", "Nota",
-         "Etapas testadas", "Respondeu em", "Anotações"],
-        [28, 18, 10, 18, 20, 16, 7, 46, 18, 11],
+         "Etapas testadas", "Respondeu em", "Anotações", "Código PARC", "Pai / filho", "Telefone do pai"],
+        [28, 18, 10, 18, 20, 16, 7, 46, 18, 11, 20, 30, 18],
     )
     for t in tecnicos:
+        if t.pai_id or t.repasse:
+            vinculo = f"Filho de {t.pai_nome}" if t.pai_nome else "Filho (pai não identificado)"
+        elif t.filhos:
+            vinculo = f"Pai de {len(t.filhos)}: " + ", ".join(f.nome for f in t.filhos)
+        else:
+            vinculo = ""
         ws.append([
-            t.nome, t.telefone,
+            # filho com o número do pai: o número não é dele — vai só na coluna do pai
+            t.nome, "" if t.numero_do_pai else t.telefone,
             "Líder" if t.papel == "lider" else "Técnico",
             t.regional or "", t.lider_nome or "",
             STATUS_LABELS.get(t.status, t.status),
@@ -1231,6 +1246,7 @@ def exportar_piloto(fase_id: Optional[int] = None, db: Session = Depends(get_db)
             (t.etapas_testadas or "").replace("|", " · "),
             t.respondido_em.astimezone(BRT).strftime("%d/%m/%Y %H:%M") if t.respondido_em else "",
             len(t.observacoes),
+            t.codigo_parc or "", vinculo, t.telefone if t.numero_do_pai else "",
         ])
 
     ws2 = wb.create_sheet("Feedback")
@@ -1282,15 +1298,14 @@ def baixar_modelo_importacao():
     ws = wb.active
     ws.title = "Técnicos"
     # "fase" é opcional: preenchida, a linha já cai direto naquela fase do piloto
-    ws.append(["nome", "telefone", "papel", "regional", "lider", "fase"])
-    ws.append(["João Silva", "(11) 99999-8888", "tecnico", "SP capital", "Carlos Souza", "Fase 1 — SP capital"])
-    ws.append(["Marcos Souza", "(11) 98888-7777", "lider", "Interior SP", "", ""])
-    ws.column_dimensions[get_column_letter(1)].width = 26
-    ws.column_dimensions[get_column_letter(2)].width = 20
-    ws.column_dimensions[get_column_letter(3)].width = 12
-    ws.column_dimensions[get_column_letter(4)].width = 20
-    ws.column_dimensions[get_column_letter(5)].width = 20
-    ws.column_dimensions[get_column_letter(6)].width = 22
+    # "codigo de parc" é opcional: "PARC ..." = pai; "PARC ... REPASSE" = filho.
+    # Filho que veio com o número do pai repete o número — é assim que o vínculo é achado
+    ws.append(["nome", "telefone", "codigo de parc", "papel", "regional", "lider", "fase"])
+    ws.append(["João Silva", "(11) 99999-8888", "PARC 1020", "tecnico", "SP capital", "", "Fase 1 — SP capital"])
+    ws.append(["Pedro Alves", "(11) 99999-8888", "PARC 1020 REPASSE", "tecnico", "SP capital", "", "Fase 1 — SP capital"])
+    ws.append(["Marcos Souza", "(11) 98888-7777", "PARC 2030", "lider", "Interior SP", "", ""])
+    for i, largura in enumerate([26, 20, 22, 12, 20, 20, 22], start=1):
+        ws.column_dimensions[get_column_letter(i)].width = largura
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -1322,7 +1337,14 @@ async def importar_tecnicos(
     fase; sem ele, uma coluna "fase" na planilha distribui cada linha na fase
     com aquele nome (criada na hora se ainda não existir). Mandar pra fase pela
     planilha é escolha explícita, então quem estava em outra fase é movido —
-    com o progresso resetado, como em adicionar_na_fase."""
+    com o progresso resetado, como em adicionar_na_fase.
+
+    Com a coluna "codigo de parc", monta a hierarquia pai/filho: só PARC = pai;
+    PARC ... REPASSE = filho. Na base, o filho costuma vir com o número do pai,
+    então número repetido não é mais rejeição automática: no grupo do mesmo
+    número, a linha só PARC é a dona verdadeira do número (o pai) e as REPASSE
+    são filhos dele, marcados com `numero_do_pai` (o número não é deles). Dois
+    PARC com o mesmo número continuam rejeitados — não dá pra saber de quem é."""
     fase_fixa = None
     if fase_id is not None:
         fase_fixa = db.query(models.PilotoFase).filter(models.PilotoFase.id == fase_id).first()
@@ -1375,8 +1397,10 @@ async def importar_tecnicos(
 
     # quem já está na base, pelo telefone — reimportar a planilha atualizada não
     # rejeita esse pessoal, atualiza o cadastro deles (ver abaixo)
-    ja_na_base = {t.telefone: t for t in db.query(models.Tecnico).all()}
-    vistos_no_arquivo = {}   # telefone -> linha em que apareceu primeiro
+    # (lista: pai e filhos de repasse dividem o mesmo número)
+    ja_na_base = {}
+    for t in db.query(models.Tecnico).all():
+        ja_na_base.setdefault(t.telefone, []).append(t)
 
     # fases por nome normalizado — "Fase 2", "fase 2 " e "FASE 2" são a mesma
     fases_por_nome = {_norm_txt(f.nome): f for f in db.query(models.PilotoFase).all()}
@@ -1414,65 +1438,146 @@ async def importar_tecnicos(
     atualizados = 0
     em_branco = 0
     rejeitados = []
+    tem_codigo = "codigo_parc" in idx
+
+    def rejeita(r, motivo):
+        rejeitados.append({
+            "linha": r["linha"], "nome": r["nome"], "telefone": r["telefone_bruto"], "motivo": motivo,
+        })
+
+    # 1ª passada: lê e valida linha por linha. Quem é pai e quem é filho só dá
+    # pra decidir vendo todas as linhas com o mesmo número, daí a 2ª passada.
+    validas = []
     for linha_num, row in enumerate(linhas[1:], start=2):
-        nome = valor(row, "nome")
-        telefone_bruto = valor(row, "telefone")
-        if not nome and not telefone_bruto:
+        r = {"linha": linha_num, "row": row, "nome": valor(row, "nome"),
+             "telefone_bruto": valor(row, "telefone")}
+        if not r["nome"] and not r["telefone_bruto"]:
             em_branco += 1
             continue  # linha em branco — não é erro, só não tem nada nela
-
-        def rejeita(motivo):
-            rejeitados.append({
-                "linha": linha_num, "nome": nome, "telefone": telefone_bruto, "motivo": motivo,
-            })
-
-        if not telefone_bruto:
-            rejeita("sem telefone")
+        if not r["telefone_bruto"]:
+            rejeita(r, "sem telefone")
             continue
-        if not nome:
-            rejeita("sem nome")
+        if not r["nome"]:
+            rejeita(r, "sem nome")
             continue
         try:
-            telefone = _norm_telefone(telefone_bruto)
+            r["telefone"] = _norm_telefone(r["telefone_bruto"])
         except HTTPException:
-            rejeita("telefone inválido")
+            rejeita(r, "telefone inválido")
             continue
-        if telefone in vistos_no_arquivo:
-            rejeita(f"telefone repetido na planilha (já veio na linha {vistos_no_arquivo[telefone]})")
-            continue
-        vistos_no_arquivo[telefone] = linha_num
+        r["codigo"] = valor(row, "codigo_parc") or None
+        # "PARC 123" = pai; "PARC 123 REPASSE" = filho, que trabalha debaixo de um pai
+        r["filho"] = "repasse" in _norm_txt(r["codigo"])
+        validas.append(r)
 
+    por_numero = {}          # telefone -> linhas com aquele número, na ordem da planilha
+    for r in validas:
+        por_numero.setdefault(r["telefone"], []).append(r)
+
+    usados = set()           # cadastros da base já casados com alguma linha
+
+    def acha_existente(r):
+        """Mesmo número + mesmo nome é o próprio. Sem isso, a linha de PARC (pai)
+        fica com quem já tinha o número e não é filho — é o que deixa corrigir
+        o nome do pai reimportando a planilha. Filho só casa pelo nome: com o
+        número do pai, o número sozinho não diz quem ele é."""
+        candidatos = [t for t in ja_na_base.get(r["telefone"], []) if id(t) not in usados]
+        for t in candidatos:
+            if _norm_txt(t.nome) == _norm_txt(r["nome"]):
+                return t
+        if not r["filho"]:
+            for t in candidatos:
+                if not t.numero_do_pai and t.repasse is not True:
+                    return t
+        return None
+
+    def grava(r, pai=None, numero_do_pai=None):
+        nonlocal criados, atualizados
+        row = r["row"]
         papel = "lider" if _norm_txt(valor(row, "papel")) in ("lider", "lider de equipe", "supervisor") else "tecnico"
         regional = valor(row, "regional") or None
         lider_nome = valor(row, "lider_nome") or None
 
-        existente = ja_na_base.get(telefone)
-        if existente:
+        tecnico = acha_existente(r)
+        if tecnico:
             # atualiza o cadastro, nunca o andamento do teste: status, nota,
             # etapas e feedback são progresso de QA e não vêm da planilha
-            existente.nome = nome
-            existente.papel = papel
+            tecnico.nome = r["nome"]
+            tecnico.papel = papel
             if regional:
-                existente.regional = regional
+                tecnico.regional = regional
             if lider_nome:
-                existente.lider_nome = lider_nome
-            if not existente.token:
-                existente.token = models.novo_token_tecnico()
-            manda_pra_fase(existente, fase_da_linha(row))
+                tecnico.lider_nome = lider_nome
+            if not tecnico.token:
+                tecnico.token = models.novo_token_tecnico()
             atualizados += 1
-            continue
+        else:
+            tecnico = models.Tecnico(
+                nome=r["nome"], telefone=r["telefone"], papel=papel,
+                regional=regional, lider_nome=lider_nome,
+                autor=(autor or "").strip() or None,
+                token=models.novo_token_tecnico(),
+                status="a_contatar",
+            )
+            db.add(tecnico)
+            ja_na_base.setdefault(r["telefone"], []).append(tecnico)
+            criados += 1
+        usados.add(id(tecnico))
+        # sem a coluna de PARC a planilha não diz nada sobre pai/filho — não mexe
+        if tem_codigo:
+            tecnico.codigo_parc = r["codigo"]
+            if r["codigo"]:
+                tecnico.repasse = r["filho"]
+            tecnico.pai = pai
+            tecnico.numero_do_pai = numero_do_pai
+        manda_pra_fase(tecnico, fase_da_linha(row))
+        return tecnico
 
-        novo = models.Tecnico(
-            nome=nome, telefone=telefone, papel=papel,
-            regional=regional, lider_nome=lider_nome,
-            autor=(autor or "").strip() or None,
-            token=models.novo_token_tecnico(),
-            status="a_contatar",
-        )
-        db.add(novo)
-        ja_na_base[telefone] = novo
-        manda_pra_fase(novo, fase_da_linha(row))
-        criados += 1
+    def pai_na_base(telefone):
+        for t in ja_na_base.get(telefone, []):
+            if not t.numero_do_pai and t.repasse is not True:
+                return t
+        return None
+
+    # 2ª passada: número repetido + REPASSE = filho com o número do pai (o número
+    # não é dele); número repetido + só PARC = o dono verdadeiro do número, o pai
+    pais_com_filhos = set()
+    filhos = 0
+    filhos_numero_do_pai = 0
+    filhos_sem_pai = []
+    for telefone, grupo in por_numero.items():
+        pais = [r for r in grupo if not r["filho"]]
+        pai = None
+        for r in pais:
+            if pai is not None:
+                # dois PARC com o mesmo número: não dá pra saber de quem ele é
+                rejeita(r, f"telefone repetido na planilha (já veio na linha {pais[0]['linha']})")
+                continue
+            pai = grava(r, numero_do_pai=False if tem_codigo else None)
+
+        vistos = {}          # nome do filho -> linha, pra não cadastrar a mesma pessoa duas vezes
+        for r in (r for r in grupo if r["filho"]):
+            chave = _norm_txt(r["nome"])
+            if chave in vistos:
+                rejeita(r, f"telefone repetido na planilha (já veio na linha {vistos[chave]})")
+                continue
+            vistos[chave] = r["linha"]
+            pai_dele = pai or pai_na_base(telefone)
+            # filho com número só dele (não repetido, sem pai dono do número) fica
+            # com o número; repetido, o número é do pai
+            numero_do_pai = len(grupo) > 1 or pai_dele is not None
+            grava(r, pai=pai_dele, numero_do_pai=numero_do_pai)
+            filhos += 1
+            if numero_do_pai:
+                filhos_numero_do_pai += 1
+            if pai_dele is not None:
+                pais_com_filhos.add(id(pai_dele))
+            elif numero_do_pai:
+                filhos_sem_pai.append({
+                    "linha": r["linha"], "nome": r["nome"], "telefone": r["telefone_bruto"],
+                    "motivo": "filho de repasse com número repetido, sem PARC pai com esse número",
+                })
+    rejeitados.sort(key=lambda e: e["linha"])
     db.commit()
 
     # o resumo é o que responde "por que entraram menos do que a planilha tinha":
@@ -1497,4 +1602,12 @@ async def importar_tecnicos(
             [{"id": fase_fixa.id, "nome": fase_fixa.nome, "tecnicos": por_fase.get(fase_fixa.id, 0)}]
         ),
         "fases_criadas": fases_criadas,
+        # pai (PARC) / filho (PARC REPASSE) — só quando a planilha tem o código
+        "hierarquia": {
+            "pais_com_filhos": len(pais_com_filhos),
+            "filhos": filhos,
+            "filhos_com_numero_do_pai": filhos_numero_do_pai,
+            "filhos_sem_pai": len(filhos_sem_pai),
+        } if tem_codigo else None,
+        "avisos": filhos_sem_pai,
     }

@@ -5917,8 +5917,16 @@
             <span>${t.papel === "lider" ? "Líder de equipe" : "Técnico"}</span>
             ${t.regional ? `<span>${esc(t.regional)}</span>` : ""}
             ${t.lider_nome ? `<span>responde a ${esc(t.lider_nome)}</span>` : ""}
-            ${t.repasse === true ? `<span>Repasse</span>` : ""}
-            <span class="tecnico-tel">${esc(formatTelefone(t.telefone))}</span>
+            ${t.codigo_parc ? `<span class="tecnico-parc">${esc(t.codigo_parc)}</span>` : ""}
+            ${t.repasse === true || t.pai_id
+              ? `<span class="tecnico-vinculo filho">${t.pai_nome ? `Filho de ${esc(t.pai_nome)}` : "Filho (pai não identificado)"}</span>`
+              : ""}
+            ${(t.filhos || []).length
+              ? `<span class="tecnico-vinculo pai" title="${esc(t.filhos.map((f) => f.nome).join(", "))}">Pai de ${t.filhos.length}: ${esc(t.filhos.map((f) => f.nome).join(", "))}</span>`
+              : ""}
+            ${t.numero_do_pai
+              ? `<span class="tecnico-tel sem-numero" title="O número da base é do pai, não dele">sem nº próprio · nº do pai ${esc(formatTelefone(t.telefone))}</span>`
+              : `<span class="tecnico-tel">${esc(formatTelefone(t.telefone))}</span>`}
           </div>
         </div>
         ${tecnicoEstrelas(t.nota)}
@@ -6230,6 +6238,14 @@
       <div class="stat ok"><span class="stat-n">${res.criados || 0}</span><span class="stat-l">Cadastrados</span></div>
       <div class="stat"><span class="stat-n">${res.atualizados || 0}</span><span class="stat-l">Atualizados</span></div>
       <div class="stat ${res.rejeitados ? "bad" : ""}"><span class="stat-n">${res.rejeitados || 0}</span><span class="stat-l">Ficaram de fora</span></div>`;
+
+    const hier = res.hierarquia;
+    if (hier) {
+      $("#import-stats").innerHTML += `
+      <div class="stat"><span class="stat-n">${hier.pais_com_filhos}</span><span class="stat-l">Pais com filhos</span></div>
+      <div class="stat"><span class="stat-n">${hier.filhos}</span><span class="stat-l">Filhos (repasse)</span></div>
+      <div class="stat ${hier.filhos_sem_pai ? "warn" : ""}"><span class="stat-n">${hier.filhos_sem_pai}</span><span class="stat-l">Filhos sem pai achado</span></div>`;
+    }
 
     const fases = res.fases || [];
     if (fases.length) {
