@@ -527,7 +527,14 @@
         </div>
         <div class="base-sel-acoes">
           <select id="base-regional"><option value="">Todas as regionais</option></select>
-          <input type="search" id="base-busca" placeholder="Buscar por nome…" autocomplete="off">
+          <select id="base-vinculo" title="Vínculo PARC">
+            <option value="">Todos os vínculos</option>
+            <option value="pai">Pais (com filhos)</option>
+            <option value="filho">Filhos (repasse)</option>
+            <option value="filho_sem_pai">Filhos sem pai achado</option>
+            <option value="sem_vinculo">Sem vínculo</option>
+          </select>
+          <input type="search" id="base-busca" placeholder="Nome ou PARC…" autocomplete="off">
           <label class="base-reaproveitar">
             <input type="checkbox" id="base-reaproveitar">
             Incluir quem já testou outra fase
@@ -567,7 +574,17 @@
           <button type="button" class="chip" data-papel="lider">Líder</button>
         </div>
       </div>
-      <input type="search" id="tecnicos-busca" class="tecnicos-busca" placeholder="Buscar por nome…" autocomplete="off">
+      <div class="chip-row">
+        <span class="chip-row-label">Vínculo</span>
+        <div class="chips" id="tecnicos-chips-vinculo">
+          <button type="button" class="chip active" data-vinculo="">Todos</button>
+          <button type="button" class="chip" data-vinculo="pai">Pai</button>
+          <button type="button" class="chip" data-vinculo="filho">Filho</button>
+          <button type="button" class="chip" data-vinculo="filho_sem_pai">Filho sem pai</button>
+          <button type="button" class="chip" data-vinculo="sem_vinculo">Sem vínculo</button>
+        </div>
+      </div>
+      <input type="search" id="tecnicos-busca" class="tecnicos-busca" placeholder="Buscar por nome ou PARC…" autocomplete="off">
     </div>
 
     <div class="ajustes-list" id="tecnicos-list"></div>

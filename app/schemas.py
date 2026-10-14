@@ -618,6 +618,7 @@ class AdicionarNaFase(BaseModel):
     regional: Optional[str] = None
     busca: Optional[str] = None
     papel: Optional[str] = None
+    vinculo: Optional[str] = None   # pai / filho / filho_sem_pai / sem_vinculo
     # True = todo mundo da base que bate no filtro (ou a base inteira, sem
     # filtro) — o "não quero escolher um por um"
     todos: bool = False

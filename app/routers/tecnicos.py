@@ -19,8 +19,8 @@ from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
-from sqlalchemy import func as sa_func
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy import exists, func as sa_func, or_
+from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 
 from .. import formulario, models, schemas
 from ..database import get_db
@@ -229,6 +229,36 @@ def _get_tecnico_or_404(db: Session, tecnico_id: int) -> models.Tecnico:
     return tecnico
 
 
+# filtro por vínculo PARC: pai (tem filhos de repasse), filho (PARC REPASSE),
+# filho cujo pai não foi achado, ou sem vínculo nenhum
+VINCULOS = {"pai", "filho", "filho_sem_pai", "sem_vinculo"}
+
+
+def _filtra_vinculo(q, vinculo: Optional[str]):
+    if not vinculo:
+        return q
+    if vinculo not in VINCULOS:
+        raise HTTPException(status_code=400, detail="Vínculo inválido — use pai, filho, filho_sem_pai ou sem_vinculo.")
+    filho = aliased(models.Tecnico)
+    tem_filhos = exists().where(filho.pai_id == models.Tecnico.id)
+    eh_filho = or_(models.Tecnico.repasse.is_(True), models.Tecnico.pai_id.isnot(None))
+    if vinculo == "pai":
+        return q.filter(tem_filhos)
+    if vinculo == "filho":
+        return q.filter(eh_filho)
+    if vinculo == "filho_sem_pai":
+        return q.filter(models.Tecnico.repasse.is_(True), models.Tecnico.pai_id.is_(None))
+    return q.filter(~eh_filho, ~tem_filhos)
+
+
+def _filtra_busca(q, busca: Optional[str]):
+    """Nome ou código de PARC — "PARC 1020" acha o pai e os filhos dele."""
+    if not busca or not busca.strip():
+        return q
+    termo = f"%{busca.strip()}%"
+    return q.filter(or_(models.Tecnico.nome.ilike(termo), models.Tecnico.codigo_parc.ilike(termo)))
+
+
 FASE_STATUSES = ["planejada", "em_andamento", "concluida", "liberada"]
 
 
@@ -239,6 +269,7 @@ def list_tecnicos(
     regional: Optional[str] = None,
     busca: Optional[str] = None,
     fase_id: Optional[int] = None,
+    vinculo: Optional[str] = None,
     limite: int = 300,
     db: Session = Depends(get_db),
 ):
@@ -263,9 +294,8 @@ def list_tecnicos(
         q = q.filter(models.Tecnico.papel == papel)
     if regional:
         q = q.filter(models.Tecnico.regional == regional)
-    if busca:
-        termo = f"%{busca.strip()}%"
-        q = q.filter(models.Tecnico.nome.ilike(termo))
+    q = _filtra_busca(q, busca)
+    q = _filtra_vinculo(q, vinculo)
     return q.order_by(models.Tecnico.nome).limit(max(1, min(limite, 1000))).all()
 
 
@@ -276,6 +306,7 @@ def base_tecnicos(
     papel: Optional[str] = None,
     sem_fase: bool = False,
     fase_id: Optional[int] = None,
+    vinculo: Optional[str] = None,
     limite: int = 50,
     offset: int = 0,
     db: Session = Depends(get_db),
@@ -294,8 +325,8 @@ def base_tecnicos(
         q = q.filter(models.Tecnico.regional == regional)
     if papel:
         q = q.filter(models.Tecnico.papel == papel)
-    if busca:
-        q = q.filter(models.Tecnico.nome.ilike(f"%{busca.strip()}%"))
+    q = _filtra_busca(q, busca)
+    q = _filtra_vinculo(q, vinculo)
     total = q.count()
     itens = (
         q.options(selectinload(models.Tecnico.pai), selectinload(models.Tecnico.filhos))
@@ -532,11 +563,11 @@ def adicionar_na_fase(fase_id: int, payload: schemas.AdicionarNaFase, db: Sessio
             q = q.filter(models.Tecnico.regional == payload.regional)
         if payload.papel:
             q = q.filter(models.Tecnico.papel == payload.papel)
-        if payload.busca:
-            q = q.filter(models.Tecnico.nome.ilike(f"%{payload.busca.strip()}%"))
+        q = _filtra_busca(q, payload.busca)
+        q = _filtra_vinculo(q, payload.vinculo)
         # sem filtro nenhum só passa se pedir "todos" explicitamente — um payload
         # vazio por engano não pode jogar a base inteira dentro da fase
-        if not (payload.regional or payload.papel or payload.busca or payload.todos):
+        if not (payload.regional or payload.papel or payload.busca or payload.vinculo or payload.todos):
             raise HTTPException(status_code=400, detail="Escolha técnicos ou informe um filtro.")
     if not payload.incluir_de_outras_fases:
         q = q.filter((models.Tecnico.fase_id.is_(None)) | (models.Tecnico.fase_id == fase_id))
