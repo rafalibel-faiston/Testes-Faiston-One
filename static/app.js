@@ -4879,6 +4879,7 @@
       observacao: fd.get("observacao") || "",
       retorno: fd.get("retorno") || "",
       prazo: fd.get("prazo") || "",
+      ufs: ufsMarcadas(),
     };
     try {
       if (ajusteOrigemObs) {
@@ -5061,6 +5062,7 @@
       e.stopPropagation();
       abrirFaseModal(Number(el.dataset.editarFase));
     }));
+    renderMapa();
   }
 
   // dias corridos de hoje até "AAAA-MM-DD", no fuso de quem está olhando
@@ -5096,6 +5098,199 @@
       ${janela}${situacao ? ` · <b>${situacao}</b>` : ""}
     </span>`;
   }
+
+
+  // ---------------- mapa do piloto ----------------
+  // Responde "onde estamos atacando e quanto já andou": cada estado é pintado
+  // pela fase que o cobre. Uma métrica só (% dos técnicos que concluíram) em
+  // escala sequencial de um azul, do claro ao escuro; verde fica reservado pra
+  // fase concluída/liberada (status, sempre com rótulo na legenda e no tooltip).
+  const UFS_POR_REGIAO = {
+    "Norte": ["AC", "AP", "AM", "PA", "RO", "RR", "TO"],
+    "Nordeste": ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE"],
+    "Centro-Oeste": ["DF", "GO", "MT", "MS"],
+    "Sudeste": ["ES", "MG", "RJ", "SP"],
+    "Sul": ["PR", "RS", "SC"],
+  };
+  const FASE_STATUS_TXT = {
+    planejada: "planejada", em_andamento: "em andamento",
+    concluida: "concluída", liberada: "liberada",
+  };
+  // faixas de % concluído — 4 degraus do mesmo azul, claro -> escuro
+  const MAPA_FAIXAS = [
+    { ate: 25, cor: "#c9dbfc", txt: "0–24%" },
+    { ate: 50, cor: "#8fb3f7", txt: "25–49%" },
+    { ate: 75, cor: "#4d86f0", txt: "50–74%", escuro: true },
+    { ate: 101, cor: "#0054ec", txt: "75–100%", escuro: true },
+  ];
+  // estados pequenos demais pra sigla caber dentro: o rótulo vai pro lado,
+  // ligado por uma linha fina
+  const MAPA_CHAMADAS = {
+    RN: [34, -10], PB: [40, -2], PE: [46, 6], AL: [40, 14], SE: [36, 20],
+    ES: [34, 4], RJ: [30, 18], DF: [26, -14],
+  };
+  let MAPA_ABERTO = localStorage.getItem("fluxoc_mapa_aberto") !== "0";
+
+  const pctFase = (f) => (f.total_tecnicos ? Math.round((f.concluidos / f.total_tecnicos) * 100) : 0);
+  const ufsDaFase = (f) => f.ufs || [];
+
+  // quando o estado está em mais de uma fase (capital numa, interior em outra),
+  // a cor é a da que está rodando agora; o tooltip lista todas
+  const PRIORIDADE_STATUS = { em_andamento: 0, concluida: 1, liberada: 2, planejada: 3 };
+  function fasesPorUf() {
+    const mapa = {};
+    FASES.forEach((f) => ufsDaFase(f).forEach((uf) => (mapa[uf] = mapa[uf] || []).push(f)));
+    Object.values(mapa).forEach((lista) => lista.sort((a, b) =>
+      (PRIORIDADE_STATUS[a.status] ?? 9) - (PRIORIDADE_STATUS[b.status] ?? 9) || a.ordem - b.ordem));
+    return mapa;
+  }
+
+  function estiloUf(f) {
+    if (!f) return { fill: "#eceef4", escuro: false, tracejado: false };
+    if (f.status === "liberada") return { fill: "#0d9d6c", escuro: true };
+    if (f.status === "concluida") return { fill: "#6fcfa8", escuro: false };
+    if (f.status === "planejada") return { fill: "#f6f7fb", escuro: false, tracejado: true };
+    const faixa = MAPA_FAIXAS.find((x) => pctFase(f) < x.ate);
+    return { fill: faixa.cor, escuro: !!faixa.escuro };
+  }
+
+  function renderMapa() {
+    const secao = $("#mapa-piloto");
+    const geo = window.BRASIL_MAPA;
+    if (!geo || !FASES.length) { secao.hidden = true; return; }
+    secao.hidden = false;
+    $("#mapa-corpo").hidden = !MAPA_ABERTO;
+    $("#mapa-toggle").textContent = MAPA_ABERTO ? "ocultar" : "mostrar";
+
+    const porUf = fasesPorUf();
+    const atual = FASES.find((f) => f.id === FASE_ATUAL);
+    const ufsAtual = new Set(atual ? ufsDaFase(atual) : []);
+
+    // resumo de uma linha: cobertura e andamento geral
+    const cobertos = Object.keys(porUf).length;
+    const liberados = Object.values(porUf).filter((l) => l.every((f) => f.status === "liberada")).length;
+    const total = FASES.reduce((n, f) => n + f.total_tecnicos, 0);
+    const concl = FASES.reduce((n, f) => n + f.concluidos, 0);
+    $("#mapa-resumo").innerHTML = cobertos
+      ? `<b>${cobertos}</b> de 27 estados com fase · <b>${liberados}</b> liberado${liberados === 1 ? "" : "s"} · `
+        + `<b>${concl}</b> de ${total} técnicos concluíram (${total ? Math.round((concl / total) * 100) : 0}%)`
+      : "Nenhuma fase tem estado marcado ainda — edite a fase (lápis) e escolha os estados.";
+
+    const paths = [];
+    const rotulos = [];
+    Object.entries(geo.ufs).forEach(([uf, u]) => {
+      const fase = (porUf[uf] || [])[0];
+      const st = estiloUf(fase);
+      const sel = ufsAtual.has(uf);
+      paths.push(`<path class="mapa-uf${sel ? " sel" : ""}${fase ? " com-fase" : ""}" data-uf="${uf}" d="${u.d}"
+        fill="${st.fill}"${st.tracejado ? ' stroke-dasharray="3 2" data-tracejado="1"' : ""}/>`);
+      const chamada = MAPA_CHAMADAS[uf];
+      if (chamada) {
+        const x = u.cx + chamada[0], y = u.cy + chamada[1];
+        rotulos.push(`<line class="mapa-chamada" x1="${u.cx}" y1="${u.cy}" x2="${x - 9}" y2="${y - 3}"/>
+          <text class="mapa-rotulo" x="${x}" y="${y}" data-uf="${uf}">${uf}</text>`);
+      } else {
+        rotulos.push(`<text class="mapa-rotulo${st.escuro ? " no-escuro" : ""}" x="${u.cx}" y="${u.cy + 3}" data-uf="${uf}">${uf}</text>`);
+      }
+    });
+    $("#mapa-svg").innerHTML = `<svg viewBox="0 0 ${geo.largura + 50} ${geo.altura}" role="img"
+      aria-label="Mapa do Brasil com as fases do piloto por estado">${paths.join("")}${rotulos.join("")}</svg>`;
+
+    $("#mapa-legenda").innerHTML =
+      `<span class="ml-titulo">% concluído</span>`
+      + MAPA_FAIXAS.map((x) => `<span class="ml-item"><i style="background:${x.cor}"></i>${x.txt}</span>`).join("")
+      + `<span class="ml-item"><i class="ml-tracejado"></i>planejada</span>`
+      + `<span class="ml-item"><i style="background:#6fcfa8"></i>concluída</span>`
+      + `<span class="ml-item"><i style="background:#0d9d6c"></i>liberada</span>`
+      + `<span class="ml-item"><i style="background:#eceef4"></i>sem fase</span>`;
+
+    // por região: quantos estados já têm fase e quanto dos técnicos das fases
+    // daquela região já concluíram (fase que pega duas regiões conta nas duas)
+    $("#mapa-regioes").innerHTML = Object.entries(UFS_POR_REGIAO).map(([regiao, ufs]) => {
+      const comFase = ufs.filter((uf) => porUf[uf]).length;
+      const fasesReg = FASES.filter((f) => ufsDaFase(f).some((uf) => ufs.includes(uf)));
+      const t = fasesReg.reduce((n, f) => n + f.total_tecnicos, 0);
+      const c = fasesReg.reduce((n, f) => n + f.concluidos, 0);
+      const pct = t ? Math.round((c / t) * 100) : 0;
+      return `<div class="mapa-reg${comFase ? "" : " vazia"}" title="${esc(regiao)}: ${c} de ${t} técnicos concluíram">
+        <span class="mapa-reg-nome">${regiao}</span>
+        <span class="mapa-reg-ufs">${comFase}/${ufs.length} estados</span>
+        <span class="pb-trilho">${pct > 0 ? `<span class="pb-barra b-azul" style="width:${Math.max(pct, 2)}%"></span>` : ""}</span>
+        <span class="mapa-reg-pct">${t ? `${pct}%` : "—"}</span>
+      </div>`;
+    }).join("");
+
+    // a mesma informação do mapa em lista — leitura sem depender de cor
+    $("#mapa-fases").innerHTML = FASES.map((f) => {
+      const pct = pctFase(f);
+      return `<button type="button" class="mapa-fase${f.id === FASE_ATUAL ? " active" : ""}" data-mapa-fase="${f.id}">
+        <span class="mapa-fase-topo">
+          <span class="mapa-fase-nome">${esc(f.nome)}</span>
+          <span class="mapa-fase-pct">${f.total_tecnicos ? `${pct}%` : "—"}</span>
+        </span>
+        <span class="mapa-fase-meta">${FASE_STATUS_TXT[f.status] || f.status}
+          · ${f.concluidos}/${f.total_tecnicos} técnicos
+          ${f.prazo ? ` · prazo ${fmtDia(f.prazo)}` : ""}</span>
+        <span class="mapa-fase-ufs">${ufsDaFase(f).length
+          ? ufsDaFase(f).map((uf) => `<i>${uf}</i>`).join("")
+          : `<em>sem estado marcado</em>`}</span>
+      </button>`;
+    }).join("");
+
+    const svg = $("#mapa-svg svg");
+    const tip = $("#mapa-tip");
+    const area = $(".mapa-area");
+    const abreFase = (id) => {
+      FASE_ATUAL = id;
+      localStorage.setItem(FASE_KEY, id);
+      loadTecnicos();
+    };
+    svg.addEventListener("mousemove", (e) => {
+      const uf = e.target.dataset && e.target.dataset.uf;
+      if (!uf) { tip.hidden = true; return; }
+      const u = geo.ufs[uf];
+      const lista = porUf[uf] || [];
+      tip.innerHTML = `<b>${esc(u.nome)} (${uf})</b><span class="mt-reg">${u.regiao}</span>`
+        + (lista.length
+          ? lista.map((f) => `<span class="mt-fase">${esc(f.nome)} — ${FASE_STATUS_TXT[f.status] || f.status},
+              ${f.concluidos}/${f.total_tecnicos} concluíram (${pctFase(f)}%)${f.prazo ? `, prazo ${fmtDia(f.prazo)}` : ""}</span>`).join("")
+          : `<span class="mt-fase">sem fase ainda</span>`);
+      const r = area.getBoundingClientRect();
+      tip.style.left = `${Math.min(e.clientX - r.left + 14, r.width - 250)}px`;
+      tip.style.top = `${e.clientY - r.top + 14}px`;
+      tip.hidden = false;
+    });
+    svg.addEventListener("mouseleave", () => { tip.hidden = true; });
+    svg.addEventListener("click", (e) => {
+      const uf = e.target.dataset && e.target.dataset.uf;
+      const fase = uf && (porUf[uf] || [])[0];
+      if (fase) abreFase(fase.id);
+    });
+    $$("[data-mapa-fase]").forEach((b) => b.addEventListener("click", () => abreFase(Number(b.dataset.mapaFase))));
+  }
+
+  $("#mapa-toggle").addEventListener("click", () => {
+    MAPA_ABERTO = !MAPA_ABERTO;
+    localStorage.setItem("fluxoc_mapa_aberto", MAPA_ABERTO ? "1" : "0");
+    renderMapa();
+  });
+
+  // seletor de estados no modal da fase, agrupado por região
+  function renderUfsPicker(marcadas) {
+    const sel = new Set(marcadas || []);
+    const box = $("#fase-ufs");
+    box.innerHTML = Object.entries(UFS_POR_REGIAO).map(([regiao, ufs]) => `
+      <div class="ufs-grupo">
+        <button type="button" class="ufs-regiao" data-regiao="${regiao}">${regiao}</button>
+        ${ufs.map((uf) => `<label class="ufs-chip"><input type="checkbox" value="${uf}"${sel.has(uf) ? " checked" : ""}>${uf}</label>`).join("")}
+      </div>`).join("");
+    $$(".ufs-regiao", box).forEach((b) => b.addEventListener("click", () => {
+      const caixas = $$(`input`, b.parentElement);
+      const todas = caixas.every((c) => c.checked);
+      caixas.forEach((c) => { c.checked = !todas; });
+    }));
+  }
+  const ufsMarcadas = () => $$("#fase-ufs input:checked").map((c) => c.value);
 
   async function loadTecnicos() {
     await loadFases();
@@ -5323,6 +5518,7 @@
       faseForm.data_inicio.value = f.data_inicio || "";
       faseForm.prazo.value = f.prazo || "";
     }
+    renderUfsPicker(f ? f.ufs : []);
     faseModal.hidden = false;
     faseForm.nome.focus();
   }
@@ -5347,6 +5543,7 @@
       // "" limpa a data no PATCH
       data_inicio: fd.get("data_inicio") || "",
       prazo: fd.get("prazo") || "",
+      ufs: ufsMarcadas(),
     };
     if (!payload.nome) return;
     try {

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class ScreenshotOut(BaseModel):
@@ -537,6 +537,14 @@ class InstaladorAppOut(BaseModel):
 class PilotoFaseOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    @field_validator("ufs", mode="before")
+    @classmethod
+    def _ufs_da_coluna(cls, v):
+        # no banco é "SP,RJ"; pra fora vai como lista
+        if isinstance(v, str):
+            return [u for u in v.split(",") if u]
+        return v or []
+
     id: int
     nome: str
     descricao: Optional[str] = ""
@@ -548,6 +556,7 @@ class PilotoFaseOut(BaseModel):
     meta_etapa: Optional[int] = None
     data_inicio: Optional[str] = None   # "AAAA-MM-DD" — início planejado
     prazo: Optional[str] = None         # "AAAA-MM-DD" — até quando a fase deve fechar
+    ufs: List[str] = []                 # estados que a fase cobre — pinta o mapa
     iniciada_em: Optional[datetime] = None
     liberada_em: Optional[datetime] = None
     autor: Optional[str] = None
@@ -567,6 +576,7 @@ class PilotoFaseCreate(BaseModel):
     meta_etapa: Optional[int] = None
     data_inicio: Optional[str] = None
     prazo: Optional[str] = None
+    ufs: List[str] = []
     autor: Optional[str] = None
 
 
@@ -582,6 +592,7 @@ class PilotoFaseUpdate(BaseModel):
     # "" limpa a data; None (ausente) não mexe
     data_inicio: Optional[str] = None
     prazo: Optional[str] = None
+    ufs: Optional[List[str]] = None     # None não mexe; [] tira a fase do mapa
 
 
 class AdicionarNaFase(BaseModel):

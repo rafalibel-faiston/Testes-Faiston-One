@@ -491,6 +491,32 @@
 
     <nav class="fases-nav" id="fases-nav" aria-label="Selecionar fase do piloto"></nav>
 
+    <section class="piloto mapa-piloto" id="mapa-piloto" hidden>
+      <header class="piloto-head">
+        <div>
+          <h3>Mapa do piloto</h3>
+          <p id="mapa-resumo">—</p>
+        </div>
+        <div class="piloto-head-acoes">
+          <button type="button" class="piloto-toggle" id="mapa-toggle">ocultar</button>
+        </div>
+      </header>
+      <div class="mapa-corpo" id="mapa-corpo">
+        <div class="mapa-area">
+          <div class="mapa-svg" id="mapa-svg"></div>
+          <div class="mapa-legenda" id="mapa-legenda"></div>
+          <div class="mapa-tip" id="mapa-tip" hidden></div>
+        </div>
+        <div class="mapa-lado">
+          <h4>Por região</h4>
+          <p class="pb-sub">estados com fase e técnicos que já concluíram o teste</p>
+          <div id="mapa-regioes"></div>
+          <h4 class="mapa-lado-h">Fases</h4>
+          <div id="mapa-fases"></div>
+        </div>
+      </div>
+    </section>
+
     <div class="ajustes-stats" id="tecnicos-stats"></div>
 
     <section class="base-sel" id="base-sel" hidden>
@@ -1072,6 +1098,10 @@
           <span class="fld-hint">A build que essa fase está testando. Cada relato guarda a versão do momento — se a LP subir uma nova, o que já foi relatado continua apontando pra build certa.</span>
         </label>
       </div>
+      <div class="fld fld-wide">Estados que a fase cobre
+        <span class="fld-hint">É o que pinta o mapa do piloto. Clique no nome da região pra marcar todos os estados dela.</span>
+        <div class="ufs-picker" id="fase-ufs"></div>
+      </div>
       <p class="notes-hint">Janela da fase — o prazo aparece na aba e fica vermelho se passar sem a fase ser concluída.</p>
       <div class="form-grid">
         <label class="fld">Início previsto
@@ -1223,6 +1253,7 @@
     document.dispatchEvent(new Event('mermaid-ready'));
   })();
 </script>
+<script src="/static/vendor/brasil-ufs.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

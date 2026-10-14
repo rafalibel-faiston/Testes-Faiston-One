@@ -478,6 +478,10 @@ class PilotoFase(Base):
     # de iniciada_em/liberada_em, que registram o que de fato aconteceu.
     data_inicio = Column(String, nullable=True)
     prazo = Column(String, nullable=True)
+    # estados que a fase cobre, em sigla e separados por vírgula ("SP,RJ") — é o
+    # que pinta o mapa do piloto. Lista e não FK porque uma fase pode ser "SP
+    # capital" e a seguinte "interior de SP": o mesmo estado em duas fases.
+    ufs = Column(String, nullable=True)
     iniciada_em = Column(DateTime(timezone=True), nullable=True)
     liberada_em = Column(DateTime(timezone=True), nullable=True)
     autor = Column(String, nullable=True)

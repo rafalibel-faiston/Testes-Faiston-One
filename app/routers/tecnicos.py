@@ -328,6 +328,27 @@ def _data_fase(valor: Optional[str], campo: str) -> Optional[str]:
     raise HTTPException(status_code=400, detail=f"Data inválida em {campo}: use DD/MM/AAAA.")
 
 
+# as 27 unidades da federação, por região — a ordem é a que o seletor mostra
+UFS_POR_REGIAO = {
+    "Norte": ["AC", "AP", "AM", "PA", "RO", "RR", "TO"],
+    "Nordeste": ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE"],
+    "Centro-Oeste": ["DF", "GO", "MT", "MS"],
+    "Sudeste": ["ES", "MG", "RJ", "SP"],
+    "Sul": ["PR", "RS", "SC"],
+}
+UFS = {uf for lista in UFS_POR_REGIAO.values() for uf in lista}
+
+
+def _ufs_fase(valores: List[str]) -> Optional[str]:
+    """Valida e grava as UFs da fase como "SP,RJ" (maiúsculas, sem repetir,
+    em ordem alfabética — a mesma fase sempre vira o mesmo texto)."""
+    siglas = {(v or "").strip().upper() for v in valores} - {""}
+    invalidas = siglas - UFS
+    if invalidas:
+        raise HTTPException(status_code=400, detail=f"UF inválida: {', '.join(sorted(invalidas))}.")
+    return ",".join(sorted(siglas)) or None
+
+
 def _checa_janela(data_inicio: Optional[str], prazo: Optional[str]) -> None:
     # o formato AAAA-MM-DD compara certo como texto
     if data_inicio and prazo and prazo < data_inicio:
@@ -413,6 +434,7 @@ def criar_fase(payload: schemas.PilotoFaseCreate, db: Session = Depends(get_db))
         meta_etapa=payload.meta_etapa,
         data_inicio=data_inicio,
         prazo=prazo,
+        ufs=_ufs_fase(payload.ufs),
         autor=(payload.autor or "").strip() or None,
     )
     db.add(fase)
@@ -455,6 +477,8 @@ def atualizar_fase(fase_id: int, payload: schemas.PilotoFaseUpdate, db: Session 
     if payload.prazo is not None:
         fase.prazo = _data_fase(payload.prazo, "prazo")
     _checa_janela(fase.data_inicio, fase.prazo)
+    if payload.ufs is not None:
+        fase.ufs = _ufs_fase(payload.ufs)
     db.commit()
     db.refresh(fase)
     return fase

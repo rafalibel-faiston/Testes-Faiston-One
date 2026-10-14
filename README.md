@@ -531,6 +531,17 @@ ninguém, só devolve o pessoal pra base.
 amarela a 3 dias do prazo e vermelha (*atrasada N dias*) se passar sem a fase ser
 concluída ou liberada.
 
+**Mapa do piloto.** Cada fase marca os **estados que cobre** (no modal, agrupados
+por região — clicar no nome da região marca todos). O mapa do Brasil logo abaixo
+das abas pinta cada estado pela fase dele: azul do claro ao escuro conforme o %
+de técnicos que concluíram, tracejado se a fase ainda está planejada, verde
+quando concluída/liberada, cinza sem fase. Passar o mouse mostra fase, andamento
+e prazo; clicar abre a fase. Ao lado, o resumo por região (Norte, Nordeste…) e a
+lista das fases com seus estados. Estado em duas fases (capital numa, interior
+em outra) é pintado pela que está rodando agora. O contorno dos estados vem de
+`static/vendor/brasil-ufs.js`, gerado do GeoJSON público
+`codeforgermany/click_that_hood` e simplificado (~38 KB).
+
 **Montar a fase pela planilha.** Com uma fase aberta, **Importar na <fase>** sobe
 uma planilha e coloca todo mundo dela direto naquela fase — sem escolher um por
 um. Outra opção é a coluna `fase` na planilha (já vem no modelo): no **Importar**
@@ -651,6 +662,7 @@ app já usa entre a lista de status do Python e a do JS).
   por filtro (`regional`/`busca`/`papel`, ou `todos: true` pra base inteira);
   quem já está em outra fase só entra com `incluir_de_outras_fases`
 - fases aceitam `data_inicio` e `prazo` (`AAAA-MM-DD` ou `DD/MM/AAAA`; `""` limpa)
+  e `ufs` (lista de siglas, ex. `["SP","RJ"]`; `[]` tira a fase do mapa)
 - `DELETE /api/piloto/fases/{id}/tecnicos/{tecnico_id}` — tira um da fase
 - `GET  /api/tecnicos/resumo` — contagem por status + total de feedback por tipo
 - `POST /api/tecnicos` — cadastra (telefone sem DDI de 10/11 dígitos ganha o 55 na frente sozinho)

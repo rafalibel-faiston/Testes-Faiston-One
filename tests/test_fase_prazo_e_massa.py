@@ -157,3 +157,24 @@ def test_coluna_parecida_com_fase_nao_cria_fase(client):
     assert dados["criados"] == 1
     assert dados["fases_criadas"] == []
     assert client.get("/api/piloto/fases").json() == []
+
+
+# --------------------------------------------------------------- mapa (UFs)
+
+
+def test_fase_guarda_os_estados_que_cobre(client):
+    fase = client.post("/api/piloto/fases", json={"nome": "Fase 2 — Sul", "ufs": ["rs", "PR", "SC", "PR"]}).json()
+    # maiúscula, sem repetir, sempre na mesma ordem
+    assert fase["ufs"] == ["PR", "RS", "SC"]
+
+    # editar outra coisa não mexe nos estados; lista vazia tira a fase do mapa
+    client.patch(f"/api/piloto/fases/{fase['id']}", json={"nome": "Fase 2"})
+    assert client.get("/api/piloto/fases").json()[0]["ufs"] == ["PR", "RS", "SC"]
+    client.patch(f"/api/piloto/fases/{fase['id']}", json={"ufs": []})
+    assert client.get("/api/piloto/fases").json()[0]["ufs"] == []
+
+
+def test_uf_inexistente_e_recusada(client):
+    resp = client.post("/api/piloto/fases", json={"nome": "Fase 1", "ufs": ["SP", "XX"]})
+    assert resp.status_code == 400
+    assert "XX" in resp.json()["detail"]
