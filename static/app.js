@@ -5116,13 +5116,16 @@
     planejada: "planejada", em_andamento: "em andamento",
     concluida: "concluída", liberada: "liberada",
   };
-  // faixas de % concluído — 4 degraus do mesmo azul, claro -> escuro
-  const MAPA_FAIXAS = [
-    { ate: 25, cor: "#c9dbfc", txt: "0–24%" },
-    { ate: 50, cor: "#8fb3f7", txt: "25–49%" },
-    { ate: 75, cor: "#4d86f0", txt: "50–74%", escuro: true },
-    { ate: 101, cor: "#0054ec", txt: "75–100%", escuro: true },
-  ];
+  // progresso em degradê contínuo nas cores da marca: azul-claro (0%) ->
+  // azul Faiston (50%) -> índigo (100%). Contínuo em vez de faixas: 12% e 22%
+  // não viram a mesma cor, e o mapa fica sem "degraus".
+  const MAPA_GRAD = ["#bcd3fd", "#0054ec", "#2226c0"];
+  const MAPA_COR = {
+    sem_fase: "#eef0f6",     // fundo do mapa: some atrás do que importa
+    planejada: "#dde3f2",    // um tom acima do fundo: já tem dono, não começou
+    concluida: "#5fcfa0",
+    liberada: "#0d9d6c",
+  };
   // estados pequenos demais pra sigla caber dentro: o rótulo vai pro lado,
   // ligado por uma linha fina
   const MAPA_CHAMADAS = {
@@ -5145,13 +5148,34 @@
     return mapa;
   }
 
+  // mistura dois hex por t (0..1)
+  function misturaCor(a, b, t) {
+    const ca = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
+    const cb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
+    return "#" + ca.map((v, i) => Math.round(v + (cb[i] - v) * t).toString(16).padStart(2, "0")).join("");
+  }
+  function corProgresso(pct) {
+    const t = Math.max(0, Math.min(100, pct)) / 100;
+    return t <= 0.5
+      ? misturaCor(MAPA_GRAD[0], MAPA_GRAD[1], t * 2)
+      : misturaCor(MAPA_GRAD[1], MAPA_GRAD[2], (t - 0.5) * 2);
+  }
+
+  // barra de progresso que termina exatamente na cor que o estado tem no mapa
+  function gradBarra(pct, status) {
+    if (status === "liberada" || status === "concluida") {
+      return `linear-gradient(90deg, ${MAPA_COR.concluida}, ${MAPA_COR[status]})`;
+    }
+    return `linear-gradient(90deg, ${MAPA_GRAD[0]}, ${corProgresso(pct)})`;
+  }
+
   function estiloUf(f) {
-    if (!f) return { fill: "#eceef4", escuro: false, tracejado: false };
-    if (f.status === "liberada") return { fill: "#0d9d6c", escuro: true };
-    if (f.status === "concluida") return { fill: "#6fcfa8", escuro: false };
-    if (f.status === "planejada") return { fill: "#f6f7fb", escuro: false, tracejado: true };
-    const faixa = MAPA_FAIXAS.find((x) => pctFase(f) < x.ate);
-    return { fill: faixa.cor, escuro: !!faixa.escuro };
+    if (!f) return { fill: MAPA_COR.sem_fase, escuro: false };
+    if (f.status === "liberada") return { fill: MAPA_COR.liberada, escuro: true };
+    if (f.status === "concluida") return { fill: MAPA_COR.concluida, escuro: false };
+    if (f.status === "planejada") return { fill: MAPA_COR.planejada, escuro: false };
+    const pct = pctFase(f);
+    return { fill: corProgresso(pct), escuro: pct >= 35 };
   }
 
   function renderMapa() {
@@ -5183,7 +5207,7 @@
       const st = estiloUf(fase);
       const sel = ufsAtual.has(uf);
       paths.push(`<path class="mapa-uf${sel ? " sel" : ""}${fase ? " com-fase" : ""}" data-uf="${uf}" d="${u.d}"
-        fill="${st.fill}"${st.tracejado ? ' stroke-dasharray="3 2" data-tracejado="1"' : ""}/>`);
+        fill="${st.fill}"/>`);
       const chamada = MAPA_CHAMADAS[uf];
       if (chamada) {
         const x = u.cx + chamada[0], y = u.cy + chamada[1];
@@ -5193,16 +5217,26 @@
         rotulos.push(`<text class="mapa-rotulo${st.escuro ? " no-escuro" : ""}" x="${u.cx}" y="${u.cy + 3}" data-uf="${uf}">${uf}</text>`);
       }
     });
+    // sombra suave embaixo do país inteiro: dá volume sem contorno pesado
     $("#mapa-svg").innerHTML = `<svg viewBox="0 0 ${geo.largura + 50} ${geo.altura}" role="img"
-      aria-label="Mapa do Brasil com as fases do piloto por estado">${paths.join("")}${rotulos.join("")}</svg>`;
+      aria-label="Mapa do Brasil com as fases do piloto por estado">
+      <defs><filter id="mapa-sombra" x="-5%" y="-5%" width="110%" height="115%">
+        <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#1e2250" flood-opacity=".12"/>
+      </filter></defs>
+      <g filter="url(#mapa-sombra)">${paths.join("")}</g>${rotulos.join("")}</svg>`;
 
-    $("#mapa-legenda").innerHTML =
-      `<span class="ml-titulo">% concluído</span>`
-      + MAPA_FAIXAS.map((x) => `<span class="ml-item"><i style="background:${x.cor}"></i>${x.txt}</span>`).join("")
-      + `<span class="ml-item"><i class="ml-tracejado"></i>planejada</span>`
-      + `<span class="ml-item"><i style="background:#6fcfa8"></i>concluída</span>`
-      + `<span class="ml-item"><i style="background:#0d9d6c"></i>liberada</span>`
-      + `<span class="ml-item"><i style="background:#eceef4"></i>sem fase</span>`;
+    $("#mapa-legenda").innerHTML = `
+      <span class="ml-grad">
+        <span class="ml-titulo">Progresso da fase</span>
+        <span class="ml-barra" style="background:linear-gradient(90deg,${MAPA_GRAD.join(",")})"></span>
+        <span class="ml-escala"><span>0%</span><span>50%</span><span>100%</span></span>
+      </span>
+      <span class="ml-itens">
+        <span class="ml-item"><i style="background:${MAPA_COR.planejada}"></i>planejada</span>
+        <span class="ml-item"><i style="background:${MAPA_COR.concluida}"></i>concluída</span>
+        <span class="ml-item"><i style="background:${MAPA_COR.liberada}"></i>liberada</span>
+        <span class="ml-item"><i style="background:${MAPA_COR.sem_fase}"></i>sem fase</span>
+      </span>`;
 
     // por região: quantos estados já têm fase e quanto dos técnicos das fases
     // daquela região já concluíram (fase que pega duas regiões conta nas duas)
@@ -5212,10 +5246,13 @@
       const t = fasesReg.reduce((n, f) => n + f.total_tecnicos, 0);
       const c = fasesReg.reduce((n, f) => n + f.concluidos, 0);
       const pct = t ? Math.round((c / t) * 100) : 0;
+      // região inteira fechada fica verde, como os estados dela no mapa
+      const fechada = fasesReg.length && fasesReg.every((f) => f.status === "liberada" || f.status === "concluida");
+      const stReg = fechada ? (fasesReg.every((f) => f.status === "liberada") ? "liberada" : "concluida") : null;
       return `<div class="mapa-reg${comFase ? "" : " vazia"}" title="${esc(regiao)}: ${c} de ${t} técnicos concluíram">
         <span class="mapa-reg-nome">${regiao}</span>
         <span class="mapa-reg-ufs">${comFase}/${ufs.length} estados</span>
-        <span class="pb-trilho">${pct > 0 ? `<span class="pb-barra b-azul" style="width:${Math.max(pct, 2)}%"></span>` : ""}</span>
+        <span class="pb-trilho">${pct > 0 ? `<span class="pb-barra" style="width:${Math.max(pct, 2)}%;background:${gradBarra(pct, stReg)}"></span>` : ""}</span>
         <span class="mapa-reg-pct">${t ? `${pct}%` : "—"}</span>
       </div>`;
     }).join("");
@@ -5231,6 +5268,7 @@
         <span class="mapa-fase-meta">${FASE_STATUS_TXT[f.status] || f.status}
           · ${f.concluidos}/${f.total_tecnicos} técnicos
           ${f.prazo ? ` · prazo ${fmtDia(f.prazo)}` : ""}</span>
+        <span class="mapa-fase-trilho"><i style="width:${pct}%;background:${gradBarra(pct, f.status)}"></i></span>
         <span class="mapa-fase-ufs">${ufsDaFase(f).length
           ? ufsDaFase(f).map((uf) => `<i>${uf}</i>`).join("")
           : `<em>sem estado marcado</em>`}</span>

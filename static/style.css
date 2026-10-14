@@ -2142,26 +2142,33 @@ body.inline-connecting * { cursor:crosshair !important; }
 .mapa-corpo[hidden] { display:none; }
 .mapa-area { position:relative; background:var(--surface); padding:14px 18px 16px; }
 .mapa-svg svg { display:block; width:100%; max-width:560px; height:auto; margin:0 auto; }
-.mapa-uf { stroke:#fff; stroke-width:1; cursor:default; transition:filter .15s var(--ease); }
-.mapa-uf[data-tracejado] { stroke:#8a96b8; stroke-width:1; }
+.mapa-uf {
+  stroke:#fff; stroke-width:1.1; stroke-linejoin:round; cursor:default;
+  transition:fill .3s var(--ease), opacity .15s var(--ease);
+}
 .mapa-uf.com-fase { cursor:pointer; }
-.mapa-uf.com-fase:hover { filter:brightness(.93); }
-/* estados da fase aberta ganham contorno escuro — "é aqui que você está" */
-.mapa-uf.sel { stroke:var(--text); stroke-width:2; }
+.mapa-uf.com-fase:hover { opacity:.82; }
+/* estados da fase aberta: contorno fino na cor da marca — "é aqui que você está" */
+.mapa-uf.sel { stroke:#2226c0; stroke-width:1.6; }
 .mapa-rotulo {
-  font-family:'Roboto',sans-serif; font-size:10px; font-weight:600; fill:var(--text-2);
-  text-anchor:middle; pointer-events:none;
+  font-family:'Roboto',sans-serif; font-size:9.5px; font-weight:600; fill:#5d6386;
+  text-anchor:middle; pointer-events:none; letter-spacing:.2px;
 }
 .mapa-rotulo.no-escuro { fill:#fff; }
-.mapa-chamada { stroke:var(--text-3); stroke-width:.6; opacity:.7; }
+.mapa-chamada { stroke:#b5bad0; stroke-width:.6; }
 .mapa-legenda {
-  display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; justify-content:center;
-  margin-top:10px; font-size:11px; color:var(--text-2);
+  display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px 22px; justify-content:center;
+  margin-top:12px; font-size:11px; color:var(--text-2);
 }
-.ml-titulo { font-weight:700; color:var(--text); }
-.ml-item { display:inline-flex; align-items:center; gap:5px; }
-.ml-item i { width:12px; height:12px; border-radius:3px; border:1px solid rgba(24,26,50,.08); }
-.ml-item i.ml-tracejado { background:#f6f7fb; border:1px dashed #8a96b8; }
+.ml-grad { display:flex; flex-direction:column; gap:4px; width:200px; }
+.ml-titulo { font-size:10.5px; font-weight:700; color:var(--text-2); text-transform:uppercase; letter-spacing:.5px; }
+.ml-barra { height:8px; border-radius:999px; }
+.ml-escala { display:flex; justify-content:space-between; font-size:10px; color:var(--text-3); font-family:'Roboto Mono',monospace; }
+.ml-itens { display:flex; flex-wrap:wrap; gap:6px 14px; }
+.ml-item { display:inline-flex; align-items:center; gap:6px; }
+.ml-item i { width:10px; height:10px; border-radius:50%; box-shadow:inset 0 0 0 1px rgba(24,26,50,.08); }
+.mapa-fase-trilho { display:block; height:4px; border-radius:999px; background:var(--line); overflow:hidden; margin:3px 0 2px; }
+.mapa-fase-trilho i { display:block; height:100%; border-radius:999px; }
 .mapa-tip {
   position:absolute; z-index:5; max-width:250px; pointer-events:none;
   background:var(--text); color:#fff; border-radius:10px; padding:9px 11px;
@@ -2183,11 +2190,12 @@ body.inline-connecting * { cursor:crosshair !important; }
 .mapa-reg-pct { text-align:right; font-family:'Roboto Mono',monospace; font-weight:600; color:var(--text); }
 .mapa-fase {
   display:flex; flex-direction:column; gap:3px; width:100%; text-align:left; cursor:pointer;
-  background:var(--surface-2); border:1px solid var(--line); border-radius:10px;
-  padding:9px 11px; margin-bottom:7px; font-family:'Roboto',sans-serif;
+  background:var(--surface); border:1px solid var(--line); border-radius:12px;
+  padding:10px 12px; margin-bottom:8px; font-family:'Roboto',sans-serif;
+  transition:border-color .15s var(--ease), box-shadow .15s var(--ease);
 }
-.mapa-fase:hover { border-color:var(--line-2); }
-.mapa-fase.active { border-color:var(--f-blue); box-shadow:0 0 0 2px var(--part-bg); }
+.mapa-fase:hover { border-color:var(--line-2); box-shadow:var(--shadow-1); }
+.mapa-fase.active { border-color:transparent; box-shadow:0 0 0 1.5px #0054ec, 0 10px 24px -14px rgba(0,84,236,.6); }
 .mapa-fase-topo { display:flex; justify-content:space-between; gap:8px; }
 .mapa-fase-nome { font-size:12.5px; font-weight:700; color:var(--text); }
 .mapa-fase-pct { font-family:'Roboto Mono',monospace; font-size:12px; font-weight:600; color:var(--text); }
