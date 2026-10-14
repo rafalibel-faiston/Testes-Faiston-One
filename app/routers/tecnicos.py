@@ -1227,8 +1227,13 @@ def responder_formulario(token: str, payload: schemas.FormularioResposta, db: Se
 COLUNAS_IMPORTACAO = {
     "nome": {"nome", "tecnico", "nome do tecnico", "nome completo"},
     "telefone": {"telefone", "whatsapp", "celular", "fone", "numero"},
-    "papel": {"papel", "funcao", "função", "cargo", "tipo"},
-    "regional": {"regional", "cidade", "regiao", "praca"},
+    # planilha que já vem classificada (Tipo PAI/FILHO/CLT + quem é o pai e o
+    # número dele) — o filho costuma vir com o próprio celular vazio
+    "tipo_vinculo": {"tipo", "vinculo", "tipo de vinculo", "tipo parc"},
+    "pai_nome": {"tecnico pai", "nome do pai", "pai"},
+    "pai_telefone": {"celular do pai", "telefone do pai", "numero do pai", "whatsapp do pai"},
+    "papel": {"papel", "funcao", "função", "cargo"},
+    "regional": {"regional", "cidade", "regiao", "praca", "uf"},
     "lider_nome": {"lider", "lider_nome", "lider direto", "responde a", "supervisor"},
     # "PARC 123" = técnico pai; "PARC 123 REPASSE" = filho de repasse
     "codigo_parc": {"codigo de parc", "codigo parc", "cod parc", "codigo do parc", "parc", "codigo_parc"},
@@ -1237,6 +1242,12 @@ COLUNAS_IMPORTACAO = {
 # exato (sem o fallback por "contém"): base exportada de outro sistema pode ter
 # uma "Fase do contrato" que não tem nada a ver com o piloto.
 COLUNA_FASE = {"fase", "fase do piloto", "leva"}
+# colunas que só casam pelo nome exato: pelo "contém", "pai" pegaria "Celular
+# do Pai" e "uf" pegaria qualquer coisa
+COLUNAS_SO_EXATAS = {"tipo_vinculo", "pai_nome", "pai_telefone"}
+# valores da coluna Tipo: o que diz pai/filho e o que, na verdade, é o papel
+TIPOS_FILHO = {"filho", "repasse", "parc repasse"}
+TIPOS_NAO_FILHO = {"pai", "parc", "clt"}
 
 
 @router.get("/tecnicos/exportar")
@@ -1398,7 +1409,12 @@ async def importar_tecnicos(
     então número repetido não é mais rejeição automática: no grupo do mesmo
     número, a linha só PARC é a dona verdadeira do número (o pai) e as REPASSE
     são filhos dele, marcados com `numero_do_pai` (o número não é deles). Dois
-    PARC com o mesmo número continuam rejeitados — não dá pra saber de quem é."""
+    PARC com o mesmo número continuam rejeitados — não dá pra saber de quem é.
+
+    Também aceita a planilha que já vem classificada: coluna "Tipo" (PAI /
+    FILHO / CLT), "Técnico Pai" e "Celular do Pai". Filho com o celular vazio
+    entra com o número do pai (marcado como `numero_do_pai`); o pai é achado
+    pelo nome e, com mais de um nome possível, pelo "Celular do Pai"."""
     fase_fixa = None
     if fase_id is not None:
         fase_fixa = db.query(models.PilotoFase).filter(models.PilotoFase.id == fase_id).first()
@@ -1427,9 +1443,10 @@ async def importar_tecnicos(
             if i not in usadas and h in aliases:
                 achou = i
                 break
-        if achou is None:
+        if achou is None and campo not in COLUNAS_SO_EXATAS:
+            # alias de 2 letras ("uf") só vale exato — contido, casa com qualquer coisa
             for i, h in enumerate(cabecalho):
-                if i not in usadas and any(a in h for a in aliases):
+                if i not in usadas and any(a in h for a in aliases if len(a) > 2):
                     achou = i
                     break
         if achou is not None:
@@ -1492,7 +1509,8 @@ async def importar_tecnicos(
     atualizados = 0
     em_branco = 0
     rejeitados = []
-    tem_codigo = "codigo_parc" in idx
+    # sem código de PARC nem coluna Tipo, a planilha não diz nada sobre pai/filho
+    tem_hierarquia = "codigo_parc" in idx or "tipo_vinculo" in idx
 
     def rejeita(r, motivo):
         rejeitados.append({
@@ -1508,6 +1526,19 @@ async def importar_tecnicos(
         if not r["nome"] and not r["telefone_bruto"]:
             em_branco += 1
             continue  # linha em branco — não é erro, só não tem nada nela
+        r["codigo"] = valor(row, "codigo_parc") or None
+        tipo = _norm_txt(valor(row, "tipo_vinculo"))
+        r["tipo"] = tipo if tipo in TIPOS_FILHO | TIPOS_NAO_FILHO else None
+        # coluna Tipo com PAI/FILHO manda; sem ela, "PARC 123 REPASSE" = filho
+        r["filho"] = tipo in TIPOS_FILHO if r["tipo"] else "repasse" in _norm_txt(r["codigo"])
+        r["pai_nome"] = valor(row, "pai_nome") or None
+        r["pai_telefone"] = valor(row, "pai_telefone") or None
+        r["sem_numero_proprio"] = False
+        if r["filho"] and not r["telefone_bruto"] and r["pai_telefone"]:
+            # planilha já tratada: o número repetido do filho foi apagado e o do
+            # pai veio em "Celular do Pai" — é por ele que se chega no filho
+            r["telefone_bruto"] = r["pai_telefone"]
+            r["sem_numero_proprio"] = True
         if not r["telefone_bruto"]:
             rejeita(r, "sem telefone")
             continue
@@ -1519,9 +1550,6 @@ async def importar_tecnicos(
         except HTTPException:
             rejeita(r, "telefone inválido")
             continue
-        r["codigo"] = valor(row, "codigo_parc") or None
-        # "PARC 123" = pai; "PARC 123 REPASSE" = filho, que trabalha debaixo de um pai
-        r["filho"] = "repasse" in _norm_txt(r["codigo"])
         validas.append(r)
 
     por_numero = {}          # telefone -> linhas com aquele número, na ordem da planilha
@@ -1548,7 +1576,8 @@ async def importar_tecnicos(
     def grava(r, pai=None, numero_do_pai=None):
         nonlocal criados, atualizados
         row = r["row"]
-        papel = "lider" if _norm_txt(valor(row, "papel")) in ("lider", "lider de equipe", "supervisor") else "tecnico"
+        papel_txt = _norm_txt(valor(row, "papel")) or _norm_txt(valor(row, "tipo_vinculo"))
+        papel = "lider" if papel_txt in ("lider", "lider de equipe", "supervisor") else "tecnico"
         regional = valor(row, "regional") or None
         lider_nome = valor(row, "lider_nome") or None
 
@@ -1577,10 +1606,9 @@ async def importar_tecnicos(
             ja_na_base.setdefault(r["telefone"], []).append(tecnico)
             criados += 1
         usados.add(id(tecnico))
-        # sem a coluna de PARC a planilha não diz nada sobre pai/filho — não mexe
-        if tem_codigo:
+        if tem_hierarquia:
             tecnico.codigo_parc = r["codigo"]
-            if r["codigo"]:
+            if r["codigo"] or r["tipo"]:
                 tecnico.repasse = r["filho"]
             tecnico.pai = pai
             tecnico.numero_do_pai = numero_do_pai
@@ -1593,22 +1621,59 @@ async def importar_tecnicos(
                 return t
         return None
 
-    # 2ª passada: número repetido + REPASSE = filho com o número do pai (o número
-    # não é dele); número repetido + só PARC = o dono verdadeiro do número, o pai
+    base_por_nome = {}       # pai que já estava na base, pelo nome
+    for lista in ja_na_base.values():
+        for t in lista:
+            if not t.numero_do_pai and t.repasse is not True:
+                base_por_nome.setdefault(_norm_txt(t.nome), []).append(t)
+
+    # 2ª passada, pais: número repetido + só PARC = o dono verdadeiro do número
+    pai_do_numero = {}       # telefone -> pai da planilha dono do número
+    pais_por_nome = {}       # nome normalizado -> pais da planilha
+    for telefone, grupo in por_numero.items():
+        pais = [r for r in grupo if not r["filho"]]
+        for r in pais:
+            if telefone in pai_do_numero:
+                # dois PARC com o mesmo número: não dá pra saber de quem ele é
+                rejeita(r, f"telefone repetido na planilha (já veio na linha {pais[0]['linha']})")
+                continue
+            pai = grava(r, numero_do_pai=False if tem_hierarquia else None)
+            pai_do_numero[telefone] = pai
+            pais_por_nome.setdefault(_norm_txt(r["nome"]), []).append(pai)
+
+    def pai_pelo_nome(r):
+        """Planilha que já diz quem é o pai ("Técnico Pai"): acha pelo nome. Com
+        mais de um nome ("FULANO / BELTRANO") ou homônimo, quem desempata é o
+        "Celular do Pai" — o pai certo é o dono daquele número."""
+        tel_pai = None
+        if r["pai_telefone"]:
+            try:
+                tel_pai = _norm_telefone(r["pai_telefone"])
+            except HTTPException:
+                pass
+        candidatos = []
+        for nome in r["pai_nome"].split("/"):
+            chave = _norm_txt(nome)
+            for t in pais_por_nome.get(chave) or base_por_nome.get(chave) or []:
+                if t not in candidatos:
+                    candidatos.append(t)
+        if tel_pai and len(candidatos) != 1:
+            pelo_numero = [t for t in candidatos if t.telefone == tel_pai]
+            if pelo_numero:
+                candidatos = pelo_numero
+            elif not candidatos and tel_pai in pai_do_numero:
+                # nome não bate (grafia diferente), mas o número é de um pai da planilha
+                candidatos = [pai_do_numero[tel_pai]]
+        # ainda empatado: melhor sem pai (e no aviso) do que ligado ao pai errado
+        return candidatos[0] if len(candidatos) == 1 else None
+
+    # 2ª passada, filhos: número repetido + REPASSE (ou Tipo FILHO) = filho com
+    # o número do pai — o número não é dele
     pais_com_filhos = set()
     filhos = 0
     filhos_numero_do_pai = 0
     filhos_sem_pai = []
     for telefone, grupo in por_numero.items():
-        pais = [r for r in grupo if not r["filho"]]
-        pai = None
-        for r in pais:
-            if pai is not None:
-                # dois PARC com o mesmo número: não dá pra saber de quem ele é
-                rejeita(r, f"telefone repetido na planilha (já veio na linha {pais[0]['linha']})")
-                continue
-            pai = grava(r, numero_do_pai=False if tem_codigo else None)
-
         vistos = {}          # nome do filho -> linha, pra não cadastrar a mesma pessoa duas vezes
         for r in (r for r in grupo if r["filho"]):
             chave = _norm_txt(r["nome"])
@@ -1616,20 +1681,29 @@ async def importar_tecnicos(
                 rejeita(r, f"telefone repetido na planilha (já veio na linha {vistos[chave]})")
                 continue
             vistos[chave] = r["linha"]
-            pai_dele = pai or pai_na_base(telefone)
-            # filho com número só dele (não repetido, sem pai dono do número) fica
-            # com o número; repetido, o número é do pai
-            numero_do_pai = len(grupo) > 1 or pai_dele is not None
+            if r["pai_nome"]:
+                pai_dele = pai_pelo_nome(r)
+                numero_do_pai = r["sem_numero_proprio"] or (
+                    pai_dele is not None and pai_dele.telefone == telefone)
+            else:
+                pai_dele = pai_do_numero.get(telefone) or pai_na_base(telefone)
+                # filho com número só dele (não repetido, sem pai dono do número)
+                # fica com o número; repetido, o número é do pai
+                numero_do_pai = r["sem_numero_proprio"] or len(grupo) > 1 or pai_dele is not None
             grava(r, pai=pai_dele, numero_do_pai=numero_do_pai)
             filhos += 1
             if numero_do_pai:
                 filhos_numero_do_pai += 1
             if pai_dele is not None:
                 pais_com_filhos.add(id(pai_dele))
-            elif numero_do_pai:
+            elif numero_do_pai or r["pai_nome"]:
                 filhos_sem_pai.append({
                     "linha": r["linha"], "nome": r["nome"], "telefone": r["telefone_bruto"],
-                    "motivo": "filho de repasse com número repetido, sem PARC pai com esse número",
+                    "motivo": ((f"mais de um pai possível ({r['pai_nome']}) e o número não desempata"
+                                if "/" in r["pai_nome"] else
+                                f"pai \"{r['pai_nome']}\" não encontrado na planilha nem na base")
+                               if r["pai_nome"] else
+                               "filho de repasse com número repetido, sem PARC pai com esse número"),
                 })
     rejeitados.sort(key=lambda e: e["linha"])
     db.commit()
@@ -1662,6 +1736,6 @@ async def importar_tecnicos(
             "filhos": filhos,
             "filhos_com_numero_do_pai": filhos_numero_do_pai,
             "filhos_sem_pai": len(filhos_sem_pai),
-        } if tem_codigo else None,
+        } if tem_hierarquia else None,
         "avisos": filhos_sem_pai,
     }

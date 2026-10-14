@@ -190,3 +190,66 @@ def test_adicionar_na_fase_todos_os_filhos_do_filtro(client):
     assert resp.json()["adicionados"] == 3
     na_fase = client.get(f"/api/tecnicos?fase_id={fase['id']}").json()
     assert {t["nome"] for t in na_fase} == {"Pedro Filho", "Órfão A", "Órfão B"}
+
+
+# ---- planilha que já vem classificada: Tipo + Técnico Pai + Celular do Pai ----
+CAB_PRONTA = ["UF", "Técnico", "Celular", "Código PARC", "Tipo", "Técnico Pai", "Celular do Pai", "Qtd. Filhos"]
+
+
+def _importa_pronta(client, linhas):
+    arquivo = planilha(linhas, cabecalho=CAB_PRONTA)
+    resp = client.post("/api/tecnicos/importar", files={"file": ("base.xlsx", arquivo)})
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def test_planilha_classificada_filho_sem_celular_usa_o_do_pai(client):
+    dados = _importa_pronta(client, [
+        ["SP", "JOAO PAI", "(11) 99999-8888", "PARC1020", "PAI", None, None, 1],
+        ["SP", "PEDRO FILHO", None, "PARC1020", "FILHO", "JOAO PAI", "(11) 99999-8888", None],
+        ["MG", "ANA CLT", "(31) 98888-7777", "PARC2000", "CLT", None, None, None],
+    ])
+    # o filho sem celular não é mais "sem telefone": entra com o número do pai
+    assert dados["rejeitados"] == 0
+    assert dados["hierarquia"]["pais_com_filhos"] == 1
+    tecs = _por_nome(client)
+    filho = tecs["PEDRO FILHO"]
+    assert filho["pai_nome"] == "JOAO PAI"
+    assert filho["numero_do_pai"] is True
+    assert filho["telefone"] == "5511999998888"
+    assert filho["repasse"] is True
+    # "Tipo" é o vínculo, não o papel; "UF" vira a regional
+    assert tecs["JOAO PAI"]["papel"] == "tecnico"
+    assert tecs["JOAO PAI"]["regional"] == "SP"
+    assert tecs["ANA CLT"]["repasse"] is False
+    assert tecs["ANA CLT"]["filhos"] == []
+
+
+def test_planilha_classificada_filho_com_numero_proprio(client):
+    _importa_pronta(client, [
+        ["SP", "JOAO PAI", "(11) 99999-8888", "PARC1020", "PAI", None, None, 1],
+        ["SP", "LUCAS FILHO", "(11) 95555-4444", "PARC1020", "FILHO", "JOAO PAI", "(11) 99999-8888", None],
+    ])
+    filho = _por_nome(client)["LUCAS FILHO"]
+    assert filho["pai_nome"] == "JOAO PAI"
+    assert filho["numero_do_pai"] is False
+    assert filho["telefone"] == "5511955554444"
+
+
+def test_mais_de_um_pai_no_nome_desempata_pelo_celular_do_pai(client):
+    dados = _importa_pronta(client, [
+        ["SP", "KEVIN PAI", "(11) 91111-1111", "PARC0856", "PAI", None, None, 1],
+        ["SP", "VALMIR PAI", "(11) 92222-2222", "PARC0856", "PAI", None, None, 0],
+        ["SP", "BETO FILHO", None, "PARC0856", "FILHO", "KEVIN PAI / VALMIR PAI", "(11) 92222-2222", None],
+    ])
+    assert dados["hierarquia"]["filhos_sem_pai"] == 0
+    assert _por_nome(client)["BETO FILHO"]["pai_nome"] == "VALMIR PAI"
+
+
+def test_pai_que_nao_esta_na_planilha_vira_aviso(client):
+    dados = _importa_pronta(client, [
+        ["SP", "ORFAO", "(11) 93333-3333", "PARC7", "FILHO", "PAI DE OUTRA REGIAO", "(41) 90000-0000", None],
+    ])
+    assert dados["criados"] == 1
+    assert dados["hierarquia"]["filhos_sem_pai"] == 1
+    assert "não encontrado" in dados["avisos"][0]["motivo"]
