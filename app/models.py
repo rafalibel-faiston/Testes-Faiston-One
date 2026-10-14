@@ -473,6 +473,15 @@ class PilotoFase(Base):
     meta_concluidos = Column(Integer, nullable=True)
     meta_nota = Column(Float, nullable=True)
     meta_etapa = Column(Integer, nullable=True)
+    # janela planejada da fase ("AAAA-MM-DD", mesmo formato do prazo das notas):
+    # é o que diz à diretoria quando cada região deve estar liberada. Diferente
+    # de iniciada_em/liberada_em, que registram o que de fato aconteceu.
+    data_inicio = Column(String, nullable=True)
+    prazo = Column(String, nullable=True)
+    # estados que a fase cobre, em sigla e separados por vírgula ("SP,RJ") — é o
+    # que pinta o mapa do piloto. Lista e não FK porque uma fase pode ser "SP
+    # capital" e a seguinte "interior de SP": o mesmo estado em duas fases.
+    ufs = Column(String, nullable=True)
     iniciada_em = Column(DateTime(timezone=True), nullable=True)
     liberada_em = Column(DateTime(timezone=True), nullable=True)
     autor = Column(String, nullable=True)

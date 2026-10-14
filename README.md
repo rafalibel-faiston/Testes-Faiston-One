@@ -517,13 +517,37 @@ fase por vez**, e cada fase tem **suas próprias metas** — uma fase de 12 téc
 numa capital não tem a mesma régua de uma de 60 no interior.
 
 O fluxo é: **Nova fase** (ex.: *Fase 1 — SP capital*) → aba **Base completa** →
-filtra por regional ou busca pelo nome → marca quem entra (ou usa *adicionar a
-regional inteira à fase*) → escolhe a **fase de destino** no seletor ao lado do
+filtra por regional ou busca pelo nome → marca quem entra (ou usa *adicionar
+todos do filtro à fase*, que pega todo mundo da lista filtrada, não só a página
+visível) → escolhe a **fase de destino** no seletor ao lado do
 botão (por padrão, a que está em andamento) → a fase sai de "planejada" e vira "em andamento"
 sozinha. O painel e os critérios passam a ser daquela fase, e quando a régua
 fecha aparece o botão **marcar como liberada** — aí é só abrir a próxima região.
 Técnico que ainda não foi chamado fica na base geral; excluir uma fase não apaga
 ninguém, só devolve o pessoal pra base.
+
+**Prazo da fase.** Cada fase tem **início previsto** e **prazo de finalização**
+(no modal da fase). A aba mostra a janela em DD/MM/AAAA e quanto falta: fica
+amarela a 3 dias do prazo e vermelha (*atrasada N dias*) se passar sem a fase ser
+concluída ou liberada.
+
+**Mapa do piloto.** Cada fase marca os **estados que cobre** (no modal, agrupados
+por região — clicar no nome da região marca todos). O mapa do Brasil logo abaixo
+das abas pinta cada estado pela fase dele: azul do claro ao escuro conforme o %
+de técnicos que concluíram, tracejado se a fase ainda está planejada, verde
+quando concluída/liberada, cinza sem fase. Passar o mouse mostra fase, andamento
+e prazo; clicar abre a fase. Ao lado, o resumo por região (Norte, Nordeste…) e a
+lista das fases com seus estados. Estado em duas fases (capital numa, interior
+em outra) é pintado pela que está rodando agora. O contorno dos estados vem de
+`static/vendor/brasil-ufs.js`, gerado do GeoJSON público
+`codeforgermany/click_that_hood` e simplificado (~38 KB).
+
+**Montar a fase pela planilha.** Com uma fase aberta, **Importar na <fase>** sobe
+uma planilha e coloca todo mundo dela direto naquela fase — sem escolher um por
+um. Outra opção é a coluna `fase` na planilha (já vem no modelo): no **Importar**
+normal, cada linha cai na fase com aquele nome, criada na hora se não existir.
+Pela planilha a escolha é explícita, então quem estava em outra fase é movido
+(com o progresso resetado, como no reaproveitar).
 
 Isso também é o que mantém a tela rápida. Antes, a aba baixava e desenhava a base
 inteira: com 4 mil cadastros eram **1,5 MB de JSON, 4 mil cards e 12,7 segundos**
@@ -635,8 +659,10 @@ app já usa entre a lista de status do Python e a do JS).
 - `GET  /api/piloto/fases` · `POST` · `PATCH /{id}` · `DELETE /{id}` — as fases do
   piloto (excluir devolve os técnicos pra base, não apaga ninguém)
 - `POST /api/piloto/fases/{id}/tecnicos` — põe gente na fase por lista de ids ou
-  por filtro (`regional`/`busca`/`papel`); quem já está em outra fase só entra com
-  `incluir_de_outras_fases`
+  por filtro (`regional`/`busca`/`papel`, ou `todos: true` pra base inteira);
+  quem já está em outra fase só entra com `incluir_de_outras_fases`
+- fases aceitam `data_inicio` e `prazo` (`AAAA-MM-DD` ou `DD/MM/AAAA`; `""` limpa)
+  e `ufs` (lista de siglas, ex. `["SP","RJ"]`; `[]` tira a fase do mapa)
 - `DELETE /api/piloto/fases/{id}/tecnicos/{tecnico_id}` — tira um da fase
 - `GET  /api/tecnicos/resumo` — contagem por status + total de feedback por tipo
 - `POST /api/tecnicos` — cadastra (telefone sem DDI de 10/11 dígitos ganha o 55 na frente sozinho)
@@ -665,7 +691,9 @@ app já usa entre a lista de status do Python e a do JS).
   `meta_etapa` e `dias_parado`
 - `POST /api/tecnicos/importar` — sobe a base (multipart, campo `file`); devolve
   `criados`, `atualizados`, `rejeitados`, o `resumo` por motivo e a lista `erros`
-  com linha/nome/telefone/motivo de cada rejeitada
+  com linha/nome/telefone/motivo de cada rejeitada; com `fase_id` (form) põe
+  todos na fase, e sem ele usa a coluna `fase` da planilha (`fases`, `fases_criadas`
+  dizem onde cada um caiu)
 
 Também dá pra pedir isso direto no Claude via MCP: `listar_tecnicos`, `criar_tecnico`,
 `gerar_mensagem_tecnico`, `atualizar_status_tecnico`, `adicionar_observacao_tecnico`

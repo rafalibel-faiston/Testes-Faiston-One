@@ -497,6 +497,12 @@ def migrate_schema(engine):
         fase_cols = {c["name"] for c in insp.get_columns("piloto_fases")}
         if "versao_app" not in fase_cols:
             stmts.append("ALTER TABLE piloto_fases ADD COLUMN versao_app VARCHAR")
+        if "data_inicio" not in fase_cols:
+            stmts.append("ALTER TABLE piloto_fases ADD COLUMN data_inicio VARCHAR")
+        if "prazo" not in fase_cols:
+            stmts.append("ALTER TABLE piloto_fases ADD COLUMN prazo VARCHAR")
+        if "ufs" not in fase_cols:
+            stmts.append("ALTER TABLE piloto_fases ADD COLUMN ufs VARCHAR")
 
     if "agenda_eventos" in existing_tables:
         ag_cols = {c["name"] for c in insp.get_columns("agenda_eventos")}

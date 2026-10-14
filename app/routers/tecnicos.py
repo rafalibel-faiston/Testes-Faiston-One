@@ -313,6 +313,81 @@ def listar_regionais(db: Session = Depends(get_db)):
     return [{"regional": r, "total": n} for r, n in linhas]
 
 
+def _data_fase(valor: Optional[str], campo: str) -> Optional[str]:
+    """Normaliza a data de uma fase pra "AAAA-MM-DD" (o que o <input type=date>
+    manda). Aceita também "DD/MM/AAAA", que é como a gente escreve na mão.
+    Vazio vira None — é assim que se apaga o prazo."""
+    texto = (valor or "").strip()
+    if not texto:
+        return None
+    for formato in ("%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(texto, formato).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    raise HTTPException(status_code=400, detail=f"Data inválida em {campo}: use DD/MM/AAAA.")
+
+
+# as 27 unidades da federação, por região — a ordem é a que o seletor mostra
+UFS_POR_REGIAO = {
+    "Norte": ["AC", "AP", "AM", "PA", "RO", "RR", "TO"],
+    "Nordeste": ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE"],
+    "Centro-Oeste": ["DF", "GO", "MT", "MS"],
+    "Sudeste": ["ES", "MG", "RJ", "SP"],
+    "Sul": ["PR", "RS", "SC"],
+}
+UFS = {uf for lista in UFS_POR_REGIAO.values() for uf in lista}
+
+
+def _ufs_fase(valores: List[str]) -> Optional[str]:
+    """Valida e grava as UFs da fase como "SP,RJ" (maiúsculas, sem repetir,
+    em ordem alfabética — a mesma fase sempre vira o mesmo texto)."""
+    siglas = {(v or "").strip().upper() for v in valores} - {""}
+    invalidas = siglas - UFS
+    if invalidas:
+        raise HTTPException(status_code=400, detail=f"UF inválida: {', '.join(sorted(invalidas))}.")
+    return ",".join(sorted(siglas)) or None
+
+
+def _checa_janela(data_inicio: Optional[str], prazo: Optional[str]) -> None:
+    # o formato AAAA-MM-DD compara certo como texto
+    if data_inicio and prazo and prazo < data_inicio:
+        raise HTTPException(status_code=400, detail="O prazo da fase é anterior ao início.")
+
+
+def _colocar_na_fase(tecnico: models.Tecnico, fase: models.PilotoFase) -> bool:
+    """Põe o técnico na fase. Devolve True se ele mudou de lugar.
+
+    Só é "reaproveitar" quando ele já vinha de outra fase de fato — a primeira
+    entrada (vindo da base geral, fase_id None) não tem progresso nenhum pra
+    resetar, e não pode invalidar o token que já foi mandado pro técnico pelo
+    WhatsApp. Vindo de outra fase, é teste novo, não continuação do anterior: o
+    progresso de QA (status, nota, etapas, link do formulário) de lá não pode
+    vazar pra cá. O relato já registrado em tecnico_observacoes fica intocado —
+    é histórico, não se apaga."""
+    if tecnico.fase_id == fase.id:
+        return False
+    veio_de_outra_fase = tecnico.fase_id is not None
+    tecnico.fase_id = fase.id
+    if veio_de_outra_fase:
+        tecnico.status = "a_contatar"
+        tecnico.nota = None
+        tecnico.etapas_testadas = None
+        tecnico.convidado_em = None
+        tecnico.instalado_em = None
+        tecnico.concluido_em = None
+        tecnico.respondido_em = None
+        tecnico.token = models.novo_token_tecnico()
+    return True
+
+
+def _fase_em_andamento(fase: models.PilotoFase) -> None:
+    # colocar gente na fase é o que a tira do papel
+    if fase.status == "planejada":
+        fase.status = "em_andamento"
+        fase.iniciada_em = fase.iniciada_em or datetime.now(timezone.utc)
+
+
 @router.get("/piloto/fases", response_model=List[schemas.PilotoFaseOut])
 def listar_fases(db: Session = Depends(get_db)):
     fases = db.query(models.PilotoFase).order_by(
@@ -344,6 +419,9 @@ def criar_fase(payload: schemas.PilotoFaseCreate, db: Session = Depends(get_db))
     nome = (payload.nome or "").strip()
     if not nome:
         raise HTTPException(status_code=400, detail="Nome da fase vazio.")
+    data_inicio = _data_fase(payload.data_inicio, "início")
+    prazo = _data_fase(payload.prazo, "prazo")
+    _checa_janela(data_inicio, prazo)
     maior = db.query(sa_func.max(models.PilotoFase.ordem)).scalar() or 0
     fase = models.PilotoFase(
         nome=nome,
@@ -354,6 +432,9 @@ def criar_fase(payload: schemas.PilotoFaseCreate, db: Session = Depends(get_db))
         meta_concluidos=payload.meta_concluidos,
         meta_nota=payload.meta_nota,
         meta_etapa=payload.meta_etapa,
+        data_inicio=data_inicio,
+        prazo=prazo,
+        ufs=_ufs_fase(payload.ufs),
         autor=(payload.autor or "").strip() or None,
     )
     db.add(fase)
@@ -391,6 +472,13 @@ def atualizar_fase(fase_id: int, payload: schemas.PilotoFaseUpdate, db: Session 
         valor = getattr(payload, campo)
         if valor is not None:
             setattr(fase, campo, valor or None)
+    if payload.data_inicio is not None:
+        fase.data_inicio = _data_fase(payload.data_inicio, "início")
+    if payload.prazo is not None:
+        fase.prazo = _data_fase(payload.prazo, "prazo")
+    _checa_janela(fase.data_inicio, fase.prazo)
+    if payload.ufs is not None:
+        fase.ufs = _ufs_fase(payload.ufs)
     db.commit()
     db.refresh(fase)
     return fase
@@ -438,39 +526,16 @@ def adicionar_na_fase(fase_id: int, payload: schemas.AdicionarNaFase, db: Sessio
             q = q.filter(models.Tecnico.papel == payload.papel)
         if payload.busca:
             q = q.filter(models.Tecnico.nome.ilike(f"%{payload.busca.strip()}%"))
-        if not (payload.regional or payload.papel or payload.busca):
+        # sem filtro nenhum só passa se pedir "todos" explicitamente — um payload
+        # vazio por engano não pode jogar a base inteira dentro da fase
+        if not (payload.regional or payload.papel or payload.busca or payload.todos):
             raise HTTPException(status_code=400, detail="Escolha técnicos ou informe um filtro.")
     if not payload.incluir_de_outras_fases:
         q = q.filter((models.Tecnico.fase_id.is_(None)) | (models.Tecnico.fase_id == fase_id))
 
-    alvos = q.all()
-    movidos = 0
-    for t in alvos:
-        if t.fase_id != fase_id:
-            # só é "reaproveitar" quando ele já vinha de outra fase de fato —
-            # a primeira entrada (vindo da base geral, fase_id None) não tem
-            # progresso nenhum pra resetar, e não pode invalidar o token que
-            # já foi mandado pro técnico pelo WhatsApp.
-            veio_de_outra_fase = t.fase_id is not None
-            t.fase_id = fase_id
-            if veio_de_outra_fase:
-                # teste novo, não continuação do anterior: o progresso de QA
-                # (status, nota, etapas, link do formulário) da fase de onde
-                # ele veio não pode vazar pra cá. O relato já registrado em
-                # tecnico_observacoes fica intocado — é histórico, não se apaga.
-                t.status = "a_contatar"
-                t.nota = None
-                t.etapas_testadas = None
-                t.convidado_em = None
-                t.instalado_em = None
-                t.concluido_em = None
-                t.respondido_em = None
-                t.token = models.novo_token_tecnico()
-            movidos += 1
-    # colocar gente na fase é o que a tira do papel
-    if movidos and fase.status == "planejada":
-        fase.status = "em_andamento"
-        fase.iniciada_em = fase.iniciada_em or datetime.now(timezone.utc)
+    movidos = sum(1 for t in q.all() if _colocar_na_fase(t, fase))
+    if movidos:
+        _fase_em_andamento(fase)
     db.commit()
     total = db.query(models.Tecnico).filter(models.Tecnico.fase_id == fase_id).count()
     return {"adicionados": movidos, "na_fase": total}
@@ -1108,6 +1173,10 @@ COLUNAS_IMPORTACAO = {
     "regional": {"regional", "cidade", "regiao", "praca"},
     "lider_nome": {"lider", "lider_nome", "lider direto", "responde a", "supervisor"},
 }
+# coluna opcional que distribui a planilha entre as fases. Só casa pelo nome
+# exato (sem o fallback por "contém"): base exportada de outro sistema pode ter
+# uma "Fase do contrato" que não tem nada a ver com o piloto.
+COLUNA_FASE = {"fase", "fase do piloto", "leva"}
 
 
 @router.get("/tecnicos/exportar")
@@ -1212,14 +1281,16 @@ def baixar_modelo_importacao():
     wb = Workbook()
     ws = wb.active
     ws.title = "Técnicos"
-    ws.append(["nome", "telefone", "papel", "regional", "lider"])
-    ws.append(["João Silva", "(11) 99999-8888", "tecnico", "SP capital", "Carlos Souza"])
-    ws.append(["Marcos Souza", "(11) 98888-7777", "lider", "Interior SP", ""])
+    # "fase" é opcional: preenchida, a linha já cai direto naquela fase do piloto
+    ws.append(["nome", "telefone", "papel", "regional", "lider", "fase"])
+    ws.append(["João Silva", "(11) 99999-8888", "tecnico", "SP capital", "Carlos Souza", "Fase 1 — SP capital"])
+    ws.append(["Marcos Souza", "(11) 98888-7777", "lider", "Interior SP", "", ""])
     ws.column_dimensions[get_column_letter(1)].width = 26
     ws.column_dimensions[get_column_letter(2)].width = 20
     ws.column_dimensions[get_column_letter(3)].width = 12
     ws.column_dimensions[get_column_letter(4)].width = 20
     ws.column_dimensions[get_column_letter(5)].width = 20
+    ws.column_dimensions[get_column_letter(6)].width = 22
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -1232,7 +1303,10 @@ def baixar_modelo_importacao():
 
 @router.post("/tecnicos/importar")
 async def importar_tecnicos(
-    file: UploadFile = File(...), autor: Optional[str] = Form(default=None), db: Session = Depends(get_db)
+    file: UploadFile = File(...),
+    autor: Optional[str] = Form(default=None),
+    fase_id: Optional[int] = Form(default=None),
+    db: Session = Depends(get_db),
 ):
     """Sobe a base de técnicos de uma vez a partir de uma planilha .xlsx (colunas:
     nome, telefone e, opcionais, papel/regional/lider — ver /tecnicos/modelo).
@@ -1241,7 +1315,19 @@ async def importar_tecnicos(
     rejeitado — reimportar a planilha nova é sincronizar, não duplicar; o que é
     progresso de QA (status, nota, etapas, feedback) nunca é tocado. Linha sem
     nome/telefone, telefone inválido ou telefone repetido dentro da própria
-    planilha entra no relatório de rejeitados, sem travar as demais."""
+    planilha entra no relatório de rejeitados, sem travar as demais.
+
+    É também o jeito de montar uma fase inteira de uma vez, sem escolher um por
+    um na base: com `fase_id`, todo mundo que entrou pela planilha vai pra essa
+    fase; sem ele, uma coluna "fase" na planilha distribui cada linha na fase
+    com aquele nome (criada na hora se ainda não existir). Mandar pra fase pela
+    planilha é escolha explícita, então quem estava em outra fase é movido —
+    com o progresso resetado, como em adicionar_na_fase."""
+    fase_fixa = None
+    if fase_id is not None:
+        fase_fixa = db.query(models.PilotoFase).filter(models.PilotoFase.id == fase_id).first()
+        if not fase_fixa:
+            raise HTTPException(status_code=404, detail="Fase não encontrada")
     if not (file.filename or "").lower().endswith((".xlsx", ".xlsm")):
         raise HTTPException(status_code=400, detail="Envie um arquivo .xlsx.")
     data = await file.read()
@@ -1275,6 +1361,11 @@ async def importar_tecnicos(
             usadas.add(achou)
     if "nome" not in idx or "telefone" not in idx:
         raise HTTPException(status_code=400, detail="A planilha precisa ter as colunas 'nome' e 'telefone'.")
+    if fase_fixa is None:
+        for i, h in enumerate(cabecalho):
+            if i not in usadas and h in COLUNA_FASE:
+                idx["fase"] = i
+                break
 
     def valor(row, campo):
         i = idx.get(campo)
@@ -1286,6 +1377,38 @@ async def importar_tecnicos(
     # rejeita esse pessoal, atualiza o cadastro deles (ver abaixo)
     ja_na_base = {t.telefone: t for t in db.query(models.Tecnico).all()}
     vistos_no_arquivo = {}   # telefone -> linha em que apareceu primeiro
+
+    # fases por nome normalizado — "Fase 2", "fase 2 " e "FASE 2" são a mesma
+    fases_por_nome = {_norm_txt(f.nome): f for f in db.query(models.PilotoFase).all()}
+    fases_criadas = []
+    por_fase = {}            # fase.id -> quantos da planilha entraram nela
+
+    def fase_da_linha(row):
+        if fase_fixa is not None:
+            return fase_fixa
+        nome_fase = valor(row, "fase")
+        if not nome_fase:
+            return None
+        chave = _norm_txt(nome_fase)
+        fase = fases_por_nome.get(chave)
+        if fase is None:
+            maior = db.query(sa_func.max(models.PilotoFase.ordem)).scalar() or 0
+            fase = models.PilotoFase(
+                nome=nome_fase, descricao="", status="planejada", ordem=maior + 1,
+                autor=(autor or "").strip() or None,
+            )
+            db.add(fase)
+            db.flush()   # precisa do id pra pôr o técnico nela
+            fases_por_nome[chave] = fase
+            fases_criadas.append(fase.nome)
+        return fase
+
+    def manda_pra_fase(tecnico, fase):
+        if fase is None:
+            return
+        _colocar_na_fase(tecnico, fase)
+        _fase_em_andamento(fase)
+        por_fase[fase.id] = por_fase.get(fase.id, 0) + 1
 
     criados = 0
     atualizados = 0
@@ -1335,6 +1458,7 @@ async def importar_tecnicos(
                 existente.lider_nome = lider_nome
             if not existente.token:
                 existente.token = models.novo_token_tecnico()
+            manda_pra_fase(existente, fase_da_linha(row))
             atualizados += 1
             continue
 
@@ -1347,6 +1471,7 @@ async def importar_tecnicos(
         )
         db.add(novo)
         ja_na_base[telefone] = novo
+        manda_pra_fase(novo, fase_da_linha(row))
         criados += 1
     db.commit()
 
@@ -1364,4 +1489,12 @@ async def importar_tecnicos(
         "rejeitados": len(rejeitados),
         "resumo": resumo,
         "erros": rejeitados,
+        # quantos da planilha caíram em cada fase — o retorno de "subi a fase 2"
+        "fases": [
+            {"id": f.id, "nome": f.nome, "tecnicos": por_fase[f.id]}
+            for f in fases_por_nome.values() if f.id in por_fase
+        ] if fase_fixa is None else (
+            [{"id": fase_fixa.id, "nome": fase_fixa.nome, "tecnicos": por_fase.get(fase_fixa.id, 0)}]
+        ),
+        "fases_criadas": fases_criadas,
     }
