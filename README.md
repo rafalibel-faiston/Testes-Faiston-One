@@ -533,9 +533,10 @@ concluída ou liberada.
 
 **Mapa do piloto.** Cada fase marca os **estados que cobre** (no modal, agrupados
 por região — clicar no nome da região marca todos). O mapa do Brasil logo abaixo
-das abas pinta cada estado pela fase dele: azul do claro ao escuro conforme o %
-de técnicos que concluíram, tracejado se a fase ainda está planejada, verde
-quando concluída/liberada, cinza sem fase. Passar o mouse mostra fase, andamento
+das abas pinta cada estado pela fase dele: degradê contínuo nas cores da marca
+(azul-claro → azul Faiston → índigo) conforme o % de técnicos que concluíram,
+lilás-acinzentado se a fase ainda está planejada, verde quando
+concluída/liberada, cinza-claro sem fase. Passar o mouse mostra fase, andamento
 e prazo; clicar abre a fase. Ao lado, o resumo por região (Norte, Nordeste…) e a
 lista das fases com seus estados. Estado em duas fases (capital numa, interior
 em outra) é pintado pela que está rodando agora. O contorno dos estados vem de
