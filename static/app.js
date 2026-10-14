@@ -5027,6 +5027,7 @@
           ${f.versao_app ? `<span class="fase-sep"></span><span>${esc(f.versao_app)}</span>` : ""}
           ${f.total_tecnicos ? `<span class="fase-pct">${pct}%</span>` : ""}
         </span>
+        ${prazoFaseHtml(f)}
         <span class="fase-progress" title="${f.concluidos} de ${f.total_tecnicos} concluíram o teste (${pct}%)">
           <i style="width:${f.total_tecnicos ? Math.max(pct, f.concluidos ? 3 : 0) : 0}%"></i>
         </span>
@@ -5046,6 +5047,10 @@
     // exportar segue a fase aberta: quem está numa fase quer a planilha dela
     const exportar = $("#btn-exportar-piloto");
     if (exportar) exportar.href = FASE_ATUAL ? `/api/tecnicos/exportar?fase_id=${FASE_ATUAL}` : "/api/tecnicos/exportar";
+    // importar direto na fase só faz sentido com uma fase aberta
+    const faseAberta = FASES.find((f) => f.id === FASE_ATUAL);
+    $("#btn-importar-fase").hidden = !faseAberta;
+    if (faseAberta) $("#importar-fase-label").textContent = `Importar na ${faseAberta.nome}`;
     $$(".fase-aba", nav).forEach((b) => b.addEventListener("click", () => {
       FASE_ATUAL = b.dataset.fase ? Number(b.dataset.fase) : null;
       localStorage.setItem(FASE_KEY, FASE_ATUAL || "");
@@ -5056,6 +5061,40 @@
       e.stopPropagation();
       abrirFaseModal(Number(el.dataset.editarFase));
     }));
+  }
+
+  // dias corridos de hoje até "AAAA-MM-DD", no fuso de quem está olhando
+  // (meia-noite local nos dois lados, senão o fuso do Brasil come um dia)
+  function diasAte(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+    if (!m) return null;
+    const alvo = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    return Math.round((alvo - hoje) / 86400000);
+  }
+
+  // linha de prazo na aba da fase: a data e quanto falta. Fase já concluída ou
+  // liberada não "atrasa" mais — o prazo vira só registro.
+  function prazoFaseHtml(f) {
+    if (!f.prazo && !f.data_inicio) return "";
+    const janela = f.data_inicio && f.prazo
+      ? `${fmtDia(f.data_inicio)} → ${fmtDia(f.prazo)}`
+      : f.prazo ? `prazo ${fmtDia(f.prazo)}` : `início ${fmtDia(f.data_inicio)}`;
+    let situacao = "";
+    let classe = "";
+    const fechada = f.status === "concluida" || f.status === "liberada";
+    if (f.prazo && !fechada) {
+      const d = diasAte(f.prazo);
+      if (d < 0) { situacao = `atrasada ${-d} dia${d === -1 ? "" : "s"}`; classe = " atrasada"; }
+      else if (d === 0) { situacao = "vence hoje"; classe = " vence"; }
+      else if (d <= 3) { situacao = `faltam ${d} dia${d === 1 ? "" : "s"}`; classe = " vence"; }
+      else situacao = `faltam ${d} dias`;
+    }
+    return `<span class="fase-prazo${classe}" title="Janela planejada da fase">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
+      ${janela}${situacao ? ` · <b>${situacao}</b>` : ""}
+    </span>`;
   }
 
   async function loadTecnicos() {
@@ -5156,13 +5195,16 @@
       <button type="button" class="btn-ghost" id="base-prev"${BASE_PAGINA === 0 ? " disabled" : ""}>anterior</button>
       <span>página ${BASE_PAGINA + 1} de ${paginas}</span>
       <button type="button" class="btn-ghost" id="base-next"${BASE_PAGINA + 1 >= paginas ? " disabled" : ""}>próxima</button>
-      ${baseFiltro.regional ? `<button type="button" class="btn-ghost base-todos" id="base-add-regional">adicionar a regional inteira à fase</button>` : ""}`;
+      ${BASE_TOTAL ? `<button type="button" class="btn-ghost base-todos" id="base-add-todos">adicionar todos os ${BASE_TOTAL} ${baseFiltro.regional || baseFiltro.busca ? "do filtro" : "da lista"} à fase</button>` : ""}`;
     $("#base-prev").addEventListener("click", () => { BASE_PAGINA--; loadBase(); });
     $("#base-next").addEventListener("click", () => { BASE_PAGINA++; loadBase(); });
-    const addReg = $("#base-add-regional");
-    if (addReg) addReg.addEventListener("click", () => adicionarNaFase({
-      regional: baseFiltro.regional, incluir_de_outras_fases: reaproveitando,
-    }));
+    // o mesmo filtro da tela vai pro servidor: entra todo mundo que ele pega,
+    // não só a página de 50 que está visível
+    const addTodos = $("#base-add-todos");
+    if (addTodos) addTodos.addEventListener("click", () => adicionarNaFase({
+      regional: baseFiltro.regional || null, busca: baseFiltro.busca || null,
+      todos: true, incluir_de_outras_fases: reaproveitando,
+    }, BASE_TOTAL));
     atualizaBotaoAdicionar();
   }
 
@@ -5193,12 +5235,13 @@
       : "Adicionar à fase";
   }
 
-  async function adicionarNaFase(payload) {
+  async function adicionarNaFase(payload, quantos) {
     if (!FASES.length) { toast("Crie uma fase antes de escolher quem entra.", true); return; }
     const destino = faseDestino();
+    const alvo = quantos ? `${quantos} técnico(s)` : "";
     const aviso = payload.incluir_de_outras_fases
-      ? `Adicionar à "${destino.nome}"? Quem já testou outra fase tem o progresso resetado (status, nota, link do formulário) — o relato antigo continua guardado.`
-      : `Adicionar à "${destino.nome}"?`;
+      ? `Adicionar ${alvo} à "${destino.nome}"? Quem já testou outra fase tem o progresso resetado (status, nota, link do formulário) — o relato antigo continua guardado.`
+      : `Adicionar ${alvo} à "${destino.nome}"?`;
     if (!confirm(aviso)) return;
     try {
       const res = await api(`/api/piloto/fases/${destino.id}/tecnicos`, {
@@ -5277,6 +5320,8 @@
       faseForm.meta_concluidos.value = f.meta_concluidos || "";
       faseForm.meta_nota.value = f.meta_nota || "";
       faseForm.meta_etapa.value = f.meta_etapa || "";
+      faseForm.data_inicio.value = f.data_inicio || "";
+      faseForm.prazo.value = f.prazo || "";
     }
     faseModal.hidden = false;
     faseForm.nome.focus();
@@ -5299,6 +5344,9 @@
       meta_concluidos: num(fd.get("meta_concluidos")),
       meta_nota: num(fd.get("meta_nota")),
       meta_etapa: num(fd.get("meta_etapa")),
+      // "" limpa a data no PATCH
+      data_inicio: fd.get("data_inicio") || "",
+      prazo: fd.get("prazo") || "",
     };
     if (!payload.nome) return;
     try {
@@ -5902,19 +5950,36 @@
     } catch (err) { toast("Erro ao subir o APK: " + err.message, true); }
   });
 
-  $("#tecnico-import-input").addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    e.target.value = "";
-    if (!file) return;
+  async function importarPlanilha(file, faseId) {
     try {
       const fd = new FormData();
       fd.append("file", file, file.name);
       if (testerName()) fd.append("autor", testerName());
+      if (faseId) fd.append("fase_id", faseId);
       toast("Importando planilha…");
       const res = await api("/api/tecnicos/importar", { method: "POST", body: fd });
       await loadTecnicos();
       mostrarResultadoImportacao(res, file.name);
     } catch (err) { toast("Erro ao importar planilha: " + err.message, true); }
+  }
+
+  // importar normal: entra na base; se a planilha tiver coluna "fase", cada
+  // linha já cai na fase com aquele nome
+  $("#tecnico-import-input").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (file) importarPlanilha(file, null);
+  });
+
+  // importar na fase: a planilha inteira vai pra fase aberta — é a fase montada
+  // de uma vez, sem escolher um por um na base completa
+  $("#tecnico-import-fase-input").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    const fase = FASES.find((f) => f.id === FASE_ATUAL);
+    if (!file || !fase) return;
+    if (!confirm(`Colocar todo mundo de "${file.name}" na "${fase.nome}"? Quem estiver em outra fase é movido pra cá, com o progresso resetado.`)) return;
+    importarPlanilha(file, fase.id);
   });
 
   // Numa base de milhares, "importou 4 mil de 6 mil" só ajuda se disser QUAIS
@@ -5931,6 +5996,12 @@
       <div class="stat"><span class="stat-n">${res.atualizados || 0}</span><span class="stat-l">Atualizados</span></div>
       <div class="stat ${res.rejeitados ? "bad" : ""}"><span class="stat-n">${res.rejeitados || 0}</span><span class="stat-l">Ficaram de fora</span></div>`;
 
+    const fases = res.fases || [];
+    if (fases.length) {
+      $("#import-stats").innerHTML += fases.map((f) =>
+        `<div class="stat ok"><span class="stat-n">${f.tecnicos}</span><span class="stat-l">Em ${esc(f.nome)}</span></div>`).join("");
+    }
+
     const motivos = Object.entries(res.resumo || {}).sort((a, b) => b[1] - a[1]);
     $("#import-rejeitados-box").hidden = !motivos.length;
     $("#import-baixar").hidden = !motivos.length;
@@ -5938,8 +6009,10 @@
       `<div class="import-motivo"><span class="import-motivo-n">${n}</span><span>${esc(motivo)}</span></div>`).join("");
 
     $("#tecnico-import-modal").hidden = false;
+    const criadas = (res.fases_criadas || []).length
+      ? ` Fase(s) criada(s) pela planilha: ${res.fases_criadas.join(", ")}.` : "";
     toast(entraram
-      ? `${entraram} técnico(s) na base (${res.criados || 0} novo(s), ${res.atualizados || 0} atualizado(s)).`
+      ? `${entraram} técnico(s) na base (${res.criados || 0} novo(s), ${res.atualizados || 0} atualizado(s)).${criadas}`
       : "Nenhum técnico entrou — veja o motivo no resultado.", !entraram);
   }
 

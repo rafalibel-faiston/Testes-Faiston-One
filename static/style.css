@@ -2007,6 +2007,19 @@ body.inline-connecting * { cursor:crosshair !important; }
 .st-em_andamento .fase-status i { background:var(--f-blue); box-shadow:0 0 0 3px rgba(0,84,236,.14); }
 .st-concluida .fase-status i, .st-liberada .fase-status i { background:var(--ok); }
 .fase-sep { width:3px; height:3px; border-radius:50%; background:currentColor; opacity:.4; flex-shrink:0; }
+/* janela planejada da fase: amarelo perto do prazo, vermelho quando passou */
+.fase-prazo {
+  display:inline-flex; align-items:center; gap:5px; font-size:11px; line-height:1.4;
+  color:var(--text-3); white-space:nowrap;
+}
+.fase-prazo svg { flex-shrink:0; opacity:.7; }
+.fase-prazo b { font-weight:600; }
+.fase-prazo.vence b { color:var(--warn); }
+.fase-prazo.atrasada b { color:var(--bad); }
+.fase-aba.active .fase-prazo { color:rgba(255,255,255,.85); }
+.fase-aba.active .fase-prazo.vence b, .fase-aba.active .fase-prazo.atrasada b {
+  color:#fff; background:rgba(255,255,255,.2); padding:0 5px; border-radius:4px;
+}
 .fase-pct { margin-left:auto; font-family:'Roboto Mono',monospace; font-weight:600; color:var(--text-2); }
 /* progresso da fase: fração já concluída no funil, pra bater o olho na aba
    e ver quão perto de fechar cada região está — sem abrir o painel do piloto.
@@ -2239,6 +2252,7 @@ body.inline-connecting * { cursor:crosshair !important; }
   font-family:'Roboto',sans-serif; font-size:12.5px; font-weight:500;
   transition:background .15s var(--ease), color .15s var(--ease), border-color .15s var(--ease);
 }
+.tool-btn[hidden] { display:none; }
 .tool-btn svg { width:15px; height:15px; flex-shrink:0; opacity:.7; }
 .tool-btn:hover { background:var(--surface-2); color:var(--text); }
 .tool-btn:hover svg { opacity:1; }

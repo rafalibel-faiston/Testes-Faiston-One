@@ -856,6 +856,8 @@ def listar_fases() -> list[dict]:
                 "descricao": f.descricao,
                 "status": f.status,
                 "versao_app": f.versao_app,
+                "data_inicio": f.data_inicio,
+                "prazo": f.prazo,
                 "total_tecnicos": contagem.get(f.id, 0),
                 "concluidos": concluidos_por_fase.get(f.id, 0),
                 "iniciada_em": f.iniciada_em.isoformat() if f.iniciada_em else None,

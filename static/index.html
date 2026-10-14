@@ -459,6 +459,11 @@
             Importar
             <input type="file" id="tecnico-import-input" accept=".xlsx,.xlsm" hidden>
           </label>
+          <label class="tool-btn" id="btn-importar-fase" hidden title="Subir uma planilha e colocar todo mundo dela direto na fase aberta">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 7.5l9 4.5 9-4.5L12 3Z"/><path d="m3 12 9 4.5L21 12"/><path d="M12 21v-6"/><path d="m9 18 3-3 3 3"/></svg>
+            <span id="importar-fase-label">Importar na fase</span>
+            <input type="file" id="tecnico-import-fase-input" accept=".xlsx,.xlsm" hidden>
+          </label>
           <label class="tool-btn" title="Subir o APK do Track One pra ir como link dentro do convite">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M12 7.5v7"/><path d="m9 11.5 3 3 3-3"/><path d="M10.5 18.5h3"/></svg>
             <span id="apk-status">Subir APK</span>
@@ -1065,6 +1070,15 @@
         <label class="fld">Versão do app
           <input name="versao_app" placeholder="ex.: 1.2.0" autocomplete="off">
           <span class="fld-hint">A build que essa fase está testando. Cada relato guarda a versão do momento — se a LP subir uma nova, o que já foi relatado continua apontando pra build certa.</span>
+        </label>
+      </div>
+      <p class="notes-hint">Janela da fase — o prazo aparece na aba e fica vermelho se passar sem a fase ser concluída.</p>
+      <div class="form-grid">
+        <label class="fld">Início previsto
+          <input type="date" name="data_inicio">
+        </label>
+        <label class="fld">Prazo de finalização
+          <input type="date" name="prazo">
         </label>
       </div>
       <p class="notes-hint">Metas desta fase — o painel usa elas pra dizer se já dá pra liberar.

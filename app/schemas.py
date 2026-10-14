@@ -546,6 +546,8 @@ class PilotoFaseOut(BaseModel):
     meta_concluidos: Optional[int] = None
     meta_nota: Optional[float] = None
     meta_etapa: Optional[int] = None
+    data_inicio: Optional[str] = None   # "AAAA-MM-DD" — início planejado
+    prazo: Optional[str] = None         # "AAAA-MM-DD" — até quando a fase deve fechar
     iniciada_em: Optional[datetime] = None
     liberada_em: Optional[datetime] = None
     autor: Optional[str] = None
@@ -563,6 +565,8 @@ class PilotoFaseCreate(BaseModel):
     meta_concluidos: Optional[int] = None
     meta_nota: Optional[float] = None
     meta_etapa: Optional[int] = None
+    data_inicio: Optional[str] = None
+    prazo: Optional[str] = None
     autor: Optional[str] = None
 
 
@@ -575,6 +579,9 @@ class PilotoFaseUpdate(BaseModel):
     meta_concluidos: Optional[int] = None
     meta_nota: Optional[float] = None
     meta_etapa: Optional[int] = None
+    # "" limpa a data; None (ausente) não mexe
+    data_inicio: Optional[str] = None
+    prazo: Optional[str] = None
 
 
 class AdicionarNaFase(BaseModel):
@@ -585,6 +592,9 @@ class AdicionarNaFase(BaseModel):
     regional: Optional[str] = None
     busca: Optional[str] = None
     papel: Optional[str] = None
+    # True = todo mundo da base que bate no filtro (ou a base inteira, sem
+    # filtro) — o "não quero escolher um por um"
+    todos: bool = False
     # por padrão não rouba técnico que já está em outra fase
     incluir_de_outras_fases: bool = False
 
