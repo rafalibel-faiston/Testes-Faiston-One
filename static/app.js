@@ -6286,30 +6286,66 @@
   const limparInput = $("#limpar-input");
   const limparBtn = $("#limpar-confirmar");
 
-  function abrirLimparModal() {
-    const total = TECNICOS.length;
-    const anotacoes = TECNICOS.reduce((n, t) => n + (t.observacoes || []).length, 0);
-    const responderam = TECNICOS.filter((t) => t.respondido_em).length;
-    if (!total) { toast("A base já está vazia."); return; }
+  // escopo do que vai ser apagado: só a fase aberta (a base de teste em uso)
+  // ou a base inteira. Dentro de uma fase, o padrão é a fase — apagar o resto
+  // tem que ser escolha explícita
+  let limparTotalBase = 0;
+  let limparTotalFase = 0;
+
+  function escopoLimpar() {
+    const marcado = document.querySelector('input[name="limpar-escopo"]:checked');
+    return marcado ? marcado.value : "base";
+  }
+
+  function atualizarAvisoLimpar() {
+    const fase = FASES.find((f) => f.id === FASE_ATUAL);
+    const soFase = escopoLimpar() === "fase" && fase;
+    const total = soFase ? limparTotalFase : limparTotalBase;
+    // anotação e formulário só dá pra contar quando a fase inteira está carregada
+    // na tela (a lista vem limitada, e a base completa chega sem o feedback)
+    const contaFeedback = soFase && TECNICOS.length === limparTotalFase;
+    const anotacoes = contaFeedback ? TECNICOS.reduce((n, t) => n + (t.observacoes || []).length, 0) : null;
+    const responderam = contaFeedback ? TECNICOS.filter((t) => t.respondido_em).length : null;
     // o alerta muda de tom quando há feedback de verdade em jogo: apagar cadastro
     // recém-importado é diferente de apagar o retorno que técnico já mandou
     $("#limpar-aviso").innerHTML = `
       <div class="limpar-numeros">
         <span><b>${total}</b> técnico(s)</span>
-        <span><b>${anotacoes}</b> anotaç(ões)</span>
-        <span><b>${responderam}</b> que já respondeu(ram) o formulário</span>
+        ${contaFeedback ? `<span><b>${anotacoes}</b> anotaç(ões)</span>
+        <span><b>${responderam}</b> que já respondeu(ram) o formulário</span>` : ""}
       </div>
       ${responderam ? `<p class="limpar-alerta">Atenção: ${responderam} técnico(s) já mandaram feedback pelo formulário. Esse retorno some junto.</p>` : ""}`;
+    $("#limpar-explica").innerHTML = soFase
+      ? `Isso apaga <b>só os técnicos da ${esc(fase.nome)}</b> e o feedback deles. A fase e o resto da base continuam. <b>Não tem como desfazer.</b>`
+      : `Isso apaga <b>todos os técnicos de todas as fases e todo o feedback registrado</b>, deixando a base vazia pra você importar a planilha de novo. <b>Não tem como desfazer.</b>`;
+    limparBtn.textContent = soFase ? "Apagar a fase" : "Apagar tudo";
+    limparBtn.dataset.vazio = total ? "" : "1";
+    limparBtn.disabled = !total || limparInput.value.trim().toUpperCase() !== "APAGAR";
+  }
+
+  async function abrirLimparModal() {
+    const fase = FASES.find((f) => f.id === FASE_ATUAL);
+    try {
+      limparTotalBase = (await api("/api/tecnicos/base?limite=1")).total;
+      limparTotalFase = fase ? (await api(`/api/tecnicos/base?limite=1&fase_id=${fase.id}`)).total : 0;
+    } catch (e) { toast("Erro ao contar a base: " + e.message, true); return; }
+    if (!limparTotalBase) { toast("A base já está vazia."); return; }
+    $("#limpar-escopo").hidden = !fase;
+    if (fase) $("#limpar-escopo-fase").textContent = `Só a ${fase.nome} (${limparTotalFase} técnico(s))`;
+    document.querySelector(`input[name="limpar-escopo"][value="${fase ? "fase" : "base"}"]`).checked = true;
     limparInput.value = "";
-    limparBtn.disabled = true;
+    atualizarAvisoLimpar();
     limparModal.hidden = false;
     limparInput.focus();
   }
 
+  document.querySelectorAll('input[name="limpar-escopo"]').forEach((r) =>
+    r.addEventListener("change", atualizarAvisoLimpar));
+
   function fecharLimparModal() { limparModal.hidden = true; }
 
   limparInput.addEventListener("input", () => {
-    limparBtn.disabled = limparInput.value.trim().toUpperCase() !== "APAGAR";
+    limparBtn.disabled = limparBtn.dataset.vazio === "1" || limparInput.value.trim().toUpperCase() !== "APAGAR";
   });
   limparInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !limparBtn.disabled) limparBtn.click();
@@ -6320,11 +6356,16 @@
     try {
       const res = await api("/api/tecnicos/limpar", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirmar: limparInput.value.trim().toUpperCase() }),
+        body: JSON.stringify({
+          confirmar: limparInput.value.trim().toUpperCase(),
+          fase_id: escopoLimpar() === "fase" ? FASE_ATUAL : null,
+        }),
       });
       fecharLimparModal();
       await loadTecnicos();
-      toast(`Base zerada — ${res.tecnicos_apagados} técnico(s) apagado(s).`);
+      toast(res.fase
+        ? `${res.fase.nome} zerada — ${res.tecnicos_apagados} técnico(s) apagado(s).`
+        : `Base zerada — ${res.tecnicos_apagados} técnico(s) apagado(s).`);
     } catch (e) {
       toast("Erro ao limpar: " + e.message, true);
       limparBtn.disabled = false;

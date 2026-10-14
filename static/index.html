@@ -478,7 +478,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 7.5l9 4.5 9-4.5L12 3Z"/><path d="m3 16.5 9 4.5 9-4.5"/><path d="m3 12 9 4.5L21 12"/></svg>
           Nova fase
         </button>
-        <button type="button" class="tool-btn tool-danger" id="btn-limpar-base" title="Apagar todos os técnicos da base">
+        <button type="button" class="tool-btn tool-danger" id="btn-limpar-base" title="Apagar os técnicos da fase aberta ou da base inteira">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9.5 7V5.5A1.5 1.5 0 0 1 11 4h2a1.5 1.5 0 0 1 1.5 1.5V7"/><path d="M6.5 7l.8 12a2 2 0 0 0 2 1.9h5.4a2 2 0 0 0 2-1.9L17.5 7"/></svg>
           Limpar base
         </button>
@@ -1140,15 +1140,18 @@
       <button type="button" class="modal-close" id="limpar-close" aria-label="Fechar">✕</button>
     </div>
     <div class="modal-body">
+      <div class="limpar-escopo" id="limpar-escopo">
+        <label><input type="radio" name="limpar-escopo" value="fase"> <span id="limpar-escopo-fase">Só a fase aberta</span></label>
+        <label><input type="radio" name="limpar-escopo" value="base"> Base inteira (todas as fases)</label>
+      </div>
       <div class="limpar-aviso" id="limpar-aviso"></div>
-      <p class="notes-hint">Isso apaga <b>todos os técnicos e todo o feedback registrado</b>, deixando a
-      base vazia pra você importar a planilha de novo. <b>Não tem como desfazer.</b></p>
+      <p class="notes-hint" id="limpar-explica"></p>
       <label class="fld fld-wide">Para confirmar, digite <b>APAGAR</b>
         <input id="limpar-input" placeholder="APAGAR" autocomplete="off" spellcheck="false">
       </label>
       <div class="modal-actions">
         <button type="button" class="btn-ghost" id="limpar-cancel">Cancelar</button>
-        <button type="button" class="btn-perigo" id="limpar-confirmar" disabled>Apagar tudo</button>
+        <button type="button" class="btn-perigo" id="limpar-confirmar" disabled>Apagar</button>
       </div>
     </div>
   </div>

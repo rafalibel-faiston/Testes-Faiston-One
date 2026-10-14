@@ -657,6 +657,9 @@ class LimparBaseTecnicos(BaseModel):
     """Apagar a base inteira não pode acontecer por um clique errado nem por uma
     chamada solta na API: exige a palavra APAGAR escrita à mão."""
     confirmar: str
+    # preenchido = apaga só os técnicos dessa fase (a base de teste em uso);
+    # ausente = a base inteira
+    fase_id: Optional[int] = None
 
 
 class FormularioResposta(BaseModel):

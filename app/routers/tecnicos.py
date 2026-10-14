@@ -275,6 +275,7 @@ def base_tecnicos(
     regional: Optional[str] = None,
     papel: Optional[str] = None,
     sem_fase: bool = False,
+    fase_id: Optional[int] = None,
     limite: int = 50,
     offset: int = 0,
     db: Session = Depends(get_db),
@@ -287,6 +288,8 @@ def base_tecnicos(
     q = db.query(models.Tecnico)
     if sem_fase:
         q = q.filter(models.Tecnico.fase_id.is_(None))
+    if fase_id is not None:
+        q = q.filter(models.Tecnico.fase_id == fase_id)
     if regional:
         q = q.filter(models.Tecnico.regional == regional)
     if papel:
@@ -811,26 +814,45 @@ def vincular_ajuste(observacao_id: int, payload: schemas.VincularAjuste, db: Ses
 
 @router.post("/tecnicos/limpar")
 def limpar_base(payload: schemas.LimparBaseTecnicos, db: Session = Depends(get_db)):
-    """Zera a base de técnicos — apaga todos os cadastros e o feedback junto.
+    """Zera a base de técnicos — apaga os cadastros e o feedback junto.
 
     Serve pra recomeçar a importação do zero quando a planilha de origem estava
-    errada. Não tem volta, então exige a palavra APAGAR: um DELETE disparado sem
-    querer (ou um clique errado na tela) não passa daqui.
+    errada. Com `fase_id`, apaga só quem está naquela fase (a base de teste em
+    uso) e deixa o resto da base intacto. Não tem volta, então exige a palavra
+    APAGAR: um DELETE disparado sem querer (ou um clique errado na tela) não
+    passa daqui.
     """
     if (payload.confirmar or "").strip().upper() != "APAGAR":
         raise HTTPException(
             status_code=400,
             detail='Confirmação inválida — para zerar a base, mande {"confirmar": "APAGAR"}.',
         )
-    tecnicos = db.query(models.Tecnico).count()
-    observacoes = db.query(models.TecnicoObservacao).count()
+    fase = None
+    tecnicos_q = db.query(models.Tecnico)
+    if payload.fase_id is not None:
+        fase = db.query(models.PilotoFase).filter(models.PilotoFase.id == payload.fase_id).first()
+        if not fase:
+            raise HTTPException(status_code=404, detail="Fase não encontrada")
+        tecnicos_q = tecnicos_q.filter(models.Tecnico.fase_id == fase.id)
+    ids = [t.id for t in tecnicos_q.with_entities(models.Tecnico.id)]
+    obs_q = db.query(models.TecnicoObservacao).filter(models.TecnicoObservacao.tecnico_id.in_(ids))
+    observacoes = obs_q.count()
     # as observações são apagadas explicitamente: no delete em massa quem cuidaria
     # disso seria o ON DELETE CASCADE do banco, e o SQLite local não o aplica por
     # padrão — sem isso, o histórico ficaria órfão em vez de sumir junto
-    db.query(models.TecnicoObservacao).delete(synchronize_session=False)
-    db.query(models.Tecnico).delete(synchronize_session=False)
+    obs_q.delete(synchronize_session=False)
+    # filho que fica (em outra fase) e tinha o pai apagado perde o vínculo, em vez
+    # de apontar pra um id que não existe mais
+    db.query(models.Tecnico).filter(
+        models.Tecnico.pai_id.in_(ids), models.Tecnico.id.notin_(ids),
+    ).update({models.Tecnico.pai_id: None}, synchronize_session=False)
+    db.query(models.Tecnico).filter(models.Tecnico.id.in_(ids)).delete(synchronize_session=False)
     db.commit()
-    return {"tecnicos_apagados": tecnicos, "observacoes_apagadas": observacoes}
+    return {
+        "tecnicos_apagados": len(ids),
+        "observacoes_apagadas": observacoes,
+        "fase": {"id": fase.id, "nome": fase.nome} if fase else None,
+    }
 
 
 @router.post("/tecnicos", response_model=schemas.TecnicoOut, status_code=201)
