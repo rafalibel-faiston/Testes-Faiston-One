@@ -2456,6 +2456,10 @@ body.inline-connecting * { cursor:crosshair !important; }
 .tecnico-etapa-ok + .tecnico-etapa-ok::before { content:'·'; margin-right:6px; color:var(--line-2); font-weight:400; }
 
 .tecnico-tel { font-family:'Roboto Mono',monospace; font-size:11px; }
+.tecnico-tel.sem-numero { color:var(--warn); }
+.tecnico-parc { font-family:'Roboto Mono',monospace; font-size:11px; }
+.tecnico-vinculo.filho { color:var(--warn); font-weight:600; }
+.tecnico-vinculo.pai { font-weight:600; max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 .tecnico-obs-bloco { margin-top:12px; padding-top:10px; border-top:1px solid var(--line); }
 .tecnico-obs-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }

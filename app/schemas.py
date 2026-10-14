@@ -471,6 +471,16 @@ class TecnicoObservacaoCreate(BaseModel):
     versao_app: Optional[str] = None
 
 
+class TecnicoFilhoOut(BaseModel):
+    """Filho de repasse listado no card do pai."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    nome: str
+    codigo_parc: Optional[str] = None
+    fase_id: Optional[int] = None
+
+
 class TecnicoOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -481,6 +491,11 @@ class TecnicoOut(BaseModel):
     regional: Optional[str] = None
     lider_nome: Optional[str] = None
     repasse: Optional[bool] = None  # cruzado com a base de Agentes; None = ainda não cruzado
+    codigo_parc: Optional[str] = None
+    pai_id: Optional[int] = None           # filho de repasse: quem é o pai dele
+    pai_nome: Optional[str] = None
+    numero_do_pai: Optional[bool] = None   # True = o telefone é do pai, não dele
+    filhos: List[TecnicoFilhoOut] = []     # pai: os filhos de repasse debaixo dele
     status: str = "a_contatar"
     autor: Optional[str] = None
     fase_id: Optional[int] = None          # leva do piloto em que ele entrou
@@ -622,6 +637,9 @@ class TecnicoResumoOut(BaseModel):
     regional: Optional[str] = None
     status: str = "a_contatar"
     fase_id: Optional[int] = None
+    codigo_parc: Optional[str] = None
+    pai_id: Optional[int] = None
+    numero_do_pai: Optional[bool] = None
 
 
 class BaseTecnicosOut(BaseModel):
