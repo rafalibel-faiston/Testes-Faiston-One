@@ -2547,3 +2547,7 @@ body.inline-connecting * { cursor:crosshair !important; }
 
 .limpar-escopo { display:flex; flex-direction:column; gap:6px; margin-bottom:10px; font-size:13px; }
 .limpar-escopo label { display:flex; align-items:center; gap:8px; cursor:pointer; }
+.base-vinculo { font-size:11px; font-weight:600; padding:1px 6px; border-radius:8px; margin-left:4px; white-space:nowrap; }
+.base-vinculo.pai { color:var(--part); background:var(--part-bg); }
+.base-vinculo.filho { color:var(--warn); background:var(--warn-bg); }
+.base-tel.sem-numero { color:var(--warn); }

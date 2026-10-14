@@ -638,8 +638,11 @@ class TecnicoResumoOut(BaseModel):
     status: str = "a_contatar"
     fase_id: Optional[int] = None
     codigo_parc: Optional[str] = None
+    repasse: Optional[bool] = None
     pai_id: Optional[int] = None
+    pai_nome: Optional[str] = None
     numero_do_pai: Optional[bool] = None
+    filhos_qtd: int = 0                    # pai: quantos filhos de repasse tem
 
 
 class BaseTecnicosOut(BaseModel):

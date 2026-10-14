@@ -298,7 +298,8 @@ def base_tecnicos(
         q = q.filter(models.Tecnico.nome.ilike(f"%{busca.strip()}%"))
     total = q.count()
     itens = (
-        q.order_by(models.Tecnico.nome)
+        q.options(selectinload(models.Tecnico.pai), selectinload(models.Tecnico.filhos))
+        .order_by(models.Tecnico.nome)
         .offset(max(0, offset))
         .limit(max(1, min(limite, 200)))
         .all()

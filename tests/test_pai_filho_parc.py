@@ -134,3 +134,14 @@ def test_exportar_mostra_vinculo_e_tira_numero_do_filho(client):
     assert linhas["Pedro Filho"][11] == "Filho de João Pai"
     assert linhas["Pedro Filho"][12] == "5511999998888"      # só o número do pai
     assert linhas["João Pai"][11] == "Pai de 1: Pedro Filho"
+
+
+def test_lista_da_base_mostra_quem_e_pai_e_quem_e_filho(client):
+    _importa(client, [
+        ["João Pai", "11999998888", "PARC 1020"],
+        ["Pedro Filho", "11999998888", "PARC 1020 REPASSE"],
+    ])
+    itens = {t["nome"]: t for t in client.get("/api/tecnicos/base").json()["itens"]}
+    assert itens["João Pai"]["filhos_qtd"] == 1
+    assert itens["Pedro Filho"]["pai_nome"] == "João Pai"
+    assert itens["Pedro Filho"]["numero_do_pai"] is True

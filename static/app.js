@@ -5397,6 +5397,16 @@
     renderBase(dados.itens);
   }
 
+  // pai (PARC) / filho (PARC REPASSE) na lista da base — é aqui que se escolhe
+  // quem entra na fase, então tem que dar pra ver quem é quem
+  function baseVinculo(t) {
+    if (t.repasse === true || t.pai_id) {
+      return ` <span class="base-vinculo filho">${t.pai_nome ? `filho de ${esc(t.pai_nome)}` : "filho · pai não achado"}</span>`;
+    }
+    if (t.filhos_qtd) return ` <span class="base-vinculo pai">pai · ${t.filhos_qtd} filho(s)</span>`;
+    return "";
+  }
+
   function renderBase(itens) {
     const reaproveitando = $("#base-reaproveitar").checked;
     $("#base-sel-sub").textContent = BASE_TOTAL
@@ -5410,9 +5420,9 @@
       return `
       <label class="base-linha">
         <input type="checkbox" data-sel="${t.id}"${baseSelecao.has(t.id) ? " checked" : ""}>
-        <span class="base-nome">${esc(t.nome)}</span>
+        <span class="base-nome">${esc(t.nome)}${baseVinculo(t)}</span>
         <span class="base-reg">${esc(t.regional || "—")}</span>
-        <span class="base-tel">${esc(formatTelefone(t.telefone))}</span>
+        <span class="base-tel${t.numero_do_pai ? " sem-numero" : ""}"${t.numero_do_pai ? ' title="Sem número próprio — este é o número do pai"' : ""}>${t.numero_do_pai ? "nº do pai · " : ""}${esc(formatTelefone(t.telefone))}</span>
         ${fase ? `<span class="base-fase-atual" title="Já testou nessa fase — reaproveitar reseta o progresso">em ${esc(fase.nome)}</span>` : ""}
       </label>`;
     }).join("") : `<p class="pb-vazio">Nenhum técnico com esse filtro.</p>`;
