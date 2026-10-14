@@ -618,6 +618,7 @@ class AdicionarNaFase(BaseModel):
     regional: Optional[str] = None
     busca: Optional[str] = None
     papel: Optional[str] = None
+    vinculo: Optional[str] = None   # pai / filho / filho_sem_pai / sem_vinculo
     # True = todo mundo da base que bate no filtro (ou a base inteira, sem
     # filtro) — o "não quero escolher um por um"
     todos: bool = False
@@ -638,8 +639,11 @@ class TecnicoResumoOut(BaseModel):
     status: str = "a_contatar"
     fase_id: Optional[int] = None
     codigo_parc: Optional[str] = None
+    repasse: Optional[bool] = None
     pai_id: Optional[int] = None
+    pai_nome: Optional[str] = None
     numero_do_pai: Optional[bool] = None
+    filhos_qtd: int = 0                    # pai: quantos filhos de repasse tem
 
 
 class BaseTecnicosOut(BaseModel):
@@ -657,6 +661,9 @@ class LimparBaseTecnicos(BaseModel):
     """Apagar a base inteira não pode acontecer por um clique errado nem por uma
     chamada solta na API: exige a palavra APAGAR escrita à mão."""
     confirmar: str
+    # preenchido = apaga só os técnicos dessa fase (a base de teste em uso);
+    # ausente = a base inteira
+    fase_id: Optional[int] = None
 
 
 class FormularioResposta(BaseModel):

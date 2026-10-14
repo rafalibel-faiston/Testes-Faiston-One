@@ -4938,7 +4938,7 @@
     sem_retorno: { label: "Sem retorno",      cls: "st-sem-retorno" },
   };
   const TECNICO_STATUS_ORDEM = Object.keys(TECNICO_STATUS_META);
-  const tecnicoFiltros = { status: "", papel: "", busca: "" };
+  const tecnicoFiltros = { status: "", papel: "", vinculo: "", busca: "" };
   // quantos cards ficam no DOM de uma vez (o resto entra no "mostrar mais")
   const PAGINA_CARDS = 40;
   let tecnicosVisiveis = PAGINA_CARDS;
@@ -5366,7 +5366,7 @@
   let BASE_TOTAL = 0;
   const BASE_POR_PAGINA = 50;
   const baseSelecao = new Set();
-  let baseFiltro = { busca: "", regional: "" };
+  let baseFiltro = { busca: "", regional: "", vinculo: "" };
   let baseBuscaTimer = null;
 
   async function loadRegionais() {
@@ -5390,11 +5390,22 @@
     if (!$("#base-reaproveitar").checked) params.set("sem_fase", "1");
     if (baseFiltro.busca) params.set("busca", baseFiltro.busca);
     if (baseFiltro.regional) params.set("regional", baseFiltro.regional);
+    if (baseFiltro.vinculo) params.set("vinculo", baseFiltro.vinculo);
     let dados;
     try { dados = await api(`/api/tecnicos/base?${params}`); }
     catch (e) { toast("Erro ao carregar a base: " + e.message, true); return; }
     BASE_TOTAL = dados.total;
     renderBase(dados.itens);
+  }
+
+  // pai (PARC) / filho (PARC REPASSE) na lista da base — é aqui que se escolhe
+  // quem entra na fase, então tem que dar pra ver quem é quem
+  function baseVinculo(t) {
+    const v = vinculoDe(t);
+    if (v === "filho") return `<span class="base-vinculo filho" title="Filho de ${esc(t.pai_nome)}">filho · ${esc(t.pai_nome)}</span>`;
+    if (v === "filho_sem_pai") return `<span class="base-vinculo filho">filho · pai não achado</span>`;
+    if (v === "pai") return `<span class="base-vinculo pai">pai · ${t.filhos_qtd} filho(s)</span>`;
+    return `<span class="base-vinculo-vazio">—</span>`;
   }
 
   function renderBase(itens) {
@@ -5411,8 +5422,9 @@
       <label class="base-linha">
         <input type="checkbox" data-sel="${t.id}"${baseSelecao.has(t.id) ? " checked" : ""}>
         <span class="base-nome">${esc(t.nome)}</span>
+        <span class="base-vinc">${baseVinculo(t)}</span>
         <span class="base-reg">${esc(t.regional || "—")}</span>
-        <span class="base-tel">${esc(formatTelefone(t.telefone))}</span>
+        <span class="base-tel${t.numero_do_pai ? " sem-numero" : ""}"${t.numero_do_pai ? ' title="Sem número próprio — este é o número do pai"' : ""}>${t.numero_do_pai ? "nº do pai · " : ""}${esc(formatTelefone(t.telefone))}</span>
         ${fase ? `<span class="base-fase-atual" title="Já testou nessa fase — reaproveitar reseta o progresso">em ${esc(fase.nome)}</span>` : ""}
       </label>`;
     }).join("") : `<p class="pb-vazio">Nenhum técnico com esse filtro.</p>`;
@@ -5428,7 +5440,7 @@
       <button type="button" class="btn-ghost" id="base-prev"${BASE_PAGINA === 0 ? " disabled" : ""}>anterior</button>
       <span>página ${BASE_PAGINA + 1} de ${paginas}</span>
       <button type="button" class="btn-ghost" id="base-next"${BASE_PAGINA + 1 >= paginas ? " disabled" : ""}>próxima</button>
-      ${BASE_TOTAL ? `<button type="button" class="btn-ghost base-todos" id="base-add-todos">adicionar todos os ${BASE_TOTAL} ${baseFiltro.regional || baseFiltro.busca ? "do filtro" : "da lista"} à fase</button>` : ""}`;
+      ${BASE_TOTAL ? `<button type="button" class="btn-ghost base-todos" id="base-add-todos">adicionar todos os ${BASE_TOTAL} ${baseFiltro.regional || baseFiltro.busca || baseFiltro.vinculo ? "do filtro" : "da lista"} à fase</button>` : ""}`;
     $("#base-prev").addEventListener("click", () => { BASE_PAGINA--; loadBase(); });
     $("#base-next").addEventListener("click", () => { BASE_PAGINA++; loadBase(); });
     // o mesmo filtro da tela vai pro servidor: entra todo mundo que ele pega,
@@ -5436,7 +5448,7 @@
     const addTodos = $("#base-add-todos");
     if (addTodos) addTodos.addEventListener("click", () => adicionarNaFase({
       regional: baseFiltro.regional || null, busca: baseFiltro.busca || null,
-      todos: true, incluir_de_outras_fases: reaproveitando,
+      vinculo: baseFiltro.vinculo || null, todos: true, incluir_de_outras_fases: reaproveitando,
     }, BASE_TOTAL));
     atualizaBotaoAdicionar();
   }
@@ -5495,6 +5507,9 @@
   $("#base-destino").addEventListener("change", (e) => { baseDestinoId = Number(e.target.value); });
   $("#base-regional").addEventListener("change", (e) => {
     baseFiltro.regional = e.target.value; BASE_PAGINA = 0; loadBase();
+  });
+  $("#base-vinculo").addEventListener("change", (e) => {
+    baseFiltro.vinculo = e.target.value; BASE_PAGINA = 0; loadBase();
   });
   $("#base-busca").addEventListener("input", (e) => {
     clearTimeout(baseBuscaTimer);
@@ -5755,12 +5770,53 @@
     aplicaPilotoAberto();
   });
 
+  // vínculo PARC: pai (tem filhos de repasse), filho (PARC REPASSE) ou nenhum
+  function vinculoDe(t) {
+    if (t.repasse === true || t.pai_id) return t.pai_id ? "filho" : "filho_sem_pai";
+    if ((t.filhos || []).length || t.filhos_qtd) return "pai";
+    return "sem_vinculo";
+  }
+
+  function bateVinculo(t, filtro) {
+    if (!filtro) return true;
+    const v = vinculoDe(t);
+    return filtro === "filho" ? (v === "filho" || v === "filho_sem_pai") : v === filtro;
+  }
+
+  // bloco próprio no card, separado do nome: quem é pai, quem é filho, de quem,
+  // e se o número cadastrado é dele ou do pai
+  function tecnicoVinculo(t) {
+    const v = vinculoDe(t);
+    if (v === "sem_vinculo" && !t.codigo_parc) return "";
+    const tipo = {
+      pai: ["pai", "Pai"], filho: ["filho", "Filho"],
+      filho_sem_pai: ["filho", "Filho"], sem_vinculo: ["solo", "Sem vínculo"],
+    }[v];
+    const itens = [];
+    if (t.codigo_parc) itens.push(`<div class="tv-item"><span class="tv-l">Código PARC</span><span class="tv-v mono">${esc(t.codigo_parc)}</span></div>`);
+    if (v === "pai") {
+      const nomes = t.filhos.map((f) => esc(f.nome)).join(", ");
+      itens.push(`<div class="tv-item tv-wide"><span class="tv-l">Filhos (${t.filhos.length})</span><span class="tv-v">${nomes}</span></div>`);
+    }
+    if (v === "filho") itens.push(`<div class="tv-item"><span class="tv-l">Pai</span><span class="tv-v">${esc(t.pai_nome)}</span></div>`);
+    if (v === "filho_sem_pai") itens.push(`<div class="tv-item"><span class="tv-l">Pai</span><span class="tv-v tv-alerta">não identificado</span></div>`);
+    if (t.numero_do_pai) {
+      itens.push(`<div class="tv-item"><span class="tv-l">Número</span><span class="tv-v tv-alerta" title="Veio com o número do pai na base">sem nº próprio · do pai: <span class="mono">${esc(formatTelefone(t.telefone))}</span></span></div>`);
+    }
+    return `<div class="tecnico-vinculo-bloco">
+      <span class="tv-tipo ${tipo[0]}">${tipo[1]}</span>
+      ${itens.join("")}
+    </div>`;
+  }
+
   function tecnicosFiltrados() {
     const busca = tecnicoFiltros.busca.toLowerCase();
     return TECNICOS
       .filter((t) => !tecnicoFiltros.status || t.status === tecnicoFiltros.status)
       .filter((t) => !tecnicoFiltros.papel || t.papel === tecnicoFiltros.papel)
-      .filter((t) => !busca || t.nome.toLowerCase().includes(busca));
+      .filter((t) => bateVinculo(t, tecnicoFiltros.vinculo))
+      .filter((t) => !busca || t.nome.toLowerCase().includes(busca)
+        || (t.codigo_parc || "").toLowerCase().includes(busca));
   }
 
   function renderTecnicos() {
@@ -5917,16 +5973,7 @@
             <span>${t.papel === "lider" ? "Líder de equipe" : "Técnico"}</span>
             ${t.regional ? `<span>${esc(t.regional)}</span>` : ""}
             ${t.lider_nome ? `<span>responde a ${esc(t.lider_nome)}</span>` : ""}
-            ${t.codigo_parc ? `<span class="tecnico-parc">${esc(t.codigo_parc)}</span>` : ""}
-            ${t.repasse === true || t.pai_id
-              ? `<span class="tecnico-vinculo filho">${t.pai_nome ? `Filho de ${esc(t.pai_nome)}` : "Filho (pai não identificado)"}</span>`
-              : ""}
-            ${(t.filhos || []).length
-              ? `<span class="tecnico-vinculo pai" title="${esc(t.filhos.map((f) => f.nome).join(", "))}">Pai de ${t.filhos.length}: ${esc(t.filhos.map((f) => f.nome).join(", "))}</span>`
-              : ""}
-            ${t.numero_do_pai
-              ? `<span class="tecnico-tel sem-numero" title="O número da base é do pai, não dele">sem nº próprio · nº do pai ${esc(formatTelefone(t.telefone))}</span>`
-              : `<span class="tecnico-tel">${esc(formatTelefone(t.telefone))}</span>`}
+            ${t.numero_do_pai ? "" : `<span class="tecnico-tel">${esc(formatTelefone(t.telefone))}</span>`}
           </div>
         </div>
         ${tecnicoEstrelas(t.nota)}
@@ -5944,6 +5991,7 @@
         </div>
       </header>
 
+      ${tecnicoVinculo(t)}
       ${tecnicoStepper(t)}
       ${tecnicoEtapas(t)}
 
@@ -6286,30 +6334,66 @@
   const limparInput = $("#limpar-input");
   const limparBtn = $("#limpar-confirmar");
 
-  function abrirLimparModal() {
-    const total = TECNICOS.length;
-    const anotacoes = TECNICOS.reduce((n, t) => n + (t.observacoes || []).length, 0);
-    const responderam = TECNICOS.filter((t) => t.respondido_em).length;
-    if (!total) { toast("A base já está vazia."); return; }
+  // escopo do que vai ser apagado: só a fase aberta (a base de teste em uso)
+  // ou a base inteira. Dentro de uma fase, o padrão é a fase — apagar o resto
+  // tem que ser escolha explícita
+  let limparTotalBase = 0;
+  let limparTotalFase = 0;
+
+  function escopoLimpar() {
+    const marcado = document.querySelector('input[name="limpar-escopo"]:checked');
+    return marcado ? marcado.value : "base";
+  }
+
+  function atualizarAvisoLimpar() {
+    const fase = FASES.find((f) => f.id === FASE_ATUAL);
+    const soFase = escopoLimpar() === "fase" && fase;
+    const total = soFase ? limparTotalFase : limparTotalBase;
+    // anotação e formulário só dá pra contar quando a fase inteira está carregada
+    // na tela (a lista vem limitada, e a base completa chega sem o feedback)
+    const contaFeedback = soFase && TECNICOS.length === limparTotalFase;
+    const anotacoes = contaFeedback ? TECNICOS.reduce((n, t) => n + (t.observacoes || []).length, 0) : null;
+    const responderam = contaFeedback ? TECNICOS.filter((t) => t.respondido_em).length : null;
     // o alerta muda de tom quando há feedback de verdade em jogo: apagar cadastro
     // recém-importado é diferente de apagar o retorno que técnico já mandou
     $("#limpar-aviso").innerHTML = `
       <div class="limpar-numeros">
         <span><b>${total}</b> técnico(s)</span>
-        <span><b>${anotacoes}</b> anotaç(ões)</span>
-        <span><b>${responderam}</b> que já respondeu(ram) o formulário</span>
+        ${contaFeedback ? `<span><b>${anotacoes}</b> anotaç(ões)</span>
+        <span><b>${responderam}</b> que já respondeu(ram) o formulário</span>` : ""}
       </div>
       ${responderam ? `<p class="limpar-alerta">Atenção: ${responderam} técnico(s) já mandaram feedback pelo formulário. Esse retorno some junto.</p>` : ""}`;
+    $("#limpar-explica").innerHTML = soFase
+      ? `Isso apaga <b>só os técnicos da ${esc(fase.nome)}</b> e o feedback deles. A fase e o resto da base continuam. <b>Não tem como desfazer.</b>`
+      : `Isso apaga <b>todos os técnicos de todas as fases e todo o feedback registrado</b>, deixando a base vazia pra você importar a planilha de novo. <b>Não tem como desfazer.</b>`;
+    limparBtn.textContent = soFase ? "Apagar a fase" : "Apagar tudo";
+    limparBtn.dataset.vazio = total ? "" : "1";
+    limparBtn.disabled = !total || limparInput.value.trim().toUpperCase() !== "APAGAR";
+  }
+
+  async function abrirLimparModal() {
+    const fase = FASES.find((f) => f.id === FASE_ATUAL);
+    try {
+      limparTotalBase = (await api("/api/tecnicos/base?limite=1")).total;
+      limparTotalFase = fase ? (await api(`/api/tecnicos/base?limite=1&fase_id=${fase.id}`)).total : 0;
+    } catch (e) { toast("Erro ao contar a base: " + e.message, true); return; }
+    if (!limparTotalBase) { toast("A base já está vazia."); return; }
+    $("#limpar-escopo").hidden = !fase;
+    if (fase) $("#limpar-escopo-fase").textContent = `Só a ${fase.nome} (${limparTotalFase} técnico(s))`;
+    document.querySelector(`input[name="limpar-escopo"][value="${fase ? "fase" : "base"}"]`).checked = true;
     limparInput.value = "";
-    limparBtn.disabled = true;
+    atualizarAvisoLimpar();
     limparModal.hidden = false;
     limparInput.focus();
   }
 
+  document.querySelectorAll('input[name="limpar-escopo"]').forEach((r) =>
+    r.addEventListener("change", atualizarAvisoLimpar));
+
   function fecharLimparModal() { limparModal.hidden = true; }
 
   limparInput.addEventListener("input", () => {
-    limparBtn.disabled = limparInput.value.trim().toUpperCase() !== "APAGAR";
+    limparBtn.disabled = limparBtn.dataset.vazio === "1" || limparInput.value.trim().toUpperCase() !== "APAGAR";
   });
   limparInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !limparBtn.disabled) limparBtn.click();
@@ -6320,11 +6404,16 @@
     try {
       const res = await api("/api/tecnicos/limpar", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirmar: limparInput.value.trim().toUpperCase() }),
+        body: JSON.stringify({
+          confirmar: limparInput.value.trim().toUpperCase(),
+          fase_id: escopoLimpar() === "fase" ? FASE_ATUAL : null,
+        }),
       });
       fecharLimparModal();
       await loadTecnicos();
-      toast(`Base zerada — ${res.tecnicos_apagados} técnico(s) apagado(s).`);
+      toast(res.fase
+        ? `${res.fase.nome} zerada — ${res.tecnicos_apagados} técnico(s) apagado(s).`
+        : `Base zerada — ${res.tecnicos_apagados} técnico(s) apagado(s).`);
     } catch (e) {
       toast("Erro ao limpar: " + e.message, true);
       limparBtn.disabled = false;
@@ -6401,6 +6490,12 @@
       toast("Técnico excluído.");
     } catch (e) { toast("Erro ao excluir: " + e.message, true); }
   });
+
+  $$("#tecnicos-chips-vinculo .chip").forEach((c) => c.addEventListener("click", () => {
+    tecnicoFiltros.vinculo = c.dataset.vinculo;
+    $$("#tecnicos-chips-vinculo .chip").forEach((o) => o.classList.toggle("active", o === c));
+    renderTecnicoList();
+  }));
 
   $$("#tecnicos-chips-papel .chip").forEach((c) => c.addEventListener("click", () => {
     tecnicoFiltros.papel = c.dataset.papel;

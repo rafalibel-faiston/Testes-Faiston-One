@@ -19,8 +19,8 @@ from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
-from sqlalchemy import func as sa_func
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy import exists, func as sa_func, or_
+from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 
 from .. import formulario, models, schemas
 from ..database import get_db
@@ -229,6 +229,36 @@ def _get_tecnico_or_404(db: Session, tecnico_id: int) -> models.Tecnico:
     return tecnico
 
 
+# filtro por vínculo PARC: pai (tem filhos de repasse), filho (PARC REPASSE),
+# filho cujo pai não foi achado, ou sem vínculo nenhum
+VINCULOS = {"pai", "filho", "filho_sem_pai", "sem_vinculo"}
+
+
+def _filtra_vinculo(q, vinculo: Optional[str]):
+    if not vinculo:
+        return q
+    if vinculo not in VINCULOS:
+        raise HTTPException(status_code=400, detail="Vínculo inválido — use pai, filho, filho_sem_pai ou sem_vinculo.")
+    filho = aliased(models.Tecnico)
+    tem_filhos = exists().where(filho.pai_id == models.Tecnico.id)
+    eh_filho = or_(models.Tecnico.repasse.is_(True), models.Tecnico.pai_id.isnot(None))
+    if vinculo == "pai":
+        return q.filter(tem_filhos)
+    if vinculo == "filho":
+        return q.filter(eh_filho)
+    if vinculo == "filho_sem_pai":
+        return q.filter(models.Tecnico.repasse.is_(True), models.Tecnico.pai_id.is_(None))
+    return q.filter(~eh_filho, ~tem_filhos)
+
+
+def _filtra_busca(q, busca: Optional[str]):
+    """Nome ou código de PARC — "PARC 1020" acha o pai e os filhos dele."""
+    if not busca or not busca.strip():
+        return q
+    termo = f"%{busca.strip()}%"
+    return q.filter(or_(models.Tecnico.nome.ilike(termo), models.Tecnico.codigo_parc.ilike(termo)))
+
+
 FASE_STATUSES = ["planejada", "em_andamento", "concluida", "liberada"]
 
 
@@ -239,6 +269,7 @@ def list_tecnicos(
     regional: Optional[str] = None,
     busca: Optional[str] = None,
     fase_id: Optional[int] = None,
+    vinculo: Optional[str] = None,
     limite: int = 300,
     db: Session = Depends(get_db),
 ):
@@ -263,9 +294,8 @@ def list_tecnicos(
         q = q.filter(models.Tecnico.papel == papel)
     if regional:
         q = q.filter(models.Tecnico.regional == regional)
-    if busca:
-        termo = f"%{busca.strip()}%"
-        q = q.filter(models.Tecnico.nome.ilike(termo))
+    q = _filtra_busca(q, busca)
+    q = _filtra_vinculo(q, vinculo)
     return q.order_by(models.Tecnico.nome).limit(max(1, min(limite, 1000))).all()
 
 
@@ -275,6 +305,8 @@ def base_tecnicos(
     regional: Optional[str] = None,
     papel: Optional[str] = None,
     sem_fase: bool = False,
+    fase_id: Optional[int] = None,
+    vinculo: Optional[str] = None,
     limite: int = 50,
     offset: int = 0,
     db: Session = Depends(get_db),
@@ -287,15 +319,18 @@ def base_tecnicos(
     q = db.query(models.Tecnico)
     if sem_fase:
         q = q.filter(models.Tecnico.fase_id.is_(None))
+    if fase_id is not None:
+        q = q.filter(models.Tecnico.fase_id == fase_id)
     if regional:
         q = q.filter(models.Tecnico.regional == regional)
     if papel:
         q = q.filter(models.Tecnico.papel == papel)
-    if busca:
-        q = q.filter(models.Tecnico.nome.ilike(f"%{busca.strip()}%"))
+    q = _filtra_busca(q, busca)
+    q = _filtra_vinculo(q, vinculo)
     total = q.count()
     itens = (
-        q.order_by(models.Tecnico.nome)
+        q.options(selectinload(models.Tecnico.pai), selectinload(models.Tecnico.filhos))
+        .order_by(models.Tecnico.nome)
         .offset(max(0, offset))
         .limit(max(1, min(limite, 200)))
         .all()
@@ -528,11 +563,11 @@ def adicionar_na_fase(fase_id: int, payload: schemas.AdicionarNaFase, db: Sessio
             q = q.filter(models.Tecnico.regional == payload.regional)
         if payload.papel:
             q = q.filter(models.Tecnico.papel == payload.papel)
-        if payload.busca:
-            q = q.filter(models.Tecnico.nome.ilike(f"%{payload.busca.strip()}%"))
+        q = _filtra_busca(q, payload.busca)
+        q = _filtra_vinculo(q, payload.vinculo)
         # sem filtro nenhum só passa se pedir "todos" explicitamente — um payload
         # vazio por engano não pode jogar a base inteira dentro da fase
-        if not (payload.regional or payload.papel or payload.busca or payload.todos):
+        if not (payload.regional or payload.papel or payload.busca or payload.vinculo or payload.todos):
             raise HTTPException(status_code=400, detail="Escolha técnicos ou informe um filtro.")
     if not payload.incluir_de_outras_fases:
         q = q.filter((models.Tecnico.fase_id.is_(None)) | (models.Tecnico.fase_id == fase_id))
@@ -811,26 +846,45 @@ def vincular_ajuste(observacao_id: int, payload: schemas.VincularAjuste, db: Ses
 
 @router.post("/tecnicos/limpar")
 def limpar_base(payload: schemas.LimparBaseTecnicos, db: Session = Depends(get_db)):
-    """Zera a base de técnicos — apaga todos os cadastros e o feedback junto.
+    """Zera a base de técnicos — apaga os cadastros e o feedback junto.
 
     Serve pra recomeçar a importação do zero quando a planilha de origem estava
-    errada. Não tem volta, então exige a palavra APAGAR: um DELETE disparado sem
-    querer (ou um clique errado na tela) não passa daqui.
+    errada. Com `fase_id`, apaga só quem está naquela fase (a base de teste em
+    uso) e deixa o resto da base intacto. Não tem volta, então exige a palavra
+    APAGAR: um DELETE disparado sem querer (ou um clique errado na tela) não
+    passa daqui.
     """
     if (payload.confirmar or "").strip().upper() != "APAGAR":
         raise HTTPException(
             status_code=400,
             detail='Confirmação inválida — para zerar a base, mande {"confirmar": "APAGAR"}.',
         )
-    tecnicos = db.query(models.Tecnico).count()
-    observacoes = db.query(models.TecnicoObservacao).count()
+    fase = None
+    tecnicos_q = db.query(models.Tecnico)
+    if payload.fase_id is not None:
+        fase = db.query(models.PilotoFase).filter(models.PilotoFase.id == payload.fase_id).first()
+        if not fase:
+            raise HTTPException(status_code=404, detail="Fase não encontrada")
+        tecnicos_q = tecnicos_q.filter(models.Tecnico.fase_id == fase.id)
+    ids = [t.id for t in tecnicos_q.with_entities(models.Tecnico.id)]
+    obs_q = db.query(models.TecnicoObservacao).filter(models.TecnicoObservacao.tecnico_id.in_(ids))
+    observacoes = obs_q.count()
     # as observações são apagadas explicitamente: no delete em massa quem cuidaria
     # disso seria o ON DELETE CASCADE do banco, e o SQLite local não o aplica por
     # padrão — sem isso, o histórico ficaria órfão em vez de sumir junto
-    db.query(models.TecnicoObservacao).delete(synchronize_session=False)
-    db.query(models.Tecnico).delete(synchronize_session=False)
+    obs_q.delete(synchronize_session=False)
+    # filho que fica (em outra fase) e tinha o pai apagado perde o vínculo, em vez
+    # de apontar pra um id que não existe mais
+    db.query(models.Tecnico).filter(
+        models.Tecnico.pai_id.in_(ids), models.Tecnico.id.notin_(ids),
+    ).update({models.Tecnico.pai_id: None}, synchronize_session=False)
+    db.query(models.Tecnico).filter(models.Tecnico.id.in_(ids)).delete(synchronize_session=False)
     db.commit()
-    return {"tecnicos_apagados": tecnicos, "observacoes_apagadas": observacoes}
+    return {
+        "tecnicos_apagados": len(ids),
+        "observacoes_apagadas": observacoes,
+        "fase": {"id": fase.id, "nome": fase.nome} if fase else None,
+    }
 
 
 @router.post("/tecnicos", response_model=schemas.TecnicoOut, status_code=201)

@@ -2456,10 +2456,6 @@ body.inline-connecting * { cursor:crosshair !important; }
 .tecnico-etapa-ok + .tecnico-etapa-ok::before { content:'·'; margin-right:6px; color:var(--line-2); font-weight:400; }
 
 .tecnico-tel { font-family:'Roboto Mono',monospace; font-size:11px; }
-.tecnico-tel.sem-numero { color:var(--warn); }
-.tecnico-parc { font-family:'Roboto Mono',monospace; font-size:11px; }
-.tecnico-vinculo.filho { color:var(--warn); font-weight:600; }
-.tecnico-vinculo.pai { font-weight:600; max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 .tecnico-obs-bloco { margin-top:12px; padding-top:10px; border-top:1px solid var(--line); }
 .tecnico-obs-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
@@ -2544,3 +2540,30 @@ body.inline-connecting * { cursor:crosshair !important; }
   .tecnico-tel { margin-left:0; width:100%; }
   .tecnico-obs-add .btn-primary { width:100%; }
 }
+
+.limpar-escopo { display:flex; flex-direction:column; gap:6px; margin-bottom:10px; font-size:13px; }
+.limpar-escopo label { display:flex; align-items:center; gap:8px; cursor:pointer; }
+.base-vinc { flex:0 0 190px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.base-vinculo { font-size:11px; font-weight:600; padding:1px 7px; border-radius:8px; white-space:nowrap; }
+.base-vinculo-vazio { color:var(--text-3); }
+.base-vinculo.pai { color:var(--part); background:var(--part-bg); }
+.base-vinculo.filho { color:var(--warn); background:var(--warn-bg); }
+.base-tel.sem-numero { color:var(--warn); }
+
+/* vínculo PARC no card do técnico: bloco próprio, separado do nome */
+.tecnico-vinculo-bloco {
+  display:flex; flex-wrap:wrap; align-items:center; gap:6px 18px;
+  margin:10px 0 4px; padding:8px 12px; border-radius:var(--radius-sm);
+  background:var(--surface-2); border:1px solid var(--line); font-size:12px;
+}
+.tv-tipo { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:2px 8px; border-radius:8px; }
+.tv-tipo.pai { color:var(--part); background:var(--part-bg); }
+.tv-tipo.filho { color:var(--warn); background:var(--warn-bg); }
+.tv-tipo.solo { color:var(--text-3); background:var(--na-bg); }
+.tv-item { display:flex; flex-direction:column; gap:1px; min-width:0; }
+.tv-wide { flex:1 1 240px; }
+.tv-l { font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-3); }
+.tv-v { color:var(--text); }
+.tv-v.mono, .tv-v .mono { font-family:'Roboto Mono',monospace; font-size:11px; }
+.tv-alerta { color:var(--warn); font-weight:600; }
+@media (max-width: 720px) { .base-vinc { display:none; } }

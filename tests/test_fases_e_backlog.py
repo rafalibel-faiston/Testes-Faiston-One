@@ -196,7 +196,53 @@ def test_limpar_leva_o_feedback_junto(client, tecnico):
     client.post(f"/api/formulario/{tecnico['token']}", json={"problema": "algo"})
     resp = client.post("/api/tecnicos/limpar", json={"confirmar": "APAGAR"})
 
-    assert resp.json() == {"tecnicos_apagados": 1, "observacoes_apagadas": 1}
+    assert resp.json() == {"tecnicos_apagados": 1, "observacoes_apagadas": 1, "fase": None}
     assert client.get("/api/tecnicos").json() == []
     # o link do formulário dele para de funcionar junto
     assert client.get(f"/formulario/{tecnico['token']}").status_code == 404
+
+
+def test_limpar_so_a_fase_deixa_o_resto_da_base(client):
+    fase = client.post("/api/piloto/fases", json={"nome": "Fase teste"}).json()
+    na_fase = client.post("/api/tecnicos", json={"nome": "Na Fase", "telefone": "11911112222"}).json()
+    fora = client.post("/api/tecnicos", json={"nome": "Fora", "telefone": "11933334444"}).json()
+    client.post(f"/api/piloto/fases/{fase['id']}/tecnicos", json={"tecnico_ids": [na_fase["id"]]})
+    client.post(f"/api/formulario/{na_fase['token']}", json={"problema": "algo"})
+    client.post(f"/api/tecnicos/{fora['id']}/observacoes", json={"texto": "fica"})
+
+    resp = client.post("/api/tecnicos/limpar", json={"confirmar": "APAGAR", "fase_id": fase["id"]})
+
+    assert resp.json() == {
+        "tecnicos_apagados": 1, "observacoes_apagadas": 1,
+        "fase": {"id": fase["id"], "nome": "Fase teste"},
+    }
+    restantes = client.get("/api/tecnicos").json()
+    assert [t["nome"] for t in restantes] == ["Fora"]
+    assert len(restantes[0]["observacoes"]) == 1              # feedback de fora fica
+    # a fase continua existindo, só vazia
+    assert any(f["id"] == fase["id"] for f in client.get("/api/piloto/fases").json())
+
+
+def test_limpar_fase_solta_filho_que_ficou_sem_o_pai(client):
+    from tests.conftest import planilha
+
+    fase = client.post("/api/piloto/fases", json={"nome": "Fase pais"}).json()
+    arquivo = planilha([
+        ["João Pai", "11999998888", "PARC 1"],
+        ["Pedro Filho", "11999998888", "PARC 1 REPASSE"],
+    ], cabecalho=["Nome", "Numero", "Codigo de PARC"])
+    client.post("/api/tecnicos/importar", files={"file": ("b.xlsx", arquivo)})
+    pai = next(t for t in client.get("/api/tecnicos").json() if t["nome"] == "João Pai")
+    client.post(f"/api/piloto/fases/{fase['id']}/tecnicos", json={"tecnico_ids": [pai["id"]]})
+
+    client.post("/api/tecnicos/limpar", json={"confirmar": "APAGAR", "fase_id": fase["id"]})
+
+    filho = client.get("/api/tecnicos").json()[0]
+    assert filho["nome"] == "Pedro Filho"
+    assert filho["pai_id"] is None
+
+
+def test_limpar_fase_inexistente_da_404(client, tecnico):
+    resp = client.post("/api/tecnicos/limpar", json={"confirmar": "APAGAR", "fase_id": 99999})
+    assert resp.status_code == 404
+    assert len(client.get("/api/tecnicos").json()) == 1

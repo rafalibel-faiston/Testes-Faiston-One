@@ -562,6 +562,10 @@ class Tecnico(Base):
     def pai_nome(self):
         return self.pai.nome if self.pai is not None else None
 
+    @property
+    def filhos_qtd(self):
+        return len(self.filhos)
+
 
 class TecnicoObservacao(Base):
     """Uma nota de QA sobre o teste de um técnico com o Track One.
