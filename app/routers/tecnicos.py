@@ -48,9 +48,12 @@ STATUS_LABELS = {
 }
 TIPOS_OBS = {"positivo", "melhoria", "problema"}
 
-# textos enviados exatamente como definidos com o Rafa — {nome} é a única
-# substituição feita na hora de gerar o link do WhatsApp.
-TEMPLATE_TECNICO = """Olá, {nome}. Aqui é o Rafael, da Faiston.
+# textos enviados exatamente como definidos com o Rafa — {nome} e {remetente}
+# (quem do time manda: o responsável pelo técnico) são substituídos na hora de
+# gerar o link do WhatsApp.
+# sem responsável definido, a mensagem sai no nome de quem escreveu os textos
+REMETENTE_PADRAO = "Rafael"
+TEMPLATE_TECNICO = """Olá, {nome}. Aqui é o {remetente}, da Faiston.
 
 Você foi selecionado para participar de um teste de um novo sistema da Faiston, o *Faiston One*.
 
@@ -61,7 +64,7 @@ O que você precisa fazer:
 4. Manter a localização do celular ativada — é por meio dela que o sistema identifica os chamados disponíveis na sua região
 5. Continuar seguindo o fluxo normalmente pelo GO.ON, da mesma forma que já faz hoje
 6. Em paralelo, você também passará a utilizar o aplicativo novo — é por meio dele que acompanharemos todo o andamento do atendimento
-7. Nos próximos dias, alguns chamados reais da Grande São Paulo passarão por esse teste. Quando um chamado for oferecido a você, basta aceitá-lo pelo aplicativo, como de costume — atenção: ao aceitar, você estará confirmando que tem condições de atender o chamado conforme a localidade informada
+7. Nos próximos dias, alguns chamados reais {regiao} passarão por esse teste. Quando um chamado for oferecido a você, basta aceitá-lo pelo aplicativo, como de costume — atenção: ao aceitar, você estará confirmando que tem condições de atender o chamado conforme a localidade informada
 
 Importante: trata-se apenas de um teste — a forma de atendimento continua a mesma: deslocamento, atendimento e preenchimento da RAT seguem normalmente. A diferença é que o aplicativo novo passará a rodar em paralelo com o GO.ON, para que tenhamos visibilidade completa do fluxo.
 
@@ -93,7 +96,7 @@ Pode ser sincero, é justamente pra ajustar o que estiver ruim antes de liberar 
 # reais (ex.: Fase 2 - Acionamento SP) — diferente do convite genérico, já
 # fala da instalação do Track One, do cadastro de competências (obrigatório
 # pro chamado ser direcionado) e do fluxo em paralelo com o GO.ON
-TEMPLATE_ACIONAMENTO = """Olá, {nome}. Aqui é o Rafael, da Faiston.
+TEMPLATE_ACIONAMENTO = """Olá, {nome}. Aqui é o {remetente}, da Faiston.
 
 Você foi selecionado para participar de um teste de um novo sistema da Faiston, o *Faiston One*.
 
@@ -104,7 +107,7 @@ O que você precisa fazer:
 4. Manter a localização do celular ativada — é por meio dela que o sistema identifica os chamados disponíveis na sua região
 5. Continuar seguindo o fluxo normalmente pelo GO.ON, da mesma forma que já faz hoje
 6. Em paralelo, você também passará a utilizar o aplicativo novo — é por meio dele que acompanharemos todo o andamento do atendimento
-7. Nos próximos dias, alguns chamados reais da Grande São Paulo passarão por esse teste. Quando um chamado for oferecido a você, basta aceitá-lo pelo aplicativo, como de costume — atenção: ao aceitar, você estará confirmando que tem condições de atender o chamado conforme a localidade informada
+7. Nos próximos dias, alguns chamados reais {regiao} passarão por esse teste. Quando um chamado for oferecido a você, basta aceitá-lo pelo aplicativo, como de costume — atenção: ao aceitar, você estará confirmando que tem condições de atender o chamado conforme a localidade informada
 
 Importante: trata-se apenas de um teste — a forma de atendimento continua a mesma: deslocamento, atendimento e preenchimento da RAT seguem normalmente. A diferença é que o aplicativo novo passará a rodar em paralelo com o GO.ON, para que tenhamos visibilidade completa do fluxo.
 
@@ -175,6 +178,51 @@ def _link_apk(db: Session, base_url: str) -> Optional[str]:
     return f"{(base_url or '').rstrip('/')}{CAMINHO_APK}"
 
 
+# de onde vêm os chamados do teste, pela UF do técnico — o texto dizia sempre
+# "da Grande São Paulo", errado pra quem é de MG, ES, RJ… SP continua com o
+# texto original do piloto
+REGIAO_POR_UF = {
+    "AC": "do Acre", "AL": "de Alagoas", "AP": "do Amapá", "AM": "do Amazonas",
+    "BA": "da Bahia", "CE": "do Ceará", "DF": "do Distrito Federal", "ES": "do Espírito Santo",
+    "GO": "de Goiás", "MA": "do Maranhão", "MT": "de Mato Grosso", "MS": "de Mato Grosso do Sul",
+    "MG": "de Minas Gerais", "PA": "do Pará", "PB": "da Paraíba", "PR": "do Paraná",
+    "PE": "de Pernambuco", "PI": "do Piauí", "RJ": "do Rio de Janeiro", "RN": "do Rio Grande do Norte",
+    "RS": "do Rio Grande do Sul", "RO": "de Rondônia", "RR": "de Roraima", "SC": "de Santa Catarina",
+    "SP": "da Grande São Paulo", "SE": "de Sergipe", "TO": "do Tocantins",
+}
+# regional que não é UF ("Sudeste", "SP capital"…): sem chutar o estado
+REGIAO_GENERICA = "da sua região"
+
+
+def _regiao_da_mensagem(tecnico: models.Tecnico) -> str:
+    return REGIAO_POR_UF.get((tecnico.regional or "").strip().upper(), REGIAO_GENERICA)
+
+
+# direto que tem repasse: o convite pede autorização pra chamar o pessoal dele —
+# o repasse trabalha debaixo do direto e muitas vezes nem tem número próprio
+# na base (está com o do direto), então é o direto quem libera e passa o contato
+BLOCO_REPASSES = """Vi aqui que você tem técnicos de repasse trabalhando com você: {lista}.
+Podemos mandar esse mesmo convite pra eles também? Se sim, me passa o WhatsApp de cada um (ou me avisa se o contato é por este número mesmo)."""
+# nomes listados no convite; acima disso vira "e mais N"
+MAX_REPASSES_NA_MENSAGEM = 8
+# o bloco entra antes do "Qualquer dúvida…", que fecha a mensagem
+ANTES_DO_FECHO = "Qualquer dúvida ou dificuldade no aplicativo"
+
+
+def _com_repasses(texto: str, tecnico: models.Tecnico) -> str:
+    """No convite do direto com repasses, pergunta se pode chamar os repasses."""
+    if tecnico.vinculo != "direto" or not tecnico.repasses:
+        return texto
+    nomes = [r.nome.strip().title() for r in tecnico.repasses]
+    lista = ", ".join(nomes[:MAX_REPASSES_NA_MENSAGEM])
+    if len(nomes) > MAX_REPASSES_NA_MENSAGEM:
+        lista += f" e mais {len(nomes) - MAX_REPASSES_NA_MENSAGEM}"
+    bloco = BLOCO_REPASSES.format(lista=lista)
+    if ANTES_DO_FECHO in texto:
+        return texto.replace(ANTES_DO_FECHO, f"{bloco}\n\n{ANTES_DO_FECHO}", 1)
+    return f"{texto}\n\n{bloco}"
+
+
 def _com_apk(texto: str, apk_link: Optional[str]) -> str:
     """Põe o link do APK dentro da mensagem: no lugar do "(o link será enviado a
     seguir)" quando o template promete o link, ou no fim quando não promete."""
@@ -195,6 +243,8 @@ def _mensagem_para(
     `apk_link` (ver _link_apk) vai embutido em toda mensagem que pede pra
     instalar o app — o wa.me não anexa arquivo, então o APK vai como link."""
     primeiro_nome = (tecnico.nome or "").strip().split(" ")[0] or tecnico.nome
+    # quem manda é o responsável pela fila desse técnico (Luis, Rafael, Renato…)
+    remetente = (tecnico.responsavel or "").strip() or REMETENTE_PADRAO
     link = f"{(base_url or '').rstrip('/')}/formulario/{tecnico.token or ''}"
     if tipo == "cobranca":
         # quem ainda nem foi convidado não tem o que cobrar: recebe o convite
@@ -210,11 +260,15 @@ def _mensagem_para(
         # vai com o APK de novo: se ele não conseguiu instalar, o link já está ali
         return _com_apk(TEMPLATE_FOLLOWUP.format(nome=primeiro_nome), apk_link)
     if tipo == "acionamento":
-        return _com_apk(TEMPLATE_ACIONAMENTO.format(nome=primeiro_nome), apk_link)
+        texto = TEMPLATE_ACIONAMENTO.format(
+            nome=primeiro_nome, remetente=remetente, regiao=_regiao_da_mensagem(tecnico))
+        return _com_apk(_com_repasses(texto, tecnico), apk_link)
     if tecnico.papel == "lider":
         # o líder só avisa o time — quem instala é cada técnico, no convite dele
         return TEMPLATE_LIDER.format(nome=primeiro_nome)
-    return _com_apk(TEMPLATE_TECNICO.format(nome=primeiro_nome), apk_link)
+    texto = TEMPLATE_TECNICO.format(
+        nome=primeiro_nome, remetente=remetente, regiao=_regiao_da_mensagem(tecnico))
+    return _com_apk(_com_repasses(texto, tecnico), apk_link)
 
 
 def _versao_da_fase(tecnico: models.Tecnico) -> Optional[str]:

@@ -6210,7 +6210,13 @@
         : "Ainda não tem APK no sistema — suba em <b>Subir APK</b> (no topo da tela) pra ele ir embutido na mensagem. Sem isso, envie o APK como anexo na conversa.",
     };
     $("#tecnico-msg-titulo").textContent = TITULOS[tipo] || TITULOS.convite;
-    $("#tecnico-msg-dica").innerHTML = DICAS[tipo] || DICAS.convite;
+    let dica = DICAS[tipo] || DICAS.convite;
+    const comRepasses = t.vinculo === "direto" && (t.repasses || []).length
+      && (tipo === "convite" || tipo === "acionamento" || !tipo);
+    if (comRepasses) {
+      dica += ` <br><br>Ele é <b>direto com ${t.repasses.length} repasse(s)</b> — a mensagem pergunta se pode chamar o pessoal dele. Quando ele mandar os contatos, atualize o telefone de cada repasse no card.`;
+    }
+    $("#tecnico-msg-dica").innerHTML = dica;
     $("#tecnico-msg-texto").value = msg.mensagem;
     $("#tecnico-msg-abrir").href = msg.wa_link;
     $("#tecnico-msg-modal").hidden = false;
