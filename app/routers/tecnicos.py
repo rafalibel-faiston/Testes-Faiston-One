@@ -1042,6 +1042,42 @@ def limpar_base(payload: schemas.LimparBaseTecnicos, db: Session = Depends(get_d
     }
 
 
+def religar_repasses(db: Session) -> dict:
+    """Liga ao direto todo repasse que ainda está sem ele, pelo código do direto.
+
+    No import o repasse só acha o direto que já está na base ou na mesma
+    planilha — o direto que entra depois (outra planilha, outra região) ficava
+    sem os repasses dele. Isto roda no fim de cada importação e na subida do
+    app, então a ligação se acerta sozinha. Com mais de um direto com o mesmo
+    código, desempata pelo número (o repasse costuma estar com o do direto);
+    sem desempate, fica sem ligar e volta em `ambiguos`."""
+    db.flush()   # o import acabou de criar o direto: sem o flush a consulta não vê
+    diretos = {}
+    for t in db.query(models.Tecnico).filter(_nao_repasse(), models.Tecnico.codigo.isnot(None)).all():
+        diretos.setdefault(_chave_codigo(t.codigo), []).append(t)
+    religados = 0
+    ambiguos = set()
+    soltos = db.query(models.Tecnico).filter(
+        models.Tecnico.vinculo == "repasse",
+        models.Tecnico.direto_id.is_(None),
+        models.Tecnico.direto_codigo.isnot(None),
+    ).all()
+    for r in soltos:
+        achados = diretos.get(_chave_codigo(r.direto_codigo), [])
+        if len(achados) > 1:
+            achados = [d for d in achados if d.telefone == r.telefone] or achados
+        if len(achados) != 1:
+            if achados:
+                ambiguos.add(r.direto_codigo)
+            continue
+        direto = achados[0]
+        r.direto = direto
+        r.direto_nome = r.direto_nome or direto.nome
+        religados += 1
+    db.flush()
+    return {"religados": religados, "ambiguos": sorted(ambiguos)}
+
+
 def _nao_repasse():
     # vinculo NULL também conta: "!= 'repasse'" sozinho deixaria o NULL de fora
     return or_(models.Tecnico.vinculo.is_(None), models.Tecnico.vinculo != "repasse")
@@ -1067,6 +1103,14 @@ def _liga_direto(db: Session, tecnico: models.Tecnico, nome: Optional[str], codi
     tecnico.direto = direto
     tecnico.direto_nome = nome or (direto.nome if direto else None)
     tecnico.direto_codigo = codigo or (direto.codigo if direto else None)
+
+
+@router.post("/tecnicos/religar")
+def religar(db: Session = Depends(get_db)):
+    """Liga na mão os repasses sem direto (o import e a subida do app já fazem)."""
+    resultado = religar_repasses(db)
+    db.commit()
+    return resultado
 
 
 @router.post("/tecnicos", response_model=schemas.TecnicoOut, status_code=201)
@@ -1916,6 +1960,9 @@ async def importar_tecnicos(
             chave = _chave_codigo(r["direto_codigo"])
             achados = diretos_por_codigo.get(chave) or [
                 t for t in base_nao_repasse if t.codigo and _chave_codigo(t.codigo) == chave]
+            if len(achados) > 1 and r["telefone"]:
+                # dois diretos com o mesmo código: o do repasse é o dono do número dele
+                achados = [t for t in achados if t.telefone == r["telefone"]] or achados
             if len(achados) == 1:
                 return achados[0]
         if r["direto_nome"]:
@@ -1962,6 +2009,8 @@ async def importar_tecnicos(
     # base do Brasil inteiro numa planilha só: com `distribuir`, quem ficou sem
     # fase cai na fase que cobre a UF dele
     distribuicao = _distribui_por_uf(db) if distribuir and fase_fixa is None else None
+    # repasse que já estava na base esperando o direto que só chegou agora
+    religacao = religar_repasses(db)
     db.commit()
 
     # o resumo é o que responde "por que entraram menos do que a planilha tinha":
@@ -1990,4 +2039,5 @@ async def importar_tecnicos(
         "vinculos": {**vinculos, "repasse_sem_direto": repasse_sem_direto} if (tem_tipo or tem_codigo) else None,
         "avisos": avisos,
         "distribuicao": distribuicao,
+        "religacao": religacao,
     }

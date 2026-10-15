@@ -56,6 +56,9 @@ try:
     seed_data.seed_todo_desmame_planilha(_db)
     seed_data.seed_ativos_ajustes(_db)
     seed_data.backfill_tecnico_tokens(_db)
+    # repasse que ficou sem o direto (direto importado depois dele)
+    tecnicos_router.religar_repasses(_db)
+    _db.commit()
 finally:
     _db.close()
 
