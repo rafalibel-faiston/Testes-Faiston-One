@@ -666,6 +666,12 @@ app já usa entre a lista de status do Python e a do JS).
   quem já está em outra fase só entra com `incluir_de_outras_fases`
 - fases aceitam `data_inicio` e `prazo` (`AAAA-MM-DD` ou `DD/MM/AAAA`; `""` limpa)
   e `ufs` (lista de siglas, ex. `["SP","RJ"]`; `[]` tira a fase do mapa)
+- `POST /api/piloto/fases/distribuir` — põe quem está sem fase na fase que cobre
+  a UF dele (as UFs marcadas na fase); só fases planejadas/em andamento, não
+  mexe em quem já tem fase nem muda o status da fase. Devolve quantos foram pra
+  cada fase, `ufs_sem_fase` (UF sem nenhuma fase marcada) e
+  `ufs_em_mais_de_uma_fase`. A importação faz o mesmo com `distribuir=true`
+  (o botão Importar da tela já manda)
 - `DELETE /api/piloto/fases/{id}/tecnicos/{tecnico_id}` — tira um da fase
 - `GET  /api/tecnicos/resumo` — contagem por status + total de feedback por tipo
 - `POST /api/tecnicos` — cadastra (telefone sem DDI de 10/11 dígitos ganha o 55 na frente sozinho)

@@ -6262,8 +6262,11 @@
       fd.append("file", file, file.name);
       if (testerName()) fd.append("autor", testerName());
       if (faseId) fd.append("fase_id", faseId);
+      // importar normal: quem ficar sem fase já cai na fase da UF dele
+      else fd.append("distribuir", "true");
       toast("Importando planilha…");
       const res = await api("/api/tecnicos/importar", { method: "POST", body: fd });
+      if (res.distribuicao) await loadFases();
       await loadTecnicos();
       mostrarResultadoImportacao(res, file.name);
     } catch (err) { toast("Erro ao importar planilha: " + err.message, true); }
@@ -6319,6 +6322,9 @@
         `<div class="stat ok"><span class="stat-n">${f.tecnicos}</span><span class="stat-l">Em ${esc(f.nome)}</span></div>`).join("");
     }
 
+    const dist = res.distribuicao;
+    if (dist) $("#import-stats").innerHTML += distribuicaoStats(dist);
+
     const motivos = Object.entries(res.resumo || {}).sort((a, b) => b[1] - a[1]);
     $("#import-rejeitados-box").hidden = !motivos.length;
     const avisos = {};
@@ -6341,6 +6347,35 @@
       ? `${entraram} técnico(s) na base (${res.criados || 0} novo(s), ${res.atualizados || 0} atualizado(s)).${criadas}`
       : "Nenhum técnico entrou — veja o motivo no resultado.", !entraram);
   }
+
+  // quantos caíram em cada fase pela UF, e o que ficou sem fase e por quê
+  function distribuicaoStats(dist) {
+    const semFase = Object.entries(dist.ufs_sem_fase || {});
+    return (dist.fases || []).map((f) =>
+      `<div class="stat ok"><span class="stat-n">${f.tecnicos}</span><span class="stat-l">${esc(f.nome)} (${esc(f.ufs.join(", "))})</span></div>`).join("")
+      + (semFase.length ? `<div class="stat warn"><span class="stat-n">${semFase.reduce((n, [, q]) => n + q, 0)}</span><span class="stat-l">Sem fase pra UF: ${esc(semFase.map(([uf, q]) => `${uf} (${q})`).join(", "))}</span></div>` : "")
+      + (dist.sem_uf ? `<div class="stat warn"><span class="stat-n">${dist.sem_uf}</span><span class="stat-l">Sem UF reconhecida</span></div>` : "")
+      + ((dist.ufs_em_mais_de_uma_fase || []).length ? `<div class="stat warn"><span class="stat-n">${dist.ufs_em_mais_de_uma_fase.length}</span><span class="stat-l">UF em mais de uma fase (foi pra primeira): ${esc(dist.ufs_em_mais_de_uma_fase.map((r) => r.uf).join(", "))}</span></div>` : "");
+  }
+
+  $("#btn-distribuir").addEventListener("click", async () => {
+    const comUf = FASES.filter((f) => (f.ufs || []).length && (f.status === "planejada" || f.status === "em_andamento"));
+    if (!comUf.length) {
+      toast("Nenhuma fase com UF marcada — edite as fases e marque os estados de cada uma.", true);
+      return;
+    }
+    const plano = comUf.map((f) => `• ${f.nome}: ${f.ufs.join(", ")}`).join("\n");
+    if (!confirm(`Colocar quem está sem fase na fase da UF dele?\n\n${plano}\n\nQuem já está em alguma fase não é mexido.`)) return;
+    try {
+      const dist = await api("/api/piloto/fases/distribuir", { method: "POST" });
+      await loadFases();
+      await loadTecnicos();
+      const semFase = Object.values(dist.ufs_sem_fase || {}).reduce((n, q) => n + q, 0);
+      toast(`${dist.distribuidos} técnico(s) distribuído(s) pelas fases.`
+        + (semFase ? ` ${semFase} ficaram sem fase (UF sem fase: ${Object.keys(dist.ufs_sem_fase).join(", ")}).` : "")
+        + (dist.sem_uf ? ` ${dist.sem_uf} sem UF reconhecida.` : ""));
+    } catch (err) { toast("Erro ao distribuir: " + err.message, true); }
+  });
 
   function baixarRelatorioImportacao() {
     if (!ultimaImportacao) return;

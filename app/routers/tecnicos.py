@@ -441,6 +441,63 @@ def _fase_em_andamento(fase: models.PilotoFase) -> None:
         fase.iniciada_em = fase.iniciada_em or datetime.now(timezone.utc)
 
 
+def _distribui_por_uf(db: Session) -> dict:
+    """Põe cada técnico sem fase na fase que cobre a UF dele (as UFs marcadas na
+    fase, as mesmas do mapa). Só mexe em quem está sem fase — ninguém é tirado
+    de uma fase nem tem o progresso resetado — e só usa fase que ainda não
+    acabou (planejada ou em andamento). UF marcada em mais de uma fase fica na
+    primeira pela ordem, e volta em `ufs_em_mais_de_uma_fase`.
+
+    Não muda o status da fase: a fase 3 planejada recebe o pessoal dela, mas
+    continua planejada até alguém começar."""
+    db.flush()   # o import acabou de criar gente: sem o flush a consulta não vê
+    fases = db.query(models.PilotoFase).filter(
+        models.PilotoFase.status.in_(("planejada", "em_andamento")),
+        models.PilotoFase.ufs.isnot(None),
+    ).order_by(models.PilotoFase.ordem, models.PilotoFase.id).all()
+    fase_da_uf = {}
+    repetidas = {}
+    for fase in fases:
+        for uf in fase.ufs.split(","):
+            if uf in fase_da_uf:
+                repetidas.setdefault(uf, [fase_da_uf[uf].nome]).append(fase.nome)
+            else:
+                fase_da_uf[uf] = fase
+    por_fase = {}
+    sem_fase_na_uf = {}
+    sem_uf = 0
+    for t in db.query(models.Tecnico).filter(models.Tecnico.fase_id.is_(None)).all():
+        uf = (t.regional or "").strip().upper()
+        if uf not in UFS:
+            sem_uf += 1
+            continue
+        fase = fase_da_uf.get(uf)
+        if fase is None:
+            sem_fase_na_uf[uf] = sem_fase_na_uf.get(uf, 0) + 1
+            continue
+        _colocar_na_fase(t, fase)
+        por_fase[fase.id] = por_fase.get(fase.id, 0) + 1
+    db.flush()
+    return {
+        "distribuidos": sum(por_fase.values()),
+        "fases": [{"id": f.id, "nome": f.nome, "ufs": f.ufs.split(","), "tecnicos": por_fase[f.id]}
+                  for f in fases if f.id in por_fase],
+        # UF que tem técnico mas nenhuma fase cobre — falta marcar ela em alguma fase
+        "ufs_sem_fase": dict(sorted(sem_fase_na_uf.items())),
+        "sem_uf": sem_uf,
+        "ufs_em_mais_de_uma_fase": [{"uf": uf, "fases": nomes} for uf, nomes in sorted(repetidas.items())],
+    }
+
+
+@router.post("/piloto/fases/distribuir")
+def distribuir_por_regiao(db: Session = Depends(get_db)):
+    """Distribui a base pelas fases conforme as UFs marcadas em cada uma — é o
+    "subi a base do Brasil inteiro, agora cada região cai na sua fase"."""
+    resultado = _distribui_por_uf(db)
+    db.commit()
+    return resultado
+
+
 @router.get("/piloto/fases", response_model=List[schemas.PilotoFaseOut])
 def listar_fases(db: Session = Depends(get_db)):
     fases = db.query(models.PilotoFase).order_by(
@@ -1478,6 +1535,7 @@ async def importar_tecnicos(
     file: UploadFile = File(...),
     autor: Optional[str] = Form(default=None),
     fase_id: Optional[int] = Form(default=None),
+    distribuir: bool = Form(default=False),
     db: Session = Depends(get_db),
 ):
     """Sobe a base de técnicos de uma vez a partir de uma planilha .xlsx (colunas:
@@ -1814,6 +1872,9 @@ async def importar_tecnicos(
             else:
                 avisa(r, "repasse sem direto informado")
     rejeitados.sort(key=lambda e: e["linha"])
+    # base do Brasil inteiro numa planilha só: com `distribuir`, quem ficou sem
+    # fase cai na fase que cobre a UF dele
+    distribuicao = _distribui_por_uf(db) if distribuir and fase_fixa is None else None
     db.commit()
 
     # o resumo é o que responde "por que entraram menos do que a planilha tinha":
@@ -1841,4 +1902,5 @@ async def importar_tecnicos(
         # direto / repasse / CLT — só quando a planilha tem a coluna Tipo ou Código
         "vinculos": {**vinculos, "repasse_sem_direto": repasse_sem_direto} if (tem_tipo or tem_codigo) else None,
         "avisos": avisos,
+        "distribuicao": distribuicao,
     }
