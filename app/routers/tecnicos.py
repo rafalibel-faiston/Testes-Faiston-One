@@ -9,6 +9,7 @@ pronta pra abrir no WhatsApp — o texto muda conforme o papel (técnico direto
 ou líder avisando a equipe), com o nome já substituído.
 """
 import io
+import re
 import unicodedata
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
@@ -1294,6 +1295,9 @@ COLUNAS_IMPORTACAO = {
     "direto_nome": {"direto", "tecnico direto", "nome do direto", "direto responsavel", "parc direto"},
     "direto_codigo": {"codigo do direto", "codigo direto", "cod direto", "cod do direto",
                       "codigo parc direto", "codigo do parc direto"},
+    # base de Agentes: "ES PARC1998" = direto PARC1998; "ES PARC1700 REPASSE" =
+    # repasse que trabalha debaixo do direto PARC1700 (a UF na frente é ignorada)
+    "agente": {"agente", "agentes", "codigo agente", "exemplificacao (agentes)", "exemplificacao agentes"},
     "direto_telefone": {"celular do direto", "telefone do direto", "numero do direto", "whatsapp do direto"},
     "papel": {"papel", "funcao", "função", "cargo"},
     "regional": {"regional", "cidade", "regiao", "praca", "uf"},
@@ -1305,7 +1309,28 @@ COLUNAS_IMPORTACAO = {
 COLUNA_FASE = {"fase", "fase do piloto", "leva"}
 # colunas que só casam pelo nome exato — e são procuradas antes das outras: pelo
 # "contém", "celular" pegaria "Celular do Direto" e "nome" pegaria "Nome do Direto"
-COLUNAS_SO_EXATAS = {"tipo_vinculo", "codigo", "direto_nome", "direto_codigo", "direto_telefone"}
+COLUNAS_SO_EXATAS = {"tipo_vinculo", "codigo", "agente", "direto_nome", "direto_codigo", "direto_telefone"}
+
+
+def _chave_codigo(codigo) -> str:
+    """Código pra comparar: sem acento, maiúscula nem espaço — "PARC 1020" e
+    "parc1020" são o mesmo."""
+    return re.sub(r"\s+", "", _norm_txt(codigo))
+
+
+def _le_agente(valor: str):
+    """"ES PARC1700 REPASSE" -> ("PARC1700 REPASSE", "PARC1700", True);
+    "SP  PARC4153" -> ("PARC4153", "PARC4153", False). A UF na frente e os
+    espaços duplos saem; sem um PARC reconhecível, devolve o texto limpo."""
+    texto = " ".join((valor or "").split())
+    if not texto:
+        return None, None, False
+    repasse = "repasse" in _norm_txt(texto)
+    m = re.search(r"PARC\s*(\d+)", texto, re.IGNORECASE)
+    if not m:
+        return texto, None, repasse
+    parc = f"PARC{m.group(1)}"
+    return (f"{parc} REPASSE" if repasse else parc), parc, repasse
 
 
 def _vinculo_da_planilha(valor: str) -> Optional[str]:
@@ -1429,18 +1454,14 @@ def baixar_modelo_importacao():
     ws = wb.active
     ws.title = "Técnicos"
     # "fase" é opcional: preenchida, a linha já cai direto naquela fase do piloto
-    # "tipo" = DIRETO / REPASSE / CLT; todo técnico tem o "codigo" dele. Repasse
-    # diz quem é o direto dele e o código do direto — sem número próprio, pode
-    # vir com o telefone vazio e entra com o número do direto
-    ws.append(["nome", "telefone", "tipo", "codigo", "direto", "codigo do direto",
-               "papel", "regional", "lider", "fase"])
-    ws.append(["João Silva", "(11) 99999-8888", "DIRETO", "PARC 1020", "", "",
-               "tecnico", "SP capital", "", "Fase 1 — SP capital"])
-    ws.append(["Pedro Alves", "(11) 97777-6666", "REPASSE", "PARC 1020-01", "João Silva", "PARC 1020",
-               "tecnico", "SP capital", "", "Fase 1 — SP capital"])
-    ws.append(["Marcos Souza", "(11) 98888-7777", "CLT", "CLT 3040", "", "",
-               "lider", "Interior SP", "", ""])
-    for i, largura in enumerate([26, 20, 10, 16, 24, 18, 12, 20, 20, 22], start=1):
+    # formato da base de Agentes: "Tipo" = Direto / Repasse / CLT; "Agente" traz o
+    # PARC — no direto é o código dele, no repasse ("... REPASSE") é o PARC do
+    # direto dele, que é como o repasse é ligado ao direto. "fase" é opcional
+    ws.append(["Técnico", "Tipo", "UF", "Agente", "Telefone", "fase"])
+    ws.append(["João Silva", "Direto", "SP", "SP PARC1020", "(11) 99999-8888", "Fase 1 — SP capital"])
+    ws.append(["Pedro Alves", "Repasse", "SP", "SP PARC1020 REPASSE", "(11) 97777-6666", "Fase 1 — SP capital"])
+    ws.append(["Marcos Souza", "CLT", "SP", "", "(11) 98888-7777", ""])
+    for i, largura in enumerate([30, 10, 6, 24, 18, 22], start=1):
         ws.column_dimensions[get_column_letter(i)].width = largura
     buf = io.BytesIO()
     wb.save(buf)
@@ -1533,7 +1554,10 @@ async def importar_tecnicos(
         i = idx.get(campo)
         if i is None or i >= len(row) or row[i] is None:
             return ""
-        return str(row[i]).strip()
+        v = row[i]
+        if isinstance(v, float) and v.is_integer():
+            v = int(v)   # telefone salvo como número: sem o ".0" virando dígito a mais
+        return str(v).strip()
 
     # quem já está na base, pelo telefone e pelo código — reimportar a planilha
     # atualizada não rejeita esse pessoal, atualiza o cadastro deles (ver abaixo)
@@ -1543,7 +1567,7 @@ async def importar_tecnicos(
     for t in db.query(models.Tecnico).all():
         ja_na_base.setdefault(t.telefone, []).append(t)
         if t.codigo:
-            base_por_codigo.setdefault(_norm_txt(t.codigo), []).append(t)
+            base_por_codigo.setdefault(_chave_codigo(t.codigo), []).append(t)
 
     # fases por nome normalizado — "Fase 2", "fase 2 " e "FASE 2" são a mesma
     fases_por_nome = {_norm_txt(f.nome): f for f in db.query(models.PilotoFase).all()}
@@ -1583,7 +1607,7 @@ async def importar_tecnicos(
     rejeitados = []
     avisos = []
     tem_tipo = "tipo_vinculo" in idx
-    tem_codigo = "codigo" in idx
+    tem_codigo = "codigo" in idx or "agente" in idx
     # quantos entraram de cada tipo e quantos vieram sem o código
     vinculos = {"direto": 0, "repasse": 0, "clt": 0, "sem_tipo": 0, "sem_codigo": 0}
 
@@ -1609,6 +1633,15 @@ async def importar_tecnicos(
         r["codigo"] = valor(row, "codigo") or None
         r["direto_nome"] = valor(row, "direto_nome") or None
         r["direto_codigo"] = valor(row, "direto_codigo") or None
+        cod_agente, parc_agente, repasse_agente = _le_agente(valor(row, "agente"))
+        if cod_agente:
+            # sem coluna Tipo, o "REPASSE" do Agente decide
+            if r["vinculo"] is None and parc_agente:
+                r["vinculo"] = "repasse" if repasse_agente else "direto"
+            r["codigo"] = r["codigo"] or cod_agente
+            # no repasse, o PARC do Agente é o do direto dele
+            if r["vinculo"] == "repasse" and parc_agente:
+                r["direto_codigo"] = r["direto_codigo"] or parc_agente
         r["direto_telefone"] = valor(row, "direto_telefone") or None
         r["repasse"] = r["vinculo"] == "repasse"
         if not r["nome"]:
@@ -1636,7 +1669,7 @@ async def importar_tecnicos(
         número + mesmo nome; senão, pra quem não é repasse, o dono do número.
         Repasse não casa só pelo número: ele pode estar com o número do direto."""
         if r["codigo"]:
-            por_codigo = [t for t in base_por_codigo.get(_norm_txt(r["codigo"]), []) if id(t) not in usados]
+            por_codigo = [t for t in base_por_codigo.get(_chave_codigo(r["codigo"]), []) if id(t) not in usados]
             if len(por_codigo) == 1:
                 return por_codigo[0]
         candidatos = [t for t in ja_na_base.get(r["telefone"], []) if id(t) not in usados]
@@ -1717,7 +1750,7 @@ async def importar_tecnicos(
         tecnico = grava(r)
         if tecnico.vinculo != "repasse":
             if tecnico.codigo:
-                diretos_por_codigo.setdefault(_norm_txt(tecnico.codigo), []).append(tecnico)
+                diretos_por_codigo.setdefault(_chave_codigo(tecnico.codigo), []).append(tecnico)
             diretos_por_nome.setdefault(_norm_txt(tecnico.nome), []).append(tecnico)
 
     base_nao_repasse = [t for lista in ja_na_base.values() for t in lista
@@ -1735,9 +1768,9 @@ async def importar_tecnicos(
             except HTTPException:
                 pass
         if r["direto_codigo"]:
-            chave = _norm_txt(r["direto_codigo"])
+            chave = _chave_codigo(r["direto_codigo"])
             achados = diretos_por_codigo.get(chave) or [
-                t for t in base_nao_repasse if t.codigo and _norm_txt(t.codigo) == chave]
+                t for t in base_nao_repasse if t.codigo and _chave_codigo(t.codigo) == chave]
             if len(achados) == 1:
                 return achados[0]
         if r["direto_nome"]:

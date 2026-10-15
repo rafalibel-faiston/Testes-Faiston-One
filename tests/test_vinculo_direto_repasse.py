@@ -258,3 +258,66 @@ def test_criar_e_editar_vinculo_na_mao(client):
     assert clt["vinculo"] == "clt"
     assert clt["direto_id"] is None and clt["direto_nome"] is None
     assert client.patch(f"/api/tecnicos/{rep['id']}", json={"vinculo": "pai"}).status_code == 400
+
+
+CAB_AGENTES = ["Técnico", "Tipo", "UF", "Agente", "Telefone"]
+
+
+def test_planilha_da_base_de_agentes(client):
+    """Formato que sobe de verdade: Técnico | Tipo | UF | Agente | Telefone. O
+    PARC do Agente é o código do direto; no repasse, é o PARC do direto dele."""
+    dados = _importa(client, [
+        ["CIRO MARTINHO ROCHA", "Repasse", "ES", "ES PARC1700 REPASSE", 27995257845],
+        ["EDIVALDO DE SOUSA LIMA LEAL", "Direto", "ES", "ES PARC1700", 27988948231],
+        ["ELDER TELAROLLI", "Repasse", "ES", "ES  PARC1717 REPASSE", 27997782658],
+        ["IGOR SALOMAO", "Repasse", "ES", "ES PARC0856 REPASSE", 13981900175],
+        ["MARCOS ANTONIO INTRA", "Repasse", "ES", "ES PARC0856 REPASSE", 13981900175],  # mesmo nº
+        ["ADNER DA SILVA", "Repasse", "MG", "MG PARC1717 REPASSE", 3591328323],
+        ["ANA CLT", "CLT", "MG", "", 31999998888],
+    ], cabecalho=CAB_AGENTES)
+    assert dados["rejeitados"] == 0, dados["erros"]
+    assert dados["criados"] == 7
+    assert dados["vinculos"]["direto"] == 1
+    assert dados["vinculos"]["repasse"] == 5
+    assert dados["vinculos"]["clt"] == 1
+    assert dados["vinculos"]["sem_codigo"] == 1          # só o CLT sem Agente
+    # PARC1717 e PARC0856 não estão na planilha nem na base
+    assert dados["vinculos"]["repasse_sem_direto"] == 4
+
+    tecs = _por_nome(client)
+    direto = tecs["EDIVALDO DE SOUSA LIMA LEAL"]
+    assert direto["vinculo"] == "direto" and direto["codigo"] == "PARC1700"
+    assert direto["regional"] == "ES"
+    assert direto["telefone"] == "5527988948231"
+    ciro = tecs["CIRO MARTINHO ROCHA"]
+    assert ciro["vinculo"] == "repasse"
+    assert ciro["codigo"] == "PARC1700 REPASSE"
+    assert ciro["direto_id"] == direto["id"]
+    assert ciro["direto_codigo"] == "PARC1700"
+    assert ciro["direto_nome"] == "EDIVALDO DE SOUSA LIMA LEAL"
+    elder = tecs["ELDER TELAROLLI"]
+    assert elder["codigo"] == "PARC1717 REPASSE" and elder["direto_codigo"] == "PARC1717"
+    assert tecs["ADNER DA SILVA"]["telefone"] == "553591328323"
+
+
+def test_agentes_repasse_acha_direto_de_outra_planilha(client):
+    # direto subiu na planilha de outra região antes
+    _importa(client, [["DIRETO 0856", "Direto", "SP", "SP PARC0856", 13981900175]], cabecalho=CAB_AGENTES)
+    _importa(client, [["IGOR SALOMAO", "Repasse", "ES", "ES PARC0856 REPASSE", 13981900175]],
+             cabecalho=CAB_AGENTES)
+    tecs = _por_nome(client)
+    igor = tecs["IGOR SALOMAO"]
+    assert igor["direto_id"] == tecs["DIRETO 0856"]["id"]
+    assert igor["numero_do_direto"] is True
+
+
+def test_agentes_reimportar_nao_duplica(client):
+    linhas = [
+        ["EDIVALDO", "Direto", "ES", "ES PARC1700", 27988948231],
+        ["CIRO", "Repasse", "ES", "ES PARC1700 REPASSE", 27995257845],
+        ["IGOR", "Repasse", "ES", "ES PARC1700 REPASSE", 27995257845],
+    ]
+    _importa(client, linhas, cabecalho=CAB_AGENTES)
+    dados = _importa(client, linhas, cabecalho=CAB_AGENTES)
+    assert dados["criados"] == 0 and dados["atualizados"] == 3
+    assert len(_por_nome(client)) == 3

@@ -696,7 +696,10 @@ app já usa entre a lista de status do Python e a do JS).
   `criados`, `atualizados`, `rejeitados`, o `resumo` por motivo e a lista `erros`
   com linha/nome/telefone/motivo de cada rejeitada; com `fase_id` (form) põe
   todos na fase, e sem ele usa a coluna `fase` da planilha (`fases`, `fases_criadas`
-  dizem onde cada um caiu). Colunas de vínculo: `tipo` (DIRETO / REPASSE / CLT),
+  dizem onde cada um caiu). Formato da base de Agentes: `Técnico | Tipo | UF |
+  Agente | Telefone` — o PARC do `Agente` (UF na frente ignorada) é o código do
+  direto, e no repasse (`... REPASSE`) é o PARC do direto dele, que é como ele
+  é ligado ao direto. Alternativa: colunas `tipo` (DIRETO / REPASSE / CLT),
   `codigo` (o do técnico — todo técnico tem) e, no repasse, `direto` e `codigo do
   direto` (+ `celular do direto`, opcional). O direto é achado pelo código e, sem
   ele, pelo nome; repasse sem telefone entra com o número do direto. Volta
