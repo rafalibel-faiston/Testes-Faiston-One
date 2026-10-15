@@ -6395,6 +6395,9 @@
         `<div class="stat ok"><span class="stat-n">${f.tecnicos}</span><span class="stat-l">Em ${esc(f.nome)}</span></div>`).join("");
     }
 
+    if (res.religacao && res.religacao.religados) {
+      $("#import-stats").innerHTML += `<div class="stat ok"><span class="stat-n">${res.religacao.religados}</span><span class="stat-l">Repasses ligados ao direto</span></div>`;
+    }
     const dist = res.distribuicao;
     if (dist) $("#import-stats").innerHTML += distribuicaoStats(dist);
 

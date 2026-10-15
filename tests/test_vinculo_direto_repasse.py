@@ -321,3 +321,42 @@ def test_agentes_reimportar_nao_duplica(client):
     dados = _importa(client, linhas, cabecalho=CAB_AGENTES)
     assert dados["criados"] == 0 and dados["atualizados"] == 3
     assert len(_por_nome(client)) == 3
+
+
+def test_direto_importado_depois_liga_os_repasses_que_ja_estavam(client):
+    """Repasse subiu numa planilha e o direto noutra, depois: a ligação se
+    acerta no fim da importação do direto."""
+    _importa(client, [
+        ["IGOR SALOMAO", "Repasse", "ES", "ES PARC0856 REPASSE", "13981900175"],
+        ["MARCOS ANTONIO INTRA", "Repasse", "MG", "MG PARC0856 REPASSE", "13981900175"],
+    ], cabecalho=CAB_AGENTES)
+    assert all(t["direto_id"] is None for t in client.get("/api/tecnicos").json())
+
+    dados = _importa(client, [["VALMIR DIAS RIBEIRO", "Direto", "SP", "SP PARC0856", "13981900175"]],
+                     cabecalho=CAB_AGENTES)
+    assert dados["religacao"]["religados"] == 2
+    tecs = _por_nome(client)
+    valmir = tecs["VALMIR DIAS RIBEIRO"]
+    assert sorted(r["nome"] for r in valmir["repasses"]) == ["IGOR SALOMAO", "MARCOS ANTONIO INTRA"]
+    igor = tecs["IGOR SALOMAO"]
+    assert igor["direto_id"] == valmir["id"]
+    assert igor["direto_nome"] == "VALMIR DIAS RIBEIRO"
+    assert igor["numero_do_direto"] is True
+
+
+def test_religar_desempata_codigo_repetido_pelo_numero(client):
+    _importa(client, [
+        ["DIRETO A", "Direto", "SP", "SP PARC0856", "11911111111"],
+        ["DIRETO B", "Direto", "MG", "MG PARC0856", "13981900175"],
+    ], cabecalho=CAB_AGENTES)
+    _importa(client, [["IGOR", "Repasse", "ES", "ES PARC0856 REPASSE", "13981900175"]], cabecalho=CAB_AGENTES)
+    tecs = _por_nome(client)
+    assert tecs["IGOR"]["direto_id"] == tecs["DIRETO B"]["id"]
+
+
+def test_religar_pelo_endpoint(client):
+    _importa(client, [["IGOR", "Repasse", "ES", "ES PARC0856 REPASSE", "13981900175"]], cabecalho=CAB_AGENTES)
+    client.post("/api/tecnicos", json={"nome": "VALMIR", "telefone": "13981900175",
+                                       "vinculo": "direto", "codigo": "PARC0856"})
+    assert client.post("/api/tecnicos/religar").json() == {"religados": 1, "ambiguos": []}
+    assert _por_nome(client)["IGOR"]["direto_nome"] == "VALMIR"
