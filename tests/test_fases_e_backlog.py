@@ -223,23 +223,26 @@ def test_limpar_so_a_fase_deixa_o_resto_da_base(client):
     assert any(f["id"] == fase["id"] for f in client.get("/api/piloto/fases").json())
 
 
-def test_limpar_fase_solta_filho_que_ficou_sem_o_pai(client):
+def test_limpar_fase_solta_repasse_que_ficou_sem_o_direto(client):
     from tests.conftest import planilha
 
-    fase = client.post("/api/piloto/fases", json={"nome": "Fase pais"}).json()
+    fase = client.post("/api/piloto/fases", json={"nome": "Fase diretos"}).json()
     arquivo = planilha([
-        ["João Pai", "11999998888", "PARC 1"],
-        ["Pedro Filho", "11999998888", "PARC 1 REPASSE"],
-    ], cabecalho=["Nome", "Numero", "Codigo de PARC"])
+        ["João Direto", "11999998888", "DIRETO", "PARC 1", "", ""],
+        ["Pedro Repasse", "11977776666", "REPASSE", "R-1", "João Direto", "PARC 1"],
+    ], cabecalho=["Nome", "Telefone", "Tipo", "Codigo", "Direto", "Codigo do Direto"])
     client.post("/api/tecnicos/importar", files={"file": ("b.xlsx", arquivo)})
-    pai = next(t for t in client.get("/api/tecnicos").json() if t["nome"] == "João Pai")
-    client.post(f"/api/piloto/fases/{fase['id']}/tecnicos", json={"tecnico_ids": [pai["id"]]})
+    direto = next(t for t in client.get("/api/tecnicos").json() if t["nome"] == "João Direto")
+    client.post(f"/api/piloto/fases/{fase['id']}/tecnicos", json={"tecnico_ids": [direto["id"]]})
 
     client.post("/api/tecnicos/limpar", json={"confirmar": "APAGAR", "fase_id": fase["id"]})
 
-    filho = client.get("/api/tecnicos").json()[0]
-    assert filho["nome"] == "Pedro Filho"
-    assert filho["pai_id"] is None
+    repasse = client.get("/api/tecnicos").json()[0]
+    assert repasse["nome"] == "Pedro Repasse"
+    assert repasse["direto_id"] is None
+    # o direto saiu da base, mas quem ele é continua gravado no repasse
+    assert repasse["direto_nome"] == "João Direto"
+    assert repasse["direto_codigo"] == "PARC 1"
 
 
 def test_limpar_fase_inexistente_da_404(client, tecnico):

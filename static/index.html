@@ -478,6 +478,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 7.5l9 4.5 9-4.5L12 3Z"/><path d="m3 16.5 9 4.5 9-4.5"/><path d="m3 12 9 4.5L21 12"/></svg>
           Nova fase
         </button>
+        <button type="button" class="tool-btn" id="btn-distribuir" title="Colocar quem está sem fase na fase que cobre a UF dele (as UFs marcadas em cada fase)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v6"/><path d="M12 9 5 15"/><path d="m12 9 7 6"/><path d="M12 9v6"/><circle cx="5" cy="18" r="2.5"/><circle cx="12" cy="18" r="2.5"/><circle cx="19" cy="18" r="2.5"/></svg>
+          Distribuir por região
+        </button>
         <button type="button" class="tool-btn tool-danger" id="btn-limpar-base" title="Apagar os técnicos da fase aberta ou da base inteira">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9.5 7V5.5A1.5 1.5 0 0 1 11 4h2a1.5 1.5 0 0 1 1.5 1.5V7"/><path d="M6.5 7l.8 12a2 2 0 0 0 2 1.9h5.4a2 2 0 0 0 2-1.9L17.5 7"/></svg>
           Limpar base
@@ -527,14 +531,15 @@
         </div>
         <div class="base-sel-acoes">
           <select id="base-regional"><option value="">Todas as regionais</option></select>
-          <select id="base-vinculo" title="Vínculo PARC">
+          <select id="base-vinculo" title="Vínculo">
             <option value="">Todos os vínculos</option>
-            <option value="pai">Pais (com filhos)</option>
-            <option value="filho">Filhos (repasse)</option>
-            <option value="filho_sem_pai">Filhos sem pai achado</option>
-            <option value="sem_vinculo">Sem vínculo</option>
+            <option value="direto">Direto</option>
+            <option value="repasse">Repasse</option>
+            <option value="clt">CLT</option>
+            <option value="repasse_sem_direto">Repasse sem direto achado</option>
+            <option value="sem_vinculo">Sem tipo</option>
           </select>
-          <input type="search" id="base-busca" placeholder="Nome ou PARC…" autocomplete="off">
+          <input type="search" id="base-busca" placeholder="Nome ou código…" autocomplete="off">
           <label class="base-reaproveitar">
             <input type="checkbox" id="base-reaproveitar">
             Incluir quem já testou outra fase
@@ -578,10 +583,11 @@
         <span class="chip-row-label">Vínculo</span>
         <div class="chips" id="tecnicos-chips-vinculo">
           <button type="button" class="chip active" data-vinculo="">Todos</button>
-          <button type="button" class="chip" data-vinculo="pai">Pai</button>
-          <button type="button" class="chip" data-vinculo="filho">Filho</button>
-          <button type="button" class="chip" data-vinculo="filho_sem_pai">Filho sem pai</button>
-          <button type="button" class="chip" data-vinculo="sem_vinculo">Sem vínculo</button>
+          <button type="button" class="chip" data-vinculo="direto">Direto</button>
+          <button type="button" class="chip" data-vinculo="repasse">Repasse</button>
+          <button type="button" class="chip" data-vinculo="clt">CLT</button>
+          <button type="button" class="chip" data-vinculo="repasse_sem_direto">Repasse sem direto</button>
+          <button type="button" class="chip" data-vinculo="sem_vinculo">Sem tipo</button>
         </div>
       </div>
       <input type="search" id="tecnicos-busca" class="tecnicos-busca" placeholder="Buscar por nome ou PARC…" autocomplete="off">
@@ -1080,13 +1086,27 @@
       <label class="fld">Líder direto
         <input name="lider_nome" placeholder="a quem ele responde (opcional, quando papel = técnico)" autocomplete="off">
       </label>
-      <label class="fld">Repasse
-        <select name="repasse">
-          <option value="">Não informado</option>
-          <option value="true">Sim</option>
-          <option value="false">Não</option>
-        </select>
-      </label>
+      <div class="form-grid">
+        <label class="fld">Vínculo
+          <select name="vinculo">
+            <option value="">Não informado</option>
+            <option value="direto">Direto</option>
+            <option value="repasse">Repasse</option>
+            <option value="clt">CLT</option>
+          </select>
+        </label>
+        <label class="fld">Código
+          <input name="codigo" placeholder="código do técnico" autocomplete="off">
+        </label>
+      </div>
+      <div class="form-grid" id="tecnico-direto-campos" hidden>
+        <label class="fld">Direto
+          <input name="direto_nome" placeholder="nome do direto dele" autocomplete="off">
+        </label>
+        <label class="fld">Código do direto
+          <input name="direto_codigo" placeholder="código do direto" autocomplete="off">
+        </label>
+      </div>
       <div class="modal-actions">
         <button type="button" class="btn-ghost" id="tecnico-delete" hidden>Excluir</button>
         <button type="button" class="btn-ghost" id="tecnico-cancel">Cancelar</button>
@@ -1188,8 +1208,13 @@
         base é atualizado, não duplicado).</p>
         <div class="import-motivos" id="import-motivos"></div>
       </div>
+      <div id="import-avisos-box" hidden>
+        <p class="notes-hint">Estes <b>entraram</b>, mas são repasse sem o direto achado — confira na
+        planilha o nome e o código do direto deles (o relatório traz linha a linha).</p>
+        <div class="import-motivos" id="import-avisos"></div>
+      </div>
       <div class="modal-actions">
-        <button type="button" class="btn-ghost" id="import-baixar" hidden>Baixar relatório dos rejeitados</button>
+        <button type="button" class="btn-ghost" id="import-baixar" hidden>Baixar relatório linha a linha</button>
         <button type="button" class="btn-primary" id="import-ok">Fechar</button>
       </div>
     </div>

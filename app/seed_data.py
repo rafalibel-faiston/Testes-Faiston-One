@@ -479,16 +479,27 @@ def migrate_schema(engine):
         # em qual leva do piloto o técnico entrou (NULL = ainda na base geral)
         if "fase_id" not in tec_cols:
             stmts.append("ALTER TABLE tecnicos ADD COLUMN fase_id INTEGER")
-        # cruzado com a base de Agentes (PARC + REPASSE); NULL = ainda não cruzado
-        if "repasse" not in tec_cols:
-            stmts.append("ALTER TABLE tecnicos ADD COLUMN repasse BOOLEAN")
-        # hierarquia pai (PARC) / filho (PARC REPASSE) da base de Agentes
+        # código do técnico e o direto do repasse (nomes antigos no banco:
+        # codigo_parc e pai_id)
         if "codigo_parc" not in tec_cols:
             stmts.append("ALTER TABLE tecnicos ADD COLUMN codigo_parc VARCHAR")
         if "pai_id" not in tec_cols:
             stmts.append("ALTER TABLE tecnicos ADD COLUMN pai_id INTEGER")
-        if "numero_do_pai" not in tec_cols:
-            stmts.append("ALTER TABLE tecnicos ADD COLUMN numero_do_pai BOOLEAN")
+        # vínculo direto / repasse / clt — substitui o antigo pai/filho
+        if "vinculo" not in tec_cols:
+            stmts.append("ALTER TABLE tecnicos ADD COLUMN vinculo VARCHAR")
+            if "repasse" in tec_cols:
+                # quem já estava marcado como repasse (ou filho de alguém) vira repasse
+                stmts.append("UPDATE tecnicos SET vinculo = 'repasse' WHERE repasse = "
+                             + ("TRUE" if pg else "1") + " OR pai_id IS NOT NULL")
+        if "direto_nome" not in tec_cols:
+            stmts.append("ALTER TABLE tecnicos ADD COLUMN direto_nome VARCHAR")
+            stmts.append("UPDATE tecnicos SET direto_nome = (SELECT d.nome FROM tecnicos d "
+                         "WHERE d.id = tecnicos.pai_id) WHERE pai_id IS NOT NULL")
+        if "direto_codigo" not in tec_cols:
+            stmts.append("ALTER TABLE tecnicos ADD COLUMN direto_codigo VARCHAR")
+            stmts.append("UPDATE tecnicos SET direto_codigo = (SELECT d.codigo_parc FROM tecnicos d "
+                         "WHERE d.id = tecnicos.pai_id) WHERE pai_id IS NOT NULL")
 
     # relato do técnico: vínculo com o backlog, build testada e chamado de origem
     if "tecnico_observacoes" in existing_tables:

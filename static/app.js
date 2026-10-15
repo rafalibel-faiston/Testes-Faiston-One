@@ -5398,13 +5398,17 @@
     renderBase(dados.itens);
   }
 
-  // pai (PARC) / filho (PARC REPASSE) na lista da base — é aqui que se escolhe
-  // quem entra na fase, então tem que dar pra ver quem é quem
+  // direto / repasse / CLT na lista da base — é aqui que se escolhe quem entra
+  // na fase, então tem que dar pra ver quem é quem
   function baseVinculo(t) {
-    const v = vinculoDe(t);
-    if (v === "filho") return `<span class="base-vinculo filho" title="Filho de ${esc(t.pai_nome)}">filho · ${esc(t.pai_nome)}</span>`;
-    if (v === "filho_sem_pai") return `<span class="base-vinculo filho">filho · pai não achado</span>`;
-    if (v === "pai") return `<span class="base-vinculo pai">pai · ${t.filhos_qtd} filho(s)</span>`;
+    if (t.vinculo === "repasse") {
+      const direto = t.direto_nome ? `${t.direto_nome}${t.direto_codigo ? ` (${t.direto_codigo})` : ""}` : "";
+      return direto
+        ? `<span class="base-vinculo repasse${t.direto_id ? "" : " sem-direto"}" title="Repasse de ${esc(direto)}${t.direto_id ? "" : " — direto não está na base"}">repasse · ${esc(direto)}</span>`
+        : `<span class="base-vinculo repasse sem-direto">repasse · sem direto</span>`;
+    }
+    if (t.vinculo === "direto") return `<span class="base-vinculo direto">direto${t.repasses_qtd ? ` · ${t.repasses_qtd} repasse(s)` : ""}</span>`;
+    if (t.vinculo === "clt") return `<span class="base-vinculo clt">CLT</span>`;
     return `<span class="base-vinculo-vazio">—</span>`;
   }
 
@@ -5424,7 +5428,8 @@
         <span class="base-nome">${esc(t.nome)}</span>
         <span class="base-vinc">${baseVinculo(t)}</span>
         <span class="base-reg">${esc(t.regional || "—")}</span>
-        <span class="base-tel${t.numero_do_pai ? " sem-numero" : ""}"${t.numero_do_pai ? ' title="Sem número próprio — este é o número do pai"' : ""}>${t.numero_do_pai ? "nº do pai · " : ""}${esc(formatTelefone(t.telefone))}</span>
+        <span class="base-cod">${esc(t.codigo || "—")}</span>
+        <span class="base-tel${t.numero_do_direto ? " sem-numero" : ""}"${t.numero_do_direto ? ' title="Sem número próprio — este é o número do direto"' : ""}>${t.numero_do_direto ? "nº do direto · " : ""}${esc(formatTelefone(t.telefone))}</span>
         ${fase ? `<span class="base-fase-atual" title="Já testou nessa fase — reaproveitar reseta o progresso">em ${esc(fase.nome)}</span>` : ""}
       </label>`;
     }).join("") : `<p class="pb-vazio">Nenhum técnico com esse filtro.</p>`;
@@ -5770,38 +5775,38 @@
     aplicaPilotoAberto();
   });
 
-  // vínculo PARC: pai (tem filhos de repasse), filho (PARC REPASSE) ou nenhum
-  function vinculoDe(t) {
-    if (t.repasse === true || t.pai_id) return t.pai_id ? "filho" : "filho_sem_pai";
-    if ((t.filhos || []).length || t.filhos_qtd) return "pai";
-    return "sem_vinculo";
-  }
-
   function bateVinculo(t, filtro) {
     if (!filtro) return true;
-    const v = vinculoDe(t);
-    return filtro === "filho" ? (v === "filho" || v === "filho_sem_pai") : v === filtro;
+    if (filtro === "sem_vinculo") return !t.vinculo;
+    if (filtro === "repasse_sem_direto") return t.vinculo === "repasse" && !t.direto_id;
+    return t.vinculo === filtro;
   }
 
-  // bloco próprio no card, separado do nome: quem é pai, quem é filho, de quem,
-  // e se o número cadastrado é dele ou do pai
+  // bloco próprio no card, separado do nome: o tipo (direto / repasse / CLT),
+  // o código e, no repasse, quem é o direto dele
   function tecnicoVinculo(t) {
-    const v = vinculoDe(t);
-    if (v === "sem_vinculo" && !t.codigo_parc) return "";
+    if (!t.vinculo && !t.codigo) return "";
     const tipo = {
-      pai: ["pai", "Pai"], filho: ["filho", "Filho"],
-      filho_sem_pai: ["filho", "Filho"], sem_vinculo: ["solo", "Sem vínculo"],
-    }[v];
+      direto: ["direto", "Direto"], repasse: ["repasse", "Repasse"], clt: ["clt", "CLT"],
+    }[t.vinculo] || ["solo", "Sem tipo"];
     const itens = [];
-    if (t.codigo_parc) itens.push(`<div class="tv-item"><span class="tv-l">Código PARC</span><span class="tv-v mono">${esc(t.codigo_parc)}</span></div>`);
-    if (v === "pai") {
-      const nomes = t.filhos.map((f) => esc(f.nome)).join(", ");
-      itens.push(`<div class="tv-item tv-wide"><span class="tv-l">Filhos (${t.filhos.length})</span><span class="tv-v">${nomes}</span></div>`);
+    itens.push(`<div class="tv-item"><span class="tv-l">Código</span>${t.codigo
+      ? `<span class="tv-v mono">${esc(t.codigo)}</span>`
+      : `<span class="tv-v tv-alerta">sem código</span>`}</div>`);
+    if (t.vinculo === "repasse") {
+      itens.push(`<div class="tv-item"><span class="tv-l">Direto</span>${t.direto_nome
+        ? `<span class="tv-v">${esc(t.direto_nome)}${t.direto_id ? "" : ' <span class="tv-alerta" title="O direto não está na base">· fora da base</span>'}</span>`
+        : `<span class="tv-v tv-alerta">não informado</span>`}</div>`);
+      itens.push(`<div class="tv-item"><span class="tv-l">Código do direto</span>${t.direto_codigo
+        ? `<span class="tv-v mono">${esc(t.direto_codigo)}</span>`
+        : `<span class="tv-v tv-alerta">não informado</span>`}</div>`);
+      if (t.numero_do_direto) {
+        itens.push(`<div class="tv-item"><span class="tv-l">Número</span><span class="tv-v tv-alerta" title="Sem número próprio na base">do direto: <span class="mono">${esc(formatTelefone(t.telefone))}</span></span></div>`);
+      }
     }
-    if (v === "filho") itens.push(`<div class="tv-item"><span class="tv-l">Pai</span><span class="tv-v">${esc(t.pai_nome)}</span></div>`);
-    if (v === "filho_sem_pai") itens.push(`<div class="tv-item"><span class="tv-l">Pai</span><span class="tv-v tv-alerta">não identificado</span></div>`);
-    if (t.numero_do_pai) {
-      itens.push(`<div class="tv-item"><span class="tv-l">Número</span><span class="tv-v tv-alerta" title="Veio com o número do pai na base">sem nº próprio · do pai: <span class="mono">${esc(formatTelefone(t.telefone))}</span></span></div>`);
+    if (t.vinculo === "direto" && (t.repasses || []).length) {
+      const nomes = t.repasses.map((r) => esc(r.nome)).join(", ");
+      itens.push(`<div class="tv-item tv-wide"><span class="tv-l">Repasses (${t.repasses.length})</span><span class="tv-v">${nomes}</span></div>`);
     }
     return `<div class="tecnico-vinculo-bloco">
       <span class="tv-tipo ${tipo[0]}">${tipo[1]}</span>
@@ -5816,7 +5821,8 @@
       .filter((t) => !tecnicoFiltros.papel || t.papel === tecnicoFiltros.papel)
       .filter((t) => bateVinculo(t, tecnicoFiltros.vinculo))
       .filter((t) => !busca || t.nome.toLowerCase().includes(busca)
-        || (t.codigo_parc || "").toLowerCase().includes(busca));
+        || (t.codigo || "").toLowerCase().includes(busca)
+        || (t.direto_codigo || "").toLowerCase().includes(busca));
   }
 
   function renderTecnicos() {
@@ -5973,7 +5979,7 @@
             <span>${t.papel === "lider" ? "Líder de equipe" : "Técnico"}</span>
             ${t.regional ? `<span>${esc(t.regional)}</span>` : ""}
             ${t.lider_nome ? `<span>responde a ${esc(t.lider_nome)}</span>` : ""}
-            ${t.numero_do_pai ? "" : `<span class="tecnico-tel">${esc(formatTelefone(t.telefone))}</span>`}
+            ${t.numero_do_direto ? "" : `<span class="tecnico-tel">${esc(formatTelefone(t.telefone))}</span>`}
           </div>
         </div>
         ${tecnicoEstrelas(t.nota)}
@@ -6206,6 +6212,11 @@
   let editingTecnicoId = null;
   const tecnicoModal = $("#tecnico-modal");
   const tecnicoForm = $("#tecnico-form");
+  // direto e código do direto só fazem sentido pra repasse
+  function mostraCamposDireto() {
+    $("#tecnico-direto-campos").hidden = tecnicoForm.vinculo.value !== "repasse";
+  }
+  tecnicoForm.vinculo.addEventListener("change", mostraCamposDireto);
 
   function openTecnicoModal(id) {
     editingTecnicoId = id || null;
@@ -6219,8 +6230,12 @@
       tecnicoForm.papel.value = t.papel;
       tecnicoForm.regional.value = t.regional || "";
       tecnicoForm.lider_nome.value = t.lider_nome || "";
-      tecnicoForm.repasse.value = t.repasse === true ? "true" : t.repasse === false ? "false" : "";
+      tecnicoForm.vinculo.value = t.vinculo || "";
+      tecnicoForm.codigo.value = t.codigo || "";
+      tecnicoForm.direto_nome.value = t.direto_nome || "";
+      tecnicoForm.direto_codigo.value = t.direto_codigo || "";
     }
+    mostraCamposDireto();
     tecnicoModal.hidden = false;
   }
   function closeTecnicoModal() { tecnicoModal.hidden = true; editingTecnicoId = null; }
@@ -6247,8 +6262,11 @@
       fd.append("file", file, file.name);
       if (testerName()) fd.append("autor", testerName());
       if (faseId) fd.append("fase_id", faseId);
+      // importar normal: quem ficar sem fase já cai na fase da UF dele
+      else fd.append("distribuir", "true");
       toast("Importando planilha…");
       const res = await api("/api/tecnicos/importar", { method: "POST", body: fd });
+      if (res.distribuicao) await loadFases();
       await loadTecnicos();
       mostrarResultadoImportacao(res, file.name);
     } catch (err) { toast("Erro ao importar planilha: " + err.message, true); }
@@ -6287,12 +6305,15 @@
       <div class="stat"><span class="stat-n">${res.atualizados || 0}</span><span class="stat-l">Atualizados</span></div>
       <div class="stat ${res.rejeitados ? "bad" : ""}"><span class="stat-n">${res.rejeitados || 0}</span><span class="stat-l">Ficaram de fora</span></div>`;
 
-    const hier = res.hierarquia;
-    if (hier) {
+    const vinc = res.vinculos;
+    if (vinc) {
       $("#import-stats").innerHTML += `
-      <div class="stat"><span class="stat-n">${hier.pais_com_filhos}</span><span class="stat-l">Pais com filhos</span></div>
-      <div class="stat"><span class="stat-n">${hier.filhos}</span><span class="stat-l">Filhos (repasse)</span></div>
-      <div class="stat ${hier.filhos_sem_pai ? "warn" : ""}"><span class="stat-n">${hier.filhos_sem_pai}</span><span class="stat-l">Filhos sem pai achado</span></div>`;
+      <div class="stat"><span class="stat-n">${vinc.direto}</span><span class="stat-l">Direto</span></div>
+      <div class="stat"><span class="stat-n">${vinc.repasse}</span><span class="stat-l">Repasse</span></div>
+      <div class="stat"><span class="stat-n">${vinc.clt}</span><span class="stat-l">CLT</span></div>
+      <div class="stat ${vinc.repasse_sem_direto ? "warn" : ""}"><span class="stat-n">${vinc.repasse_sem_direto}</span><span class="stat-l">Repasse sem direto achado</span></div>
+      <div class="stat ${vinc.sem_codigo ? "warn" : ""}"><span class="stat-n">${vinc.sem_codigo}</span><span class="stat-l">Sem código</span></div>
+      ${vinc.sem_tipo ? `<div class="stat warn"><span class="stat-n">${vinc.sem_tipo}</span><span class="stat-l">Sem tipo</span></div>` : ""}`;
     }
 
     const fases = res.fases || [];
@@ -6301,9 +6322,21 @@
         `<div class="stat ok"><span class="stat-n">${f.tecnicos}</span><span class="stat-l">Em ${esc(f.nome)}</span></div>`).join("");
     }
 
+    const dist = res.distribuicao;
+    if (dist) $("#import-stats").innerHTML += distribuicaoStats(dist);
+
     const motivos = Object.entries(res.resumo || {}).sort((a, b) => b[1] - a[1]);
     $("#import-rejeitados-box").hidden = !motivos.length;
-    $("#import-baixar").hidden = !motivos.length;
+    const avisos = {};
+    (res.avisos || []).forEach((a) => {
+      const chave = a.motivo.startsWith("direto ") ? "direto não encontrado na planilha nem na base" : a.motivo;
+      avisos[chave] = (avisos[chave] || 0) + 1;
+    });
+    const listaAvisos = Object.entries(avisos).sort((a, b) => b[1] - a[1]);
+    $("#import-avisos-box").hidden = !listaAvisos.length;
+    $("#import-avisos").innerHTML = listaAvisos.map(([motivo, n]) =>
+      `<div class="import-motivo"><span class="import-motivo-n">${n}</span><span>${esc(motivo)}</span></div>`).join("");
+    $("#import-baixar").hidden = !motivos.length && !listaAvisos.length;
     $("#import-motivos").innerHTML = motivos.map(([motivo, n]) =>
       `<div class="import-motivo"><span class="import-motivo-n">${n}</span><span>${esc(motivo)}</span></div>`).join("");
 
@@ -6315,16 +6348,48 @@
       : "Nenhum técnico entrou — veja o motivo no resultado.", !entraram);
   }
 
+  // quantos caíram em cada fase pela UF, e o que ficou sem fase e por quê
+  function distribuicaoStats(dist) {
+    const semFase = Object.entries(dist.ufs_sem_fase || {});
+    return (dist.fases || []).map((f) =>
+      `<div class="stat ok"><span class="stat-n">${f.tecnicos}</span><span class="stat-l">${esc(f.nome)} (${esc(f.ufs.join(", "))})</span></div>`).join("")
+      + (semFase.length ? `<div class="stat warn"><span class="stat-n">${semFase.reduce((n, [, q]) => n + q, 0)}</span><span class="stat-l">Sem fase pra UF: ${esc(semFase.map(([uf, q]) => `${uf} (${q})`).join(", "))}</span></div>` : "")
+      + (dist.sem_uf ? `<div class="stat warn"><span class="stat-n">${dist.sem_uf}</span><span class="stat-l">Sem UF reconhecida</span></div>` : "")
+      + ((dist.ufs_em_mais_de_uma_fase || []).length ? `<div class="stat warn"><span class="stat-n">${dist.ufs_em_mais_de_uma_fase.length}</span><span class="stat-l">UF em mais de uma fase (foi pra primeira): ${esc(dist.ufs_em_mais_de_uma_fase.map((r) => r.uf).join(", "))}</span></div>` : "");
+  }
+
+  $("#btn-distribuir").addEventListener("click", async () => {
+    const comUf = FASES.filter((f) => (f.ufs || []).length && (f.status === "planejada" || f.status === "em_andamento"));
+    if (!comUf.length) {
+      toast("Nenhuma fase com UF marcada — edite as fases e marque os estados de cada uma.", true);
+      return;
+    }
+    const plano = comUf.map((f) => `• ${f.nome}: ${f.ufs.join(", ")}`).join("\n");
+    if (!confirm(`Colocar quem está sem fase na fase da UF dele?\n\n${plano}\n\nQuem já está em alguma fase não é mexido.`)) return;
+    try {
+      const dist = await api("/api/piloto/fases/distribuir", { method: "POST" });
+      await loadFases();
+      await loadTecnicos();
+      const semFase = Object.values(dist.ufs_sem_fase || {}).reduce((n, q) => n + q, 0);
+      toast(`${dist.distribuidos} técnico(s) distribuído(s) pelas fases.`
+        + (semFase ? ` ${semFase} ficaram sem fase (UF sem fase: ${Object.keys(dist.ufs_sem_fase).join(", ")}).` : "")
+        + (dist.sem_uf ? ` ${dist.sem_uf} sem UF reconhecida.` : ""));
+    } catch (err) { toast("Erro ao distribuir: " + err.message, true); }
+  });
+
   function baixarRelatorioImportacao() {
     if (!ultimaImportacao) return;
-    const linhas = [["linha", "nome", "telefone", "motivo"]].concat(
-      (ultimaImportacao.res.erros || []).map((e) => [e.linha, e.nome || "", e.telefone || "", e.motivo]));
+    const corpo = [
+      ...(ultimaImportacao.res.erros || []).map((e) => [e.linha, e.nome || "", e.telefone || "", "não entrou", e.motivo]),
+      ...(ultimaImportacao.res.avisos || []).map((e) => [e.linha, e.nome || "", e.telefone || "", "entrou com aviso", e.motivo]),
+    ].sort((a, b) => a[0] - b[0]);
+    const linhas = [["linha", "nome", "telefone", "situação", "motivo"], ...corpo];
     // ; como separador e BOM: é assim que o Excel em pt-BR abre o CSV já em colunas
     const csv = "﻿" + linhas.map((l) => l.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\r\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = "tecnicos-nao-importados.csv";
+    a.download = "tecnicos-importacao.csv";
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -6454,13 +6519,17 @@
     const nome = (fd.get("nome") || "").trim();
     const telefone = (fd.get("telefone") || "").trim();
     if (!nome || !telefone) return;
-    const repasseRaw = fd.get("repasse");
+    const vinculo = fd.get("vinculo") || null;
     const payload = {
       nome, telefone,
       papel: fd.get("papel"),
       regional: fd.get("regional") || null,
       lider_nome: fd.get("lider_nome") || null,
-      repasse: repasseRaw === "" ? null : repasseRaw === "true",
+      vinculo,
+      codigo: (fd.get("codigo") || "").trim() || null,
+      // só repasse tem direto
+      direto_nome: vinculo === "repasse" ? (fd.get("direto_nome") || "").trim() || null : null,
+      direto_codigo: vinculo === "repasse" ? (fd.get("direto_codigo") || "").trim() || null : null,
     };
     try {
       if (editingTecnicoId) {

@@ -9,6 +9,7 @@ pronta pra abrir no WhatsApp — o texto muda conforme o papel (técnico direto
 ou líder avisando a equipe), com o nome já substituído.
 """
 import io
+import re
 import unicodedata
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
@@ -34,6 +35,7 @@ pagina_router = APIRouter(tags=["tecnicos"])
 BRT = timezone(timedelta(hours=-3))
 
 PAPEIS = {"tecnico", "lider"}
+VINCULO_LABELS = {"direto": "Direto", "repasse": "Repasse", "clt": "CLT"}
 # funil de QA: do convite até o teste no atendimento real virar feedback registrado
 STATUSES = ["a_contatar", "convidado", "instalado", "em_teste", "concluido", "sem_retorno"]
 STATUS_LABELS = {
@@ -229,34 +231,46 @@ def _get_tecnico_or_404(db: Session, tecnico_id: int) -> models.Tecnico:
     return tecnico
 
 
-# filtro por vínculo PARC: pai (tem filhos de repasse), filho (PARC REPASSE),
-# filho cujo pai não foi achado, ou sem vínculo nenhum
-VINCULOS = {"pai", "filho", "filho_sem_pai", "sem_vinculo"}
+# vínculo do técnico com a Faiston
+VINCULOS_TECNICO = {"direto", "repasse", "clt"}
+# filtro por vínculo: os três tipos, repasse cujo direto não está na base, ou
+# quem a planilha não classificou
+VINCULOS = VINCULOS_TECNICO | {"repasse_sem_direto", "sem_vinculo"}
 
 
 def _filtra_vinculo(q, vinculo: Optional[str]):
     if not vinculo:
         return q
     if vinculo not in VINCULOS:
-        raise HTTPException(status_code=400, detail="Vínculo inválido — use pai, filho, filho_sem_pai ou sem_vinculo.")
-    filho = aliased(models.Tecnico)
-    tem_filhos = exists().where(filho.pai_id == models.Tecnico.id)
-    eh_filho = or_(models.Tecnico.repasse.is_(True), models.Tecnico.pai_id.isnot(None))
-    if vinculo == "pai":
-        return q.filter(tem_filhos)
-    if vinculo == "filho":
-        return q.filter(eh_filho)
-    if vinculo == "filho_sem_pai":
-        return q.filter(models.Tecnico.repasse.is_(True), models.Tecnico.pai_id.is_(None))
-    return q.filter(~eh_filho, ~tem_filhos)
+        raise HTTPException(
+            status_code=400,
+            detail="Vínculo inválido — use direto, repasse, clt, repasse_sem_direto ou sem_vinculo.",
+        )
+    if vinculo == "sem_vinculo":
+        return q.filter(models.Tecnico.vinculo.is_(None))
+    if vinculo == "repasse_sem_direto":
+        return q.filter(models.Tecnico.vinculo == "repasse", models.Tecnico.direto_id.is_(None))
+    return q.filter(models.Tecnico.vinculo == vinculo)
 
 
 def _filtra_busca(q, busca: Optional[str]):
-    """Nome ou código de PARC — "PARC 1020" acha o pai e os filhos dele."""
+    """Nome, código do técnico ou código do direto — o código de um direto acha
+    ele e os repasses dele."""
     if not busca or not busca.strip():
         return q
     termo = f"%{busca.strip()}%"
-    return q.filter(or_(models.Tecnico.nome.ilike(termo), models.Tecnico.codigo_parc.ilike(termo)))
+    return q.filter(or_(
+        models.Tecnico.nome.ilike(termo),
+        models.Tecnico.codigo.ilike(termo),
+        models.Tecnico.direto_codigo.ilike(termo),
+    ))
+
+
+def _vinculo_valido(vinculo: Optional[str]) -> Optional[str]:
+    vinculo = (vinculo or "").strip().lower() or None
+    if vinculo is not None and vinculo not in VINCULOS_TECNICO:
+        raise HTTPException(status_code=400, detail='Vínculo inválido — use "direto", "repasse" ou "clt".')
+    return vinculo
 
 
 FASE_STATUSES = ["planejada", "em_andamento", "concluida", "liberada"]
@@ -282,8 +296,8 @@ def list_tecnicos(
         db.query(models.Tecnico)
         .options(
             joinedload(models.Tecnico.observacoes).joinedload(models.TecnicoObservacao.ajuste),
-            selectinload(models.Tecnico.pai),
-            selectinload(models.Tecnico.filhos),
+            selectinload(models.Tecnico.direto),
+            selectinload(models.Tecnico.repasses),
         )
     )
     if fase_id is not None:
@@ -329,7 +343,7 @@ def base_tecnicos(
     q = _filtra_vinculo(q, vinculo)
     total = q.count()
     itens = (
-        q.options(selectinload(models.Tecnico.pai), selectinload(models.Tecnico.filhos))
+        q.options(selectinload(models.Tecnico.direto), selectinload(models.Tecnico.repasses))
         .order_by(models.Tecnico.nome)
         .offset(max(0, offset))
         .limit(max(1, min(limite, 200)))
@@ -425,6 +439,63 @@ def _fase_em_andamento(fase: models.PilotoFase) -> None:
     if fase.status == "planejada":
         fase.status = "em_andamento"
         fase.iniciada_em = fase.iniciada_em or datetime.now(timezone.utc)
+
+
+def _distribui_por_uf(db: Session) -> dict:
+    """Põe cada técnico sem fase na fase que cobre a UF dele (as UFs marcadas na
+    fase, as mesmas do mapa). Só mexe em quem está sem fase — ninguém é tirado
+    de uma fase nem tem o progresso resetado — e só usa fase que ainda não
+    acabou (planejada ou em andamento). UF marcada em mais de uma fase fica na
+    primeira pela ordem, e volta em `ufs_em_mais_de_uma_fase`.
+
+    Não muda o status da fase: a fase 3 planejada recebe o pessoal dela, mas
+    continua planejada até alguém começar."""
+    db.flush()   # o import acabou de criar gente: sem o flush a consulta não vê
+    fases = db.query(models.PilotoFase).filter(
+        models.PilotoFase.status.in_(("planejada", "em_andamento")),
+        models.PilotoFase.ufs.isnot(None),
+    ).order_by(models.PilotoFase.ordem, models.PilotoFase.id).all()
+    fase_da_uf = {}
+    repetidas = {}
+    for fase in fases:
+        for uf in fase.ufs.split(","):
+            if uf in fase_da_uf:
+                repetidas.setdefault(uf, [fase_da_uf[uf].nome]).append(fase.nome)
+            else:
+                fase_da_uf[uf] = fase
+    por_fase = {}
+    sem_fase_na_uf = {}
+    sem_uf = 0
+    for t in db.query(models.Tecnico).filter(models.Tecnico.fase_id.is_(None)).all():
+        uf = (t.regional or "").strip().upper()
+        if uf not in UFS:
+            sem_uf += 1
+            continue
+        fase = fase_da_uf.get(uf)
+        if fase is None:
+            sem_fase_na_uf[uf] = sem_fase_na_uf.get(uf, 0) + 1
+            continue
+        _colocar_na_fase(t, fase)
+        por_fase[fase.id] = por_fase.get(fase.id, 0) + 1
+    db.flush()
+    return {
+        "distribuidos": sum(por_fase.values()),
+        "fases": [{"id": f.id, "nome": f.nome, "ufs": f.ufs.split(","), "tecnicos": por_fase[f.id]}
+                  for f in fases if f.id in por_fase],
+        # UF que tem técnico mas nenhuma fase cobre — falta marcar ela em alguma fase
+        "ufs_sem_fase": dict(sorted(sem_fase_na_uf.items())),
+        "sem_uf": sem_uf,
+        "ufs_em_mais_de_uma_fase": [{"uf": uf, "fases": nomes} for uf, nomes in sorted(repetidas.items())],
+    }
+
+
+@router.post("/piloto/fases/distribuir")
+def distribuir_por_regiao(db: Session = Depends(get_db)):
+    """Distribui a base pelas fases conforme as UFs marcadas em cada uma — é o
+    "subi a base do Brasil inteiro, agora cada região cai na sua fase"."""
+    resultado = _distribui_por_uf(db)
+    db.commit()
+    return resultado
 
 
 @router.get("/piloto/fases", response_model=List[schemas.PilotoFaseOut])
@@ -873,11 +944,12 @@ def limpar_base(payload: schemas.LimparBaseTecnicos, db: Session = Depends(get_d
     # disso seria o ON DELETE CASCADE do banco, e o SQLite local não o aplica por
     # padrão — sem isso, o histórico ficaria órfão em vez de sumir junto
     obs_q.delete(synchronize_session=False)
-    # filho que fica (em outra fase) e tinha o pai apagado perde o vínculo, em vez
-    # de apontar pra um id que não existe mais
+    # repasse que fica (em outra fase) e tinha o direto apagado perde a ligação
+    # com o cadastro, em vez de apontar pra um id que não existe mais — o nome e
+    # o código do direto continuam gravados nele
     db.query(models.Tecnico).filter(
-        models.Tecnico.pai_id.in_(ids), models.Tecnico.id.notin_(ids),
-    ).update({models.Tecnico.pai_id: None}, synchronize_session=False)
+        models.Tecnico.direto_id.in_(ids), models.Tecnico.id.notin_(ids),
+    ).update({models.Tecnico.direto_id: None}, synchronize_session=False)
     db.query(models.Tecnico).filter(models.Tecnico.id.in_(ids)).delete(synchronize_session=False)
     db.commit()
     return {
@@ -885,6 +957,33 @@ def limpar_base(payload: schemas.LimparBaseTecnicos, db: Session = Depends(get_d
         "observacoes_apagadas": observacoes,
         "fase": {"id": fase.id, "nome": fase.nome} if fase else None,
     }
+
+
+def _nao_repasse():
+    # vinculo NULL também conta: "!= 'repasse'" sozinho deixaria o NULL de fora
+    return or_(models.Tecnico.vinculo.is_(None), models.Tecnico.vinculo != "repasse")
+
+
+def _liga_direto(db: Session, tecnico: models.Tecnico, nome: Optional[str], codigo: Optional[str]):
+    """Grava o direto do repasse (nome e código como vieram) e liga no cadastro
+    dele quando ele está na base — pelo código e, sem código, pelo nome."""
+    nome = (nome or "").strip() or None
+    codigo = (codigo or "").strip() or None
+    direto = None
+    if codigo:
+        achados = db.query(models.Tecnico).filter(
+            models.Tecnico.codigo == codigo, _nao_repasse(),
+        ).limit(2).all()
+        direto = achados[0] if len(achados) == 1 else None
+    if direto is None and nome:
+        achados = [t for t in db.query(models.Tecnico).filter(_nao_repasse()).all()
+                   if _norm_txt(t.nome) == _norm_txt(nome)]
+        direto = achados[0] if len(achados) == 1 else None
+    if direto is tecnico:
+        direto = None
+    tecnico.direto = direto
+    tecnico.direto_nome = nome or (direto.nome if direto else None)
+    tecnico.direto_codigo = codigo or (direto.codigo if direto else None)
 
 
 @router.post("/tecnicos", response_model=schemas.TecnicoOut, status_code=201)
@@ -901,11 +1000,14 @@ def create_tecnico(payload: schemas.TecnicoCreate, db: Session = Depends(get_db)
         papel=papel,
         regional=(payload.regional or "").strip() or None,
         lider_nome=(payload.lider_nome or "").strip() or None,
-        repasse=payload.repasse,
+        vinculo=_vinculo_valido(payload.vinculo),
+        codigo=(payload.codigo or "").strip() or None,
         autor=(payload.autor or "").strip() or None,
         token=models.novo_token_tecnico(),
         status="a_contatar",
     )
+    if tecnico.vinculo == "repasse":
+        _liga_direto(db, tecnico, payload.direto_nome, payload.direto_codigo)
     db.add(tecnico)
     db.commit()
     db.refresh(tecnico)
@@ -1001,10 +1103,23 @@ def update_tecnico(tecnico_id: int, payload: schemas.TecnicoUpdate, db: Session 
         tecnico.regional = payload.regional.strip() or None
     if payload.lider_nome is not None:
         tecnico.lider_nome = payload.lider_nome.strip() or None
-    # bool tem valor legítimo em False, então "campo enviado" (mesmo como null,
-    # pra voltar a "não informado") é o que importa, não "diferente de None"
-    if "repasse" in payload.model_fields_set:
-        tecnico.repasse = payload.repasse
+    # "campo enviado" (mesmo como null, pra voltar a "não informado") é o que
+    # importa, não "diferente de None"
+    if "vinculo" in payload.model_fields_set:
+        tecnico.vinculo = _vinculo_valido(payload.vinculo)
+    if "codigo" in payload.model_fields_set:
+        tecnico.codigo = (payload.codigo or "").strip() or None
+    if tecnico.vinculo == "repasse":
+        if {"direto_nome", "direto_codigo"} & payload.model_fields_set:
+            _liga_direto(
+                db, tecnico,
+                payload.direto_nome if "direto_nome" in payload.model_fields_set else tecnico.direto_nome,
+                payload.direto_codigo if "direto_codigo" in payload.model_fields_set else tecnico.direto_codigo,
+            )
+    else:
+        # só repasse tem direto
+        tecnico.direto = None
+        tecnico.direto_nome = tecnico.direto_codigo = None
     if payload.status is not None:
         if payload.status not in STATUSES:
             raise HTTPException(status_code=400, detail="Status inválido.")
@@ -1227,27 +1342,66 @@ def responder_formulario(token: str, payload: schemas.FormularioResposta, db: Se
 COLUNAS_IMPORTACAO = {
     "nome": {"nome", "tecnico", "nome do tecnico", "nome completo"},
     "telefone": {"telefone", "whatsapp", "celular", "fone", "numero"},
-    # planilha que já vem classificada (Tipo PAI/FILHO/CLT + quem é o pai e o
-    # número dele) — o filho costuma vir com o próprio celular vazio
-    "tipo_vinculo": {"tipo", "vinculo", "tipo de vinculo", "tipo parc"},
-    "pai_nome": {"tecnico pai", "nome do pai", "pai"},
-    "pai_telefone": {"celular do pai", "telefone do pai", "numero do pai", "whatsapp do pai"},
+    # DIRETO / REPASSE / CLT
+    "tipo_vinculo": {"tipo", "vinculo", "tipo de vinculo", "tipo vinculo", "contratacao",
+                     "tipo de contratacao", "regime"},
+    # o código do próprio técnico — todo técnico tem
+    "codigo": {"codigo", "cod", "codigo do tecnico", "codigo tecnico", "cod tecnico",
+               "codigo de parc", "codigo parc", "cod parc", "codigo do parc", "codigo_parc", "parc"},
+    # repasse: quem é o direto dele, o código e (sem número próprio) o celular do direto
+    "direto_nome": {"direto", "tecnico direto", "nome do direto", "direto responsavel", "parc direto"},
+    "direto_codigo": {"codigo do direto", "codigo direto", "cod direto", "cod do direto",
+                      "codigo parc direto", "codigo do parc direto"},
+    # base de Agentes: "ES PARC1998" = direto PARC1998; "ES PARC1700 REPASSE" =
+    # repasse que trabalha debaixo do direto PARC1700 (a UF na frente é ignorada)
+    "agente": {"agente", "agentes", "codigo agente", "exemplificacao (agentes)", "exemplificacao agentes"},
+    "direto_telefone": {"celular do direto", "telefone do direto", "numero do direto", "whatsapp do direto"},
     "papel": {"papel", "funcao", "função", "cargo"},
     "regional": {"regional", "cidade", "regiao", "praca", "uf"},
     "lider_nome": {"lider", "lider_nome", "lider direto", "responde a", "supervisor"},
-    # "PARC 123" = técnico pai; "PARC 123 REPASSE" = filho de repasse
-    "codigo_parc": {"codigo de parc", "codigo parc", "cod parc", "codigo do parc", "parc", "codigo_parc"},
 }
 # coluna opcional que distribui a planilha entre as fases. Só casa pelo nome
 # exato (sem o fallback por "contém"): base exportada de outro sistema pode ter
 # uma "Fase do contrato" que não tem nada a ver com o piloto.
 COLUNA_FASE = {"fase", "fase do piloto", "leva"}
-# colunas que só casam pelo nome exato: pelo "contém", "pai" pegaria "Celular
-# do Pai" e "uf" pegaria qualquer coisa
-COLUNAS_SO_EXATAS = {"tipo_vinculo", "pai_nome", "pai_telefone"}
-# valores da coluna Tipo: o que diz pai/filho e o que, na verdade, é o papel
-TIPOS_FILHO = {"filho", "repasse", "parc repasse"}
-TIPOS_NAO_FILHO = {"pai", "parc", "clt"}
+# colunas que só casam pelo nome exato — e são procuradas antes das outras: pelo
+# "contém", "celular" pegaria "Celular do Direto" e "nome" pegaria "Nome do Direto"
+COLUNAS_SO_EXATAS = {"tipo_vinculo", "codigo", "agente", "direto_nome", "direto_codigo", "direto_telefone"}
+
+
+def _chave_codigo(codigo) -> str:
+    """Código pra comparar: sem acento, maiúscula nem espaço — "PARC 1020" e
+    "parc1020" são o mesmo."""
+    return re.sub(r"\s+", "", _norm_txt(codigo))
+
+
+def _le_agente(valor: str):
+    """"ES PARC1700 REPASSE" -> ("PARC1700 REPASSE", "PARC1700", True);
+    "SP  PARC4153" -> ("PARC4153", "PARC4153", False). A UF na frente e os
+    espaços duplos saem; sem um PARC reconhecível, devolve o texto limpo."""
+    texto = " ".join((valor or "").split())
+    if not texto:
+        return None, None, False
+    repasse = "repasse" in _norm_txt(texto)
+    m = re.search(r"PARC\s*(\d+)", texto, re.IGNORECASE)
+    if not m:
+        return texto, None, repasse
+    parc = f"PARC{m.group(1)}"
+    return (f"{parc} REPASSE" if repasse else parc), parc, repasse
+
+
+def _vinculo_da_planilha(valor: str) -> Optional[str]:
+    """Valor da coluna Tipo -> direto / repasse / clt (None = não reconhecido)."""
+    v = _norm_txt(valor)
+    if not v:
+        return None
+    if "repasse" in v:
+        return "repasse"
+    if "clt" in v:
+        return "clt"
+    if "direto" in v or v in ("parc", "pj"):
+        return "direto"
+    return None
 
 
 @router.get("/tecnicos/exportar")
@@ -1265,8 +1419,8 @@ def exportar_piloto(fase_id: Optional[int] = None, db: Session = Depends(get_db)
 
     q = db.query(models.Tecnico).options(
         joinedload(models.Tecnico.observacoes).joinedload(models.TecnicoObservacao.ajuste),
-        selectinload(models.Tecnico.pai),
-        selectinload(models.Tecnico.filhos),
+        selectinload(models.Tecnico.direto),
+        selectinload(models.Tecnico.repasses),
     )
     if fase_id:
         q = q.filter(models.Tecnico.fase_id == fase_id)
@@ -1291,19 +1445,12 @@ def exportar_piloto(fase_id: Optional[int] = None, db: Session = Depends(get_db)
     escreve_cabecalho(
         ws,
         ["Nome", "Telefone", "Papel", "Regional", "Líder", "Situação", "Nota",
-         "Etapas testadas", "Respondeu em", "Anotações", "Código PARC", "Pai / filho", "Telefone do pai"],
-        [28, 18, 10, 18, 20, 16, 7, 46, 18, 11, 20, 30, 18],
+         "Etapas testadas", "Respondeu em", "Anotações", "Vínculo", "Código", "Direto", "Código do direto"],
+        [28, 18, 10, 18, 20, 16, 7, 46, 18, 11, 10, 18, 28, 18],
     )
     for t in tecnicos:
-        if t.pai_id or t.repasse:
-            vinculo = f"Filho de {t.pai_nome}" if t.pai_nome else "Filho (pai não identificado)"
-        elif t.filhos:
-            vinculo = f"Pai de {len(t.filhos)}: " + ", ".join(f.nome for f in t.filhos)
-        else:
-            vinculo = ""
         ws.append([
-            # filho com o número do pai: o número não é dele — vai só na coluna do pai
-            t.nome, "" if t.numero_do_pai else t.telefone,
+            t.nome, t.telefone,
             "Líder" if t.papel == "lider" else "Técnico",
             t.regional or "", t.lider_nome or "",
             STATUS_LABELS.get(t.status, t.status),
@@ -1311,7 +1458,8 @@ def exportar_piloto(fase_id: Optional[int] = None, db: Session = Depends(get_db)
             (t.etapas_testadas or "").replace("|", " · "),
             t.respondido_em.astimezone(BRT).strftime("%d/%m/%Y %H:%M") if t.respondido_em else "",
             len(t.observacoes),
-            t.codigo_parc or "", vinculo, t.telefone if t.numero_do_pai else "",
+            VINCULO_LABELS.get(t.vinculo, ""), t.codigo or "",
+            t.direto_nome or "", t.direto_codigo or "",
         ])
 
     ws2 = wb.create_sheet("Feedback")
@@ -1363,13 +1511,14 @@ def baixar_modelo_importacao():
     ws = wb.active
     ws.title = "Técnicos"
     # "fase" é opcional: preenchida, a linha já cai direto naquela fase do piloto
-    # "codigo de parc" é opcional: "PARC ..." = pai; "PARC ... REPASSE" = filho.
-    # Filho que veio com o número do pai repete o número — é assim que o vínculo é achado
-    ws.append(["nome", "telefone", "codigo de parc", "papel", "regional", "lider", "fase"])
-    ws.append(["João Silva", "(11) 99999-8888", "PARC 1020", "tecnico", "SP capital", "", "Fase 1 — SP capital"])
-    ws.append(["Pedro Alves", "(11) 99999-8888", "PARC 1020 REPASSE", "tecnico", "SP capital", "", "Fase 1 — SP capital"])
-    ws.append(["Marcos Souza", "(11) 98888-7777", "PARC 2030", "lider", "Interior SP", "", ""])
-    for i, largura in enumerate([26, 20, 22, 12, 20, 20, 22], start=1):
+    # formato da base de Agentes: "Tipo" = Direto / Repasse / CLT; "Agente" traz o
+    # PARC — no direto é o código dele, no repasse ("... REPASSE") é o PARC do
+    # direto dele, que é como o repasse é ligado ao direto. "fase" é opcional
+    ws.append(["Técnico", "Tipo", "UF", "Agente", "Telefone", "fase"])
+    ws.append(["João Silva", "Direto", "SP", "SP PARC1020", "(11) 99999-8888", "Fase 1 — SP capital"])
+    ws.append(["Pedro Alves", "Repasse", "SP", "SP PARC1020 REPASSE", "(11) 97777-6666", "Fase 1 — SP capital"])
+    ws.append(["Marcos Souza", "CLT", "SP", "", "(11) 98888-7777", ""])
+    for i, largura in enumerate([30, 10, 6, 24, 18, 22], start=1):
         ws.column_dimensions[get_column_letter(i)].width = largura
     buf = io.BytesIO()
     wb.save(buf)
@@ -1386,6 +1535,7 @@ async def importar_tecnicos(
     file: UploadFile = File(...),
     autor: Optional[str] = Form(default=None),
     fase_id: Optional[int] = Form(default=None),
+    distribuir: bool = Form(default=False),
     db: Session = Depends(get_db),
 ):
     """Sobe a base de técnicos de uma vez a partir de uma planilha .xlsx (colunas:
@@ -1404,17 +1554,13 @@ async def importar_tecnicos(
     planilha é escolha explícita, então quem estava em outra fase é movido —
     com o progresso resetado, como em adicionar_na_fase.
 
-    Com a coluna "codigo de parc", monta a hierarquia pai/filho: só PARC = pai;
-    PARC ... REPASSE = filho. Na base, o filho costuma vir com o número do pai,
-    então número repetido não é mais rejeição automática: no grupo do mesmo
-    número, a linha só PARC é a dona verdadeira do número (o pai) e as REPASSE
-    são filhos dele, marcados com `numero_do_pai` (o número não é deles). Dois
-    PARC com o mesmo número continuam rejeitados — não dá pra saber de quem é.
-
-    Também aceita a planilha que já vem classificada: coluna "Tipo" (PAI /
-    FILHO / CLT), "Técnico Pai" e "Celular do Pai". Filho com o celular vazio
-    entra com o número do pai (marcado como `numero_do_pai`); o pai é achado
-    pelo nome e, com mais de um nome possível, pelo "Celular do Pai"."""
+    Com a coluna "tipo" (DIRETO / REPASSE / CLT) grava o vínculo de cada um, e
+    a coluna "codigo" o código do técnico. Repasse diz quem é o direto dele
+    ("direto" e "codigo do direto"): o direto é achado na planilha ou na base
+    pelo código e, sem código, pelo nome. Repasse sem número próprio pode vir
+    com o telefone vazio — entra com o "celular do direto" ou com o número do
+    cadastro do direto, e pode repetir o número do direto sem ser rejeitado.
+    Repasse sem direto informado ou com direto não achado volta nos avisos."""
     fase_fixa = None
     if fase_id is not None:
         fase_fixa = db.query(models.PilotoFase).filter(models.PilotoFase.id == fase_id).first()
@@ -1434,7 +1580,9 @@ async def importar_tecnicos(
     cabecalho = [_norm_txt(c) for c in linhas[0]]
     idx = {}
     usadas = set()
-    for campo, aliases in COLUNAS_IMPORTACAO.items():
+    # as colunas "só exatas" primeiro, pra que o fallback por "contém" das outras
+    # não roube "Celular do Direto" ou "Nome do Direto"
+    for campo, aliases in sorted(COLUNAS_IMPORTACAO.items(), key=lambda kv: kv[0] not in COLUNAS_SO_EXATAS):
         # 1ª passada: coluna com o nome exato (ex.: "Nome", "Telefone"). 2ª passada
         # (fallback): a base pode vir de outro sistema com coluna composta — ex.
         # "Endereço - Cidade" cai em "regional" por conter "cidade".
@@ -1464,14 +1612,20 @@ async def importar_tecnicos(
         i = idx.get(campo)
         if i is None or i >= len(row) or row[i] is None:
             return ""
-        return str(row[i]).strip()
+        v = row[i]
+        if isinstance(v, float) and v.is_integer():
+            v = int(v)   # telefone salvo como número: sem o ".0" virando dígito a mais
+        return str(v).strip()
 
-    # quem já está na base, pelo telefone — reimportar a planilha atualizada não
-    # rejeita esse pessoal, atualiza o cadastro deles (ver abaixo)
-    # (lista: pai e filhos de repasse dividem o mesmo número)
+    # quem já está na base, pelo telefone e pelo código — reimportar a planilha
+    # atualizada não rejeita esse pessoal, atualiza o cadastro deles (ver abaixo)
+    # (lista: o repasse sem número próprio divide o número com o direto)
     ja_na_base = {}
+    base_por_codigo = {}
     for t in db.query(models.Tecnico).all():
         ja_na_base.setdefault(t.telefone, []).append(t)
+        if t.codigo:
+            base_por_codigo.setdefault(_chave_codigo(t.codigo), []).append(t)
 
     # fases por nome normalizado — "Fase 2", "fase 2 " e "FASE 2" são a mesma
     fases_por_nome = {_norm_txt(f.nome): f for f in db.query(models.PilotoFase).all()}
@@ -1509,16 +1663,23 @@ async def importar_tecnicos(
     atualizados = 0
     em_branco = 0
     rejeitados = []
-    # sem código de PARC nem coluna Tipo, a planilha não diz nada sobre pai/filho
-    tem_hierarquia = "codigo_parc" in idx or "tipo_vinculo" in idx
+    avisos = []
+    tem_tipo = "tipo_vinculo" in idx
+    tem_codigo = "codigo" in idx or "agente" in idx
+    # quantos entraram de cada tipo e quantos vieram sem o código
+    vinculos = {"direto": 0, "repasse": 0, "clt": 0, "sem_tipo": 0, "sem_codigo": 0}
 
     def rejeita(r, motivo):
         rejeitados.append({
             "linha": r["linha"], "nome": r["nome"], "telefone": r["telefone_bruto"], "motivo": motivo,
         })
 
-    # 1ª passada: lê e valida linha por linha. Quem é pai e quem é filho só dá
-    # pra decidir vendo todas as linhas com o mesmo número, daí a 2ª passada.
+    def avisa(r, motivo):
+        avisos.append({"linha": r["linha"], "nome": r["nome"], "telefone": r["telefone_bruto"], "motivo": motivo})
+
+    # 1ª passada: lê e valida linha por linha. O repasse só é gravado depois dos
+    # diretos (2ª passada) — é de lá que sai o direto dele e, quando ele não tem
+    # número próprio, o telefone
     validas = []
     for linha_num, row in enumerate(linhas[1:], start=2):
         r = {"linha": linha_num, "row": row, "nome": valor(row, "nome"),
@@ -1526,57 +1687,63 @@ async def importar_tecnicos(
         if not r["nome"] and not r["telefone_bruto"]:
             em_branco += 1
             continue  # linha em branco — não é erro, só não tem nada nela
-        r["codigo"] = valor(row, "codigo_parc") or None
-        tipo = _norm_txt(valor(row, "tipo_vinculo"))
-        r["tipo"] = tipo if tipo in TIPOS_FILHO | TIPOS_NAO_FILHO else None
-        # coluna Tipo com PAI/FILHO manda; sem ela, "PARC 123 REPASSE" = filho
-        r["filho"] = tipo in TIPOS_FILHO if r["tipo"] else "repasse" in _norm_txt(r["codigo"])
-        r["pai_nome"] = valor(row, "pai_nome") or None
-        r["pai_telefone"] = valor(row, "pai_telefone") or None
-        r["sem_numero_proprio"] = False
-        if r["filho"] and not r["telefone_bruto"] and r["pai_telefone"]:
-            # planilha já tratada: o número repetido do filho foi apagado e o do
-            # pai veio em "Celular do Pai" — é por ele que se chega no filho
-            r["telefone_bruto"] = r["pai_telefone"]
-            r["sem_numero_proprio"] = True
-        if not r["telefone_bruto"]:
-            rejeita(r, "sem telefone")
-            continue
+        r["vinculo"] = _vinculo_da_planilha(valor(row, "tipo_vinculo"))
+        r["codigo"] = valor(row, "codigo") or None
+        r["direto_nome"] = valor(row, "direto_nome") or None
+        r["direto_codigo"] = valor(row, "direto_codigo") or None
+        cod_agente, parc_agente, repasse_agente = _le_agente(valor(row, "agente"))
+        if cod_agente:
+            # sem coluna Tipo, o "REPASSE" do Agente decide
+            if r["vinculo"] is None and parc_agente:
+                r["vinculo"] = "repasse" if repasse_agente else "direto"
+            r["codigo"] = r["codigo"] or cod_agente
+            # no repasse, o PARC do Agente é o do direto dele
+            if r["vinculo"] == "repasse" and parc_agente:
+                r["direto_codigo"] = r["direto_codigo"] or parc_agente
+        r["direto_telefone"] = valor(row, "direto_telefone") or None
+        r["repasse"] = r["vinculo"] == "repasse"
         if not r["nome"]:
             rejeita(r, "sem nome")
             continue
-        try:
-            r["telefone"] = _norm_telefone(r["telefone_bruto"])
-        except HTTPException:
-            rejeita(r, "telefone inválido")
+        if r["repasse"] and not r["telefone_bruto"]:
+            # sem número próprio: chega nele pelo número do direto
+            r["telefone_bruto"] = r["direto_telefone"] or ""
+        if not r["telefone_bruto"] and not r["repasse"]:
+            rejeita(r, "sem telefone")
             continue
+        r["telefone"] = None
+        if r["telefone_bruto"]:
+            try:
+                r["telefone"] = _norm_telefone(r["telefone_bruto"])
+            except HTTPException:
+                rejeita(r, "telefone inválido")
+                continue
         validas.append(r)
-
-    por_numero = {}          # telefone -> linhas com aquele número, na ordem da planilha
-    for r in validas:
-        por_numero.setdefault(r["telefone"], []).append(r)
 
     usados = set()           # cadastros da base já casados com alguma linha
 
     def acha_existente(r):
-        """Mesmo número + mesmo nome é o próprio. Sem isso, a linha de PARC (pai)
-        fica com quem já tinha o número e não é filho — é o que deixa corrigir
-        o nome do pai reimportando a planilha. Filho só casa pelo nome: com o
-        número do pai, o número sozinho não diz quem ele é."""
+        """Pelo código (quando só um cadastro tem aquele código); senão mesmo
+        número + mesmo nome; senão, pra quem não é repasse, o dono do número.
+        Repasse não casa só pelo número: ele pode estar com o número do direto."""
+        if r["codigo"]:
+            por_codigo = [t for t in base_por_codigo.get(_chave_codigo(r["codigo"]), []) if id(t) not in usados]
+            if len(por_codigo) == 1:
+                return por_codigo[0]
         candidatos = [t for t in ja_na_base.get(r["telefone"], []) if id(t) not in usados]
         for t in candidatos:
             if _norm_txt(t.nome) == _norm_txt(r["nome"]):
                 return t
-        if not r["filho"]:
+        if not r["repasse"]:
             for t in candidatos:
-                if not t.numero_do_pai and t.repasse is not True:
+                if t.vinculo != "repasse":
                     return t
         return None
 
-    def grava(r, pai=None, numero_do_pai=None):
+    def grava(r, direto=None):
         nonlocal criados, atualizados
         row = r["row"]
-        papel_txt = _norm_txt(valor(row, "papel")) or _norm_txt(valor(row, "tipo_vinculo"))
+        papel_txt = _norm_txt(valor(row, "papel"))
         papel = "lider" if papel_txt in ("lider", "lider de equipe", "supervisor") else "tecnico"
         regional = valor(row, "regional") or None
         lider_nome = valor(row, "lider_nome") or None
@@ -1587,6 +1754,10 @@ async def importar_tecnicos(
             # etapas e feedback são progresso de QA e não vêm da planilha
             tecnico.nome = r["nome"]
             tecnico.papel = papel
+            if tecnico.telefone != r["telefone"]:
+                # casou pelo código com o número trocado: vale o da planilha
+                ja_na_base.setdefault(r["telefone"], []).append(tecnico)
+                tecnico.telefone = r["telefone"]
             if regional:
                 tecnico.regional = regional
             if lider_nome:
@@ -1606,106 +1777,104 @@ async def importar_tecnicos(
             ja_na_base.setdefault(r["telefone"], []).append(tecnico)
             criados += 1
         usados.add(id(tecnico))
-        if tem_hierarquia:
-            tecnico.codigo_parc = r["codigo"]
-            if r["codigo"] or r["tipo"]:
-                tecnico.repasse = r["filho"]
-            tecnico.pai = pai
-            tecnico.numero_do_pai = numero_do_pai
+        vinculos[r["vinculo"] or "sem_tipo"] += 1
+        if not r["codigo"]:
+            vinculos["sem_codigo"] += 1
+        if r["codigo"]:
+            tecnico.codigo = r["codigo"]
+        if r["vinculo"]:
+            tecnico.vinculo = r["vinculo"]
+        if tecnico.vinculo == "repasse":
+            tecnico.direto = direto
+            tecnico.direto_nome = r["direto_nome"] or (direto.nome if direto else None)
+            tecnico.direto_codigo = r["direto_codigo"] or (direto.codigo if direto else None)
+        elif r["vinculo"]:
+            tecnico.direto = None
+            tecnico.direto_nome = tecnico.direto_codigo = None
         manda_pra_fase(tecnico, fase_da_linha(row))
         return tecnico
 
-    def pai_na_base(telefone):
-        for t in ja_na_base.get(telefone, []):
-            if not t.numero_do_pai and t.repasse is not True:
-                return t
-        return None
+    # 2ª passada: direto, CLT e quem não tem tipo — cada número é de um só
+    diretos_por_codigo = {}  # código normalizado -> diretos da planilha
+    diretos_por_nome = {}    # nome normalizado -> diretos da planilha
+    linha_do_numero = {}     # telefone -> 1ª linha que trouxe o número
+    for r in validas:
+        if r["repasse"]:
+            continue
+        if r["telefone"] in linha_do_numero:
+            rejeita(r, f"telefone repetido na planilha (já veio na linha {linha_do_numero[r['telefone']]})")
+            continue
+        linha_do_numero[r["telefone"]] = r["linha"]
+        tecnico = grava(r)
+        if tecnico.vinculo != "repasse":
+            if tecnico.codigo:
+                diretos_por_codigo.setdefault(_chave_codigo(tecnico.codigo), []).append(tecnico)
+            diretos_por_nome.setdefault(_norm_txt(tecnico.nome), []).append(tecnico)
 
-    base_por_nome = {}       # pai que já estava na base, pelo nome
-    for lista in ja_na_base.values():
-        for t in lista:
-            if not t.numero_do_pai and t.repasse is not True:
-                base_por_nome.setdefault(_norm_txt(t.nome), []).append(t)
+    base_nao_repasse = [t for lista in ja_na_base.values() for t in lista
+                        if t.vinculo != "repasse" and id(t) not in usados]
 
-    # 2ª passada, pais: número repetido + só PARC = o dono verdadeiro do número
-    pai_do_numero = {}       # telefone -> pai da planilha dono do número
-    pais_por_nome = {}       # nome normalizado -> pais da planilha
-    for telefone, grupo in por_numero.items():
-        pais = [r for r in grupo if not r["filho"]]
-        for r in pais:
-            if telefone in pai_do_numero:
-                # dois PARC com o mesmo número: não dá pra saber de quem ele é
-                rejeita(r, f"telefone repetido na planilha (já veio na linha {pais[0]['linha']})")
-                continue
-            pai = grava(r, numero_do_pai=False if tem_hierarquia else None)
-            pai_do_numero[telefone] = pai
-            pais_por_nome.setdefault(_norm_txt(r["nome"]), []).append(pai)
-
-    def pai_pelo_nome(r):
-        """Planilha que já diz quem é o pai ("Técnico Pai"): acha pelo nome. Com
-        mais de um nome ("FULANO / BELTRANO") ou homônimo, quem desempata é o
-        "Celular do Pai" — o pai certo é o dono daquele número."""
-        tel_pai = None
-        if r["pai_telefone"]:
+    def acha_direto(r):
+        """O direto do repasse: pelo código; sem código (ou código que não bate),
+        pelo nome; e, por último, pelo celular do direto. Na planilha primeiro,
+        depois na base. Ambíguo fica sem direto — melhor no aviso do que ligado
+        ao direto errado."""
+        tel_direto = None
+        if r["direto_telefone"]:
             try:
-                tel_pai = _norm_telefone(r["pai_telefone"])
+                tel_direto = _norm_telefone(r["direto_telefone"])
             except HTTPException:
                 pass
-        candidatos = []
-        for nome in r["pai_nome"].split("/"):
-            chave = _norm_txt(nome)
-            for t in pais_por_nome.get(chave) or base_por_nome.get(chave) or []:
-                if t not in candidatos:
-                    candidatos.append(t)
-        if tel_pai and len(candidatos) != 1:
-            pelo_numero = [t for t in candidatos if t.telefone == tel_pai]
-            if pelo_numero:
-                candidatos = pelo_numero
-            elif not candidatos and tel_pai in pai_do_numero:
-                # nome não bate (grafia diferente), mas o número é de um pai da planilha
-                candidatos = [pai_do_numero[tel_pai]]
-        # ainda empatado: melhor sem pai (e no aviso) do que ligado ao pai errado
-        return candidatos[0] if len(candidatos) == 1 else None
+        if r["direto_codigo"]:
+            chave = _chave_codigo(r["direto_codigo"])
+            achados = diretos_por_codigo.get(chave) or [
+                t for t in base_nao_repasse if t.codigo and _chave_codigo(t.codigo) == chave]
+            if len(achados) == 1:
+                return achados[0]
+        if r["direto_nome"]:
+            chave = _norm_txt(r["direto_nome"])
+            achados = diretos_por_nome.get(chave) or [
+                t for t in base_nao_repasse if _norm_txt(t.nome) == chave]
+            if len(achados) > 1 and tel_direto:
+                achados = [t for t in achados if t.telefone == tel_direto]
+            if len(achados) == 1:
+                return achados[0]
+        if tel_direto:
+            achados = [t for t in ja_na_base.get(tel_direto, []) if t.vinculo != "repasse"]
+            if len(achados) == 1:
+                return achados[0]
+        return None
 
-    # 2ª passada, filhos: número repetido + REPASSE (ou Tipo FILHO) = filho com
-    # o número do pai — o número não é dele
-    pais_com_filhos = set()
-    filhos = 0
-    filhos_numero_do_pai = 0
-    filhos_sem_pai = []
-    for telefone, grupo in por_numero.items():
-        vistos = {}          # nome do filho -> linha, pra não cadastrar a mesma pessoa duas vezes
-        for r in (r for r in grupo if r["filho"]):
-            chave = _norm_txt(r["nome"])
-            if chave in vistos:
-                rejeita(r, f"telefone repetido na planilha (já veio na linha {vistos[chave]})")
+    # 3ª passada: repasse — liga no direto e, sem número próprio, usa o dele
+    repasse_sem_direto = 0
+    vistos = {}              # (telefone, nome) -> linha, pra não cadastrar a mesma pessoa duas vezes
+    for r in validas:
+        if not r["repasse"]:
+            continue
+        direto = acha_direto(r)
+        if r["telefone"] is None:
+            if direto is None:
+                rejeita(r, "repasse sem telefone e sem direto achado pra usar o número dele")
                 continue
-            vistos[chave] = r["linha"]
-            if r["pai_nome"]:
-                pai_dele = pai_pelo_nome(r)
-                numero_do_pai = r["sem_numero_proprio"] or (
-                    pai_dele is not None and pai_dele.telefone == telefone)
+            r["telefone"] = direto.telefone
+            r["telefone_bruto"] = direto.telefone
+        chave = (r["telefone"], _norm_txt(r["nome"]))
+        if chave in vistos:
+            rejeita(r, f"telefone repetido na planilha (já veio na linha {vistos[chave]})")
+            continue
+        vistos[chave] = r["linha"]
+        grava(r, direto=direto)
+        if direto is None:
+            repasse_sem_direto += 1
+            if r["direto_nome"] or r["direto_codigo"]:
+                quem = " / ".join(x for x in (r["direto_nome"], r["direto_codigo"]) if x)
+                avisa(r, f"direto \"{quem}\" não encontrado na planilha nem na base")
             else:
-                pai_dele = pai_do_numero.get(telefone) or pai_na_base(telefone)
-                # filho com número só dele (não repetido, sem pai dono do número)
-                # fica com o número; repetido, o número é do pai
-                numero_do_pai = r["sem_numero_proprio"] or len(grupo) > 1 or pai_dele is not None
-            grava(r, pai=pai_dele, numero_do_pai=numero_do_pai)
-            filhos += 1
-            if numero_do_pai:
-                filhos_numero_do_pai += 1
-            if pai_dele is not None:
-                pais_com_filhos.add(id(pai_dele))
-            elif numero_do_pai or r["pai_nome"]:
-                filhos_sem_pai.append({
-                    "linha": r["linha"], "nome": r["nome"], "telefone": r["telefone_bruto"],
-                    "motivo": ((f"mais de um pai possível ({r['pai_nome']}) e o número não desempata"
-                                if "/" in r["pai_nome"] else
-                                f"pai \"{r['pai_nome']}\" não encontrado na planilha nem na base")
-                               if r["pai_nome"] else
-                               "filho de repasse com número repetido, sem PARC pai com esse número"),
-                })
+                avisa(r, "repasse sem direto informado")
     rejeitados.sort(key=lambda e: e["linha"])
+    # base do Brasil inteiro numa planilha só: com `distribuir`, quem ficou sem
+    # fase cai na fase que cobre a UF dele
+    distribuicao = _distribui_por_uf(db) if distribuir and fase_fixa is None else None
     db.commit()
 
     # o resumo é o que responde "por que entraram menos do que a planilha tinha":
@@ -1730,12 +1899,8 @@ async def importar_tecnicos(
             [{"id": fase_fixa.id, "nome": fase_fixa.nome, "tecnicos": por_fase.get(fase_fixa.id, 0)}]
         ),
         "fases_criadas": fases_criadas,
-        # pai (PARC) / filho (PARC REPASSE) — só quando a planilha tem o código
-        "hierarquia": {
-            "pais_com_filhos": len(pais_com_filhos),
-            "filhos": filhos,
-            "filhos_com_numero_do_pai": filhos_numero_do_pai,
-            "filhos_sem_pai": len(filhos_sem_pai),
-        } if tem_hierarquia else None,
-        "avisos": filhos_sem_pai,
+        # direto / repasse / CLT — só quando a planilha tem a coluna Tipo ou Código
+        "vinculos": {**vinculos, "repasse_sem_direto": repasse_sem_direto} if (tem_tipo or tem_codigo) else None,
+        "avisos": avisos,
+        "distribuicao": distribuicao,
     }
