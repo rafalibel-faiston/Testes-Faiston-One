@@ -652,9 +652,11 @@ app já usa entre a lista de status do Python e a do JS).
 ### API
 
 - `GET  /api/tecnicos` — lista completa com observações (filtros: `status`, `papel`,
-  `regional`, `busca`, `fase_id`); sempre limitada (`limite`, padrão 300)
+  `regional`, `busca`, `fase_id`, `vinculo`); sempre limitada (`limite`, padrão 300).
+  `vinculo` = `direto`, `repasse`, `clt`, `repasse_sem_direto` ou `sem_vinculo`;
+  `busca` acha por nome, código do técnico ou código do direto
 - `GET  /api/tecnicos/base` — a base em formato leve e paginado (`busca`,
-  `regional`, `papel`, `sem_fase`, `limite`, `offset`) — é o que a tela usa pra
+  `regional`, `papel`, `sem_fase`, `vinculo`, `limite`, `offset`) — é o que a tela usa pra
   escolher quem entra numa fase sem baixar tudo
 - `GET  /api/tecnicos/regionais` — as regionais existentes, com quantos em cada
 - `GET  /api/piloto/fases` · `POST` · `PATCH /{id}` · `DELETE /{id}` — as fases do
@@ -694,7 +696,12 @@ app já usa entre a lista de status do Python e a do JS).
   `criados`, `atualizados`, `rejeitados`, o `resumo` por motivo e a lista `erros`
   com linha/nome/telefone/motivo de cada rejeitada; com `fase_id` (form) põe
   todos na fase, e sem ele usa a coluna `fase` da planilha (`fases`, `fases_criadas`
-  dizem onde cada um caiu)
+  dizem onde cada um caiu). Colunas de vínculo: `tipo` (DIRETO / REPASSE / CLT),
+  `codigo` (o do técnico — todo técnico tem) e, no repasse, `direto` e `codigo do
+  direto` (+ `celular do direto`, opcional). O direto é achado pelo código e, sem
+  ele, pelo nome; repasse sem telefone entra com o número do direto. Volta
+  `vinculos` (contagem por tipo, `sem_codigo`, `repasse_sem_direto`) e `avisos`
+  (repasse que entrou sem o direto achado)
 
 Também dá pra pedir isso direto no Claude via MCP: `listar_tecnicos`, `criar_tecnico`,
 `gerar_mensagem_tecnico`, `atualizar_status_tecnico`, `adicionar_observacao_tecnico`

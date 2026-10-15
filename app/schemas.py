@@ -471,13 +471,13 @@ class TecnicoObservacaoCreate(BaseModel):
     versao_app: Optional[str] = None
 
 
-class TecnicoFilhoOut(BaseModel):
-    """Filho de repasse listado no card do pai."""
+class TecnicoRepasseOut(BaseModel):
+    """Repasse listado no card do direto dele."""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     nome: str
-    codigo_parc: Optional[str] = None
+    codigo: Optional[str] = None
     fase_id: Optional[int] = None
 
 
@@ -490,12 +490,13 @@ class TecnicoOut(BaseModel):
     papel: str = "tecnico"
     regional: Optional[str] = None
     lider_nome: Optional[str] = None
-    repasse: Optional[bool] = None  # cruzado com a base de Agentes; None = ainda não cruzado
-    codigo_parc: Optional[str] = None
-    pai_id: Optional[int] = None           # filho de repasse: quem é o pai dele
-    pai_nome: Optional[str] = None
-    numero_do_pai: Optional[bool] = None   # True = o telefone é do pai, não dele
-    filhos: List[TecnicoFilhoOut] = []     # pai: os filhos de repasse debaixo dele
+    vinculo: Optional[str] = None          # direto / repasse / clt; None = não informado
+    codigo: Optional[str] = None           # código do técnico na base
+    direto_id: Optional[int] = None        # repasse: o cadastro do direto dele, se está na base
+    direto_nome: Optional[str] = None      # repasse: nome do direto (como veio da planilha)
+    direto_codigo: Optional[str] = None    # repasse: código do direto
+    numero_do_direto: bool = False         # repasse sem número próprio: o telefone é do direto
+    repasses: List[TecnicoRepasseOut] = [] # direto: os repasses debaixo dele
     status: str = "a_contatar"
     autor: Optional[str] = None
     fase_id: Optional[int] = None          # leva do piloto em que ele entrou
@@ -517,7 +518,10 @@ class TecnicoCreate(BaseModel):
     papel: Optional[str] = "tecnico"
     regional: Optional[str] = None
     lider_nome: Optional[str] = None
-    repasse: Optional[bool] = None
+    vinculo: Optional[str] = None
+    codigo: Optional[str] = None
+    direto_nome: Optional[str] = None
+    direto_codigo: Optional[str] = None
     autor: Optional[str] = None
 
 
@@ -527,7 +531,10 @@ class TecnicoUpdate(BaseModel):
     papel: Optional[str] = None
     regional: Optional[str] = None
     lider_nome: Optional[str] = None
-    repasse: Optional[bool] = None
+    vinculo: Optional[str] = None
+    codigo: Optional[str] = None
+    direto_nome: Optional[str] = None
+    direto_codigo: Optional[str] = None
     status: Optional[str] = None
 
 
@@ -618,7 +625,7 @@ class AdicionarNaFase(BaseModel):
     regional: Optional[str] = None
     busca: Optional[str] = None
     papel: Optional[str] = None
-    vinculo: Optional[str] = None   # pai / filho / filho_sem_pai / sem_vinculo
+    vinculo: Optional[str] = None   # direto / repasse / clt / repasse_sem_direto / sem_vinculo
     # True = todo mundo da base que bate no filtro (ou a base inteira, sem
     # filtro) — o "não quero escolher um por um"
     todos: bool = False
@@ -638,12 +645,13 @@ class TecnicoResumoOut(BaseModel):
     regional: Optional[str] = None
     status: str = "a_contatar"
     fase_id: Optional[int] = None
-    codigo_parc: Optional[str] = None
-    repasse: Optional[bool] = None
-    pai_id: Optional[int] = None
-    pai_nome: Optional[str] = None
-    numero_do_pai: Optional[bool] = None
-    filhos_qtd: int = 0                    # pai: quantos filhos de repasse tem
+    vinculo: Optional[str] = None
+    codigo: Optional[str] = None
+    direto_id: Optional[int] = None
+    direto_nome: Optional[str] = None
+    direto_codigo: Optional[str] = None
+    numero_do_direto: bool = False
+    repasses_qtd: int = 0                  # direto: quantos repasses tem
 
 
 class BaseTecnicosOut(BaseModel):

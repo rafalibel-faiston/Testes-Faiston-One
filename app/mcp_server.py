@@ -776,12 +776,12 @@ def _tecnico_to_dict(tecnico: models.Tecnico) -> dict:
         "papel": tecnico.papel,
         "regional": tecnico.regional,
         "lider_nome": tecnico.lider_nome,
-        "repasse": tecnico.repasse,
-        "codigo_parc": tecnico.codigo_parc,
-        "pai_id": tecnico.pai_id,
-        "pai_nome": tecnico.pai_nome,
-        "numero_do_pai": tecnico.numero_do_pai,
-        "filhos": [{"id": f.id, "nome": f.nome} for f in tecnico.filhos],
+        "vinculo": tecnico.vinculo,
+        "codigo": tecnico.codigo,
+        "direto_id": tecnico.direto_id,
+        "direto_nome": tecnico.direto_nome,
+        "direto_codigo": tecnico.direto_codigo,
+        "repasses": [{"id": r.id, "nome": r.nome, "codigo": r.codigo} for r in tecnico.repasses],
         "status": tecnico.status,
         "fase_id": tecnico.fase_id,
         "fase_nome": tecnico.fase.nome if tecnico.fase else None,
@@ -993,16 +993,33 @@ def gerar_mensagem_tecnico(tecnico_id: int, tipo: str = "convite") -> dict:
 
 
 @mcp.tool()
-def atualizar_repasse_tecnico(tecnico_id: int, repasse: Optional[bool] = None) -> dict:
-    """Marca se o técnico é prestador de repasse (True), PARC direto/CLT (False)
-    ou volta a "não informado" (None) — é o que cruza com a base geral de
-    Agentes (coluna "Informações Adicionais" com "REPASSE")."""
+def atualizar_vinculo_tecnico(
+    tecnico_id: int,
+    vinculo: Optional[str] = None,
+    codigo: Optional[str] = None,
+    direto_nome: Optional[str] = None,
+    direto_codigo: Optional[str] = None,
+) -> dict:
+    """Define o vínculo do técnico: "direto", "repasse" ou "clt" (None = não
+    informado), o código dele e, pra repasse, quem é o direto e o código do
+    direto. Campos não enviados (None) ficam como estão, menos o vínculo."""
+    if vinculo is not None and vinculo not in ("direto", "repasse", "clt"):
+        return {"erro": 'Vínculo inválido — use "direto", "repasse" ou "clt".'}
     db = SessionLocal()
     try:
         tecnico = db.query(models.Tecnico).filter(models.Tecnico.id == tecnico_id).first()
         if not tecnico:
             return {"erro": f"Técnico {tecnico_id} não encontrado"}
-        tecnico.repasse = repasse
+        tecnico.vinculo = vinculo
+        if codigo is not None:
+            tecnico.codigo = codigo.strip() or None
+        if direto_nome is not None:
+            tecnico.direto_nome = direto_nome.strip() or None
+        if direto_codigo is not None:
+            tecnico.direto_codigo = direto_codigo.strip() or None
+        if vinculo != "repasse":
+            tecnico.direto = None
+            tecnico.direto_nome = tecnico.direto_codigo = None
         db.commit()
         db.refresh(tecnico)
         return _tecnico_to_dict(tecnico)
