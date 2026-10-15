@@ -2571,3 +2571,20 @@ body.inline-connecting * { cursor:crosshair !important; }
 .tv-v.mono, .tv-v .mono { font-family:'Roboto Mono',monospace; font-size:11px; }
 .tv-alerta { color:var(--warn); font-weight:600; }
 @media (max-width: 720px) { .base-vinc, .base-cod { display:none; } }
+
+/* divisão da fase entre pessoas: o andamento da fila de cada uma */
+.resp-painel { margin:4px 0 12px; }
+.resp-cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:10px; }
+.resp-card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-sm); padding:10px 12px; display:flex; flex-direction:column; gap:6px; }
+.resp-card.eu { border-color:var(--part); box-shadow:0 0 0 1px var(--part-bg); }
+.resp-topo { display:flex; align-items:center; gap:8px; font-size:13px; }
+.resp-eu { font-size:10px; font-weight:700; text-transform:uppercase; color:var(--part); background:var(--part-bg); padding:1px 6px; border-radius:8px; }
+.resp-total { margin-left:auto; color:var(--text-3); font-size:12px; }
+.resp-barra { height:6px; border-radius:4px; background:var(--na-bg); overflow:hidden; }
+.resp-barra span { display:block; height:100%; background:var(--ok); }
+.resp-nums { display:flex; flex-wrap:wrap; gap:4px 12px; font-size:12px; color:var(--text-2); }
+.resp-nums b { color:var(--text); }
+.resp-alerta, .resp-alerta b { color:var(--warn); }
+.resp-ufs { font-size:11px; color:var(--text-3); font-family:'Roboto Mono',monospace; }
+.btn-proximo { margin-left:auto; white-space:nowrap; }
+.tecnico-resp { color:var(--part); font-weight:600; }
