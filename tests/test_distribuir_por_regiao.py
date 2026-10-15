@@ -89,3 +89,14 @@ def test_regional_que_nao_e_uf_conta_como_sem_uf(client):
     client.post("/api/tecnicos", json={"nome": "Velho", "telefone": "11999990000", "regional": "SP capital"})
     dist = client.post("/api/piloto/fases/distribuir").json()
     assert dist["distribuidos"] == 0 and dist["sem_uf"] == 1
+
+
+def test_lista_da_fase_traz_a_fase_inteira(client):
+    """A tela carrega a fase pela /tecnicos: cortar em 300 sumia com técnico."""
+    fase = _fase(client, "Grande", ["SP"])
+    linhas = [[f"TEC {i:04d}", "Direto", "SP", f"SP PARC{i}", 11900000000 + i] for i in range(412)]
+    _importa(client, linhas, distribuir="true")
+    lista = client.get("/api/tecnicos", params={"fase_id": fase["id"]}).json()
+    assert len(lista) == 412
+    # fora de fase continua com o teto padrão
+    assert len(client.get("/api/tecnicos").json()) == 300
