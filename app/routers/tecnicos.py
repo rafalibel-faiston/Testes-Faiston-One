@@ -64,7 +64,7 @@ O que você precisa fazer:
 4. Manter a localização do celular ativada — é por meio dela que o sistema identifica os chamados disponíveis na sua região
 5. Continuar seguindo o fluxo normalmente pelo GO.ON, da mesma forma que já faz hoje
 6. Em paralelo, você também passará a utilizar o aplicativo novo — é por meio dele que acompanharemos todo o andamento do atendimento
-7. Nos próximos dias, alguns chamados reais da Grande São Paulo passarão por esse teste. Quando um chamado for oferecido a você, basta aceitá-lo pelo aplicativo, como de costume — atenção: ao aceitar, você estará confirmando que tem condições de atender o chamado conforme a localidade informada
+7. Nos próximos dias, alguns chamados reais {regiao} passarão por esse teste. Quando um chamado for oferecido a você, basta aceitá-lo pelo aplicativo, como de costume — atenção: ao aceitar, você estará confirmando que tem condições de atender o chamado conforme a localidade informada
 
 Importante: trata-se apenas de um teste — a forma de atendimento continua a mesma: deslocamento, atendimento e preenchimento da RAT seguem normalmente. A diferença é que o aplicativo novo passará a rodar em paralelo com o GO.ON, para que tenhamos visibilidade completa do fluxo.
 
@@ -107,7 +107,7 @@ O que você precisa fazer:
 4. Manter a localização do celular ativada — é por meio dela que o sistema identifica os chamados disponíveis na sua região
 5. Continuar seguindo o fluxo normalmente pelo GO.ON, da mesma forma que já faz hoje
 6. Em paralelo, você também passará a utilizar o aplicativo novo — é por meio dele que acompanharemos todo o andamento do atendimento
-7. Nos próximos dias, alguns chamados reais da Grande São Paulo passarão por esse teste. Quando um chamado for oferecido a você, basta aceitá-lo pelo aplicativo, como de costume — atenção: ao aceitar, você estará confirmando que tem condições de atender o chamado conforme a localidade informada
+7. Nos próximos dias, alguns chamados reais {regiao} passarão por esse teste. Quando um chamado for oferecido a você, basta aceitá-lo pelo aplicativo, como de costume — atenção: ao aceitar, você estará confirmando que tem condições de atender o chamado conforme a localidade informada
 
 Importante: trata-se apenas de um teste — a forma de atendimento continua a mesma: deslocamento, atendimento e preenchimento da RAT seguem normalmente. A diferença é que o aplicativo novo passará a rodar em paralelo com o GO.ON, para que tenhamos visibilidade completa do fluxo.
 
@@ -178,6 +178,26 @@ def _link_apk(db: Session, base_url: str) -> Optional[str]:
     return f"{(base_url or '').rstrip('/')}{CAMINHO_APK}"
 
 
+# de onde vêm os chamados do teste, pela UF do técnico — o texto dizia sempre
+# "da Grande São Paulo", errado pra quem é de MG, ES, RJ… SP continua com o
+# texto original do piloto
+REGIAO_POR_UF = {
+    "AC": "do Acre", "AL": "de Alagoas", "AP": "do Amapá", "AM": "do Amazonas",
+    "BA": "da Bahia", "CE": "do Ceará", "DF": "do Distrito Federal", "ES": "do Espírito Santo",
+    "GO": "de Goiás", "MA": "do Maranhão", "MT": "de Mato Grosso", "MS": "de Mato Grosso do Sul",
+    "MG": "de Minas Gerais", "PA": "do Pará", "PB": "da Paraíba", "PR": "do Paraná",
+    "PE": "de Pernambuco", "PI": "do Piauí", "RJ": "do Rio de Janeiro", "RN": "do Rio Grande do Norte",
+    "RS": "do Rio Grande do Sul", "RO": "de Rondônia", "RR": "de Roraima", "SC": "de Santa Catarina",
+    "SP": "da Grande São Paulo", "SE": "de Sergipe", "TO": "do Tocantins",
+}
+# regional que não é UF ("Sudeste", "SP capital"…): sem chutar o estado
+REGIAO_GENERICA = "da sua região"
+
+
+def _regiao_da_mensagem(tecnico: models.Tecnico) -> str:
+    return REGIAO_POR_UF.get((tecnico.regional or "").strip().upper(), REGIAO_GENERICA)
+
+
 # direto que tem repasse: o convite pede autorização pra chamar o pessoal dele —
 # o repasse trabalha debaixo do direto e muitas vezes nem tem número próprio
 # na base (está com o do direto), então é o direto quem libera e passa o contato
@@ -240,12 +260,14 @@ def _mensagem_para(
         # vai com o APK de novo: se ele não conseguiu instalar, o link já está ali
         return _com_apk(TEMPLATE_FOLLOWUP.format(nome=primeiro_nome), apk_link)
     if tipo == "acionamento":
-        texto = TEMPLATE_ACIONAMENTO.format(nome=primeiro_nome, remetente=remetente)
+        texto = TEMPLATE_ACIONAMENTO.format(
+            nome=primeiro_nome, remetente=remetente, regiao=_regiao_da_mensagem(tecnico))
         return _com_apk(_com_repasses(texto, tecnico), apk_link)
     if tecnico.papel == "lider":
         # o líder só avisa o time — quem instala é cada técnico, no convite dele
         return TEMPLATE_LIDER.format(nome=primeiro_nome)
-    texto = TEMPLATE_TECNICO.format(nome=primeiro_nome, remetente=remetente)
+    texto = TEMPLATE_TECNICO.format(
+        nome=primeiro_nome, remetente=remetente, regiao=_regiao_da_mensagem(tecnico))
     return _com_apk(_com_repasses(texto, tecnico), apk_link)
 
 

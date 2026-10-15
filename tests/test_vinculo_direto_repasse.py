@@ -392,3 +392,25 @@ def test_convite_do_direto_com_muitos_repasses_resume(client):
     direto = _por_nome(client)["DIRETO GRANDE"]
     msg = client.get(f"/api/tecnicos/{direto['id']}/mensagem").json()["mensagem"]
     assert "Repasse 07 e mais 2." in msg
+
+
+def test_convite_fala_da_regiao_do_tecnico(client):
+    _importa(client, [
+        ["ANA SP", "Direto", "SP", "SP PARC1", "11911111111"],
+        ["BIA MG", "Direto", "MG", "MG PARC2", "31922222222"],
+        ["CAIO ES", "Direto", "ES", "ES PARC3", "27933333333"],
+        ["DUDA RJ", "Direto", "RJ", "RJ PARC4", "21944444444"],
+    ], cabecalho=CAB_AGENTES)
+    client.post("/api/tecnicos", json={"nome": "EDU SEM UF", "telefone": "71955555555", "regional": "Sudeste"})
+    esperado = {
+        "ANA SP": "chamados reais da Grande São Paulo passarão",
+        "BIA MG": "chamados reais de Minas Gerais passarão",
+        "CAIO ES": "chamados reais do Espírito Santo passarão",
+        "DUDA RJ": "chamados reais do Rio de Janeiro passarão",
+        "EDU SEM UF": "chamados reais da sua região passarão",
+    }
+    for nome, trecho in esperado.items():
+        tid = _por_nome(client)[nome]["id"]
+        for tipo in ("convite", "acionamento"):
+            msg = client.get(f"/api/tecnicos/{tid}/mensagem", params={"tipo": tipo}).json()["mensagem"]
+            assert trecho in msg, (nome, tipo)
