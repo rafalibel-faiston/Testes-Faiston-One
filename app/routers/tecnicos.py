@@ -287,6 +287,7 @@ def list_tecnicos(
     busca: Optional[str] = None,
     fase_id: Optional[int] = None,
     vinculo: Optional[str] = None,
+    responsavel: Optional[str] = None,
     limite: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
@@ -320,6 +321,8 @@ def list_tecnicos(
         q = q.filter(models.Tecnico.regional == regional)
     q = _filtra_busca(q, busca)
     q = _filtra_vinculo(q, vinculo)
+    if responsavel:
+        q = q.filter(models.Tecnico.responsavel == responsavel.strip())
     return q.order_by(models.Tecnico.nome).limit(max(1, min(limite, LIMITE_FASE))).all()
 
 
@@ -506,6 +509,76 @@ def distribuir_por_regiao(db: Session = Depends(get_db)):
     resultado = _distribui_por_uf(db)
     db.commit()
     return resultado
+
+
+def _divide_por_uf(tecnicos, pessoas: List[str], ja_tem: dict) -> dict:
+    """Reparte `tecnicos` entre `pessoas` por UF e devolve {pessoa: [técnicos]}.
+
+    Meta: todo mundo termina com a mesma quantidade (contando o que já tinha,
+    em `ja_tem`). A UF vai inteira pra quem tem mais espaço; a UF que não cabe
+    inteira em ninguém é repartida — na ordem do código do direto, pra o direto
+    e os repasses dele (que costumam dividir o número) ficarem juntos."""
+    total = len(tecnicos) + sum(ja_tem.values())
+    n = len(pessoas)
+    meta = {p: total // n + (1 if i < total % n else 0) for i, p in enumerate(pessoas)}
+    espaco = {p: max(0, meta[p] - ja_tem.get(p, 0)) for p in pessoas}
+    por_uf = {}
+    for t in tecnicos:
+        por_uf.setdefault((t.regional or "").strip().upper() or "—", []).append(t)
+    destino = {p: [] for p in pessoas}
+    for uf in sorted(por_uf, key=lambda u: (-len(por_uf[u]), u)):
+        grupo = sorted(por_uf[uf], key=lambda t: (_chave_codigo(t.direto_codigo or t.codigo), _norm_txt(t.nome)))
+        while grupo:
+            # quem tem mais espaço; empate vai pra ordem da lista
+            pessoa = max(pessoas, key=lambda p: (espaco[p], -pessoas.index(p)))
+            leva = len(grupo) if espaco[pessoa] >= len(grupo) else max(espaco[pessoa], 1)
+            destino[pessoa].extend(grupo[:leva])
+            espaco[pessoa] -= leva
+            grupo = grupo[leva:]
+    return destino
+
+
+@router.post("/piloto/fases/{fase_id}/dividir")
+def dividir_fase(fase_id: int, payload: schemas.DividirFase, db: Session = Depends(get_db)):
+    """Divide os técnicos da fase entre as pessoas do time, por UF — cada uma
+    trabalha a própria fila (filtro "Meus" na tela)."""
+    fase = db.query(models.PilotoFase).filter(models.PilotoFase.id == fase_id).first()
+    if not fase:
+        raise HTTPException(status_code=404, detail="Fase não encontrada")
+    pessoas = []
+    for p in payload.pessoas:
+        p = (p or "").strip()
+        if p and _norm_txt(p) not in {_norm_txt(x) for x in pessoas}:
+            pessoas.append(p)
+    if not pessoas:
+        raise HTTPException(status_code=400, detail="Informe ao menos uma pessoa.")
+    tecnicos = db.query(models.Tecnico).filter(models.Tecnico.fase_id == fase_id).all()
+    # "luis" e "Luís" são a mesma pessoa: grava sempre com a grafia da lista
+    grafia = {_norm_txt(p): p for p in pessoas}
+    ja_tem = {}
+    a_dividir = []
+    for t in tecnicos:
+        dono = grafia.get(_norm_txt(t.responsavel)) if t.responsavel else None
+        if payload.manter_atribuidos and dono:
+            t.responsavel = dono
+            ja_tem[dono] = ja_tem.get(dono, 0) + 1
+        else:
+            a_dividir.append(t)
+    destino = _divide_por_uf(a_dividir, pessoas, ja_tem)
+    for pessoa, lista in destino.items():
+        for t in lista:
+            t.responsavel = pessoa
+    db.commit()
+    resumo = []
+    for p in pessoas:
+        dele = [t for t in tecnicos if t.responsavel == p]
+        ufs = {}
+        for t in dele:
+            uf = (t.regional or "").strip().upper() or "—"
+            ufs[uf] = ufs.get(uf, 0) + 1
+        resumo.append({"pessoa": p, "tecnicos": len(dele), "novos": len(destino[p]),
+                       "ufs": dict(sorted(ufs.items(), key=lambda kv: -kv[1]))})
+    return {"fase": {"id": fase.id, "nome": fase.nome}, "divididos": len(a_dividir), "pessoas": resumo}
 
 
 @router.get("/piloto/fases", response_model=List[schemas.PilotoFaseOut])
@@ -1119,6 +1192,8 @@ def update_tecnico(tecnico_id: int, payload: schemas.TecnicoUpdate, db: Session 
         tecnico.vinculo = _vinculo_valido(payload.vinculo)
     if "codigo" in payload.model_fields_set:
         tecnico.codigo = (payload.codigo or "").strip() or None
+    if "responsavel" in payload.model_fields_set:
+        tecnico.responsavel = (payload.responsavel or "").strip() or None
     if tecnico.vinculo == "repasse":
         if {"direto_nome", "direto_codigo"} & payload.model_fields_set:
             _liga_direto(
@@ -1455,8 +1530,9 @@ def exportar_piloto(fase_id: Optional[int] = None, db: Session = Depends(get_db)
     escreve_cabecalho(
         ws,
         ["Nome", "Telefone", "Papel", "Regional", "Líder", "Situação", "Nota",
-         "Etapas testadas", "Respondeu em", "Anotações", "Vínculo", "Código", "Direto", "Código do direto"],
-        [28, 18, 10, 18, 20, 16, 7, 46, 18, 11, 10, 18, 28, 18],
+         "Etapas testadas", "Respondeu em", "Anotações", "Vínculo", "Código", "Direto", "Código do direto",
+         "Responsável"],
+        [28, 18, 10, 18, 20, 16, 7, 46, 18, 11, 10, 18, 28, 18, 16],
     )
     for t in tecnicos:
         ws.append([
@@ -1470,6 +1546,7 @@ def exportar_piloto(fase_id: Optional[int] = None, db: Session = Depends(get_db)
             len(t.observacoes),
             VINCULO_LABELS.get(t.vinculo, ""), t.codigo or "",
             t.direto_nome or "", t.direto_codigo or "",
+            t.responsavel or "",
         ])
 
     ws2 = wb.create_sheet("Feedback")

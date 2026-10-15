@@ -4938,7 +4938,11 @@
     sem_retorno: { label: "Sem retorno",      cls: "st-sem-retorno" },
   };
   const TECNICO_STATUS_ORDEM = Object.keys(TECNICO_STATUS_META);
-  const tecnicoFiltros = { status: "", papel: "", vinculo: "", busca: "" };
+  // responsavel: null = ainda não escolhido (abre em "Meus" se a pessoa tem
+  // fila na fase), "" = todos, "__sem__" = sem responsável, ou o nome
+  const tecnicoFiltros = { status: "", papel: "", vinculo: "", busca: "", responsavel: null };
+  const PESSOAS_KEY = "fluxoc_pessoas_divisao";
+  const normNome = (s) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
   // quantos cards ficam no DOM de uma vez (o resto entra no "mostrar mais")
   const PAGINA_CARDS = 40;
   let tecnicosVisiveis = PAGINA_CARDS;
@@ -5055,6 +5059,7 @@
     $$(".fase-aba", nav).forEach((b) => b.addEventListener("click", () => {
       FASE_ATUAL = b.dataset.fase ? Number(b.dataset.fase) : null;
       localStorage.setItem(FASE_KEY, FASE_ATUAL || "");
+      tecnicoFiltros.responsavel = null;   // fase nova: abre de novo na fila de quem está na tela
       renderFasesNav();
       loadTecnicos();
     }));
@@ -5814,9 +5819,74 @@
     </div>`;
   }
 
+  function bateResponsavel(t) {
+    const r = tecnicoFiltros.responsavel;
+    if (!r) return true;
+    if (r === "__sem__") return !t.responsavel;
+    return normNome(t.responsavel) === normNome(r);
+  }
+
+  // pessoas com fila na fase, em ordem alfabética
+  function responsaveisDaFase() {
+    const nomes = new Set();
+    TECNICOS.forEach((t) => { if (t.responsavel) nomes.add(t.responsavel); });
+    return [...nomes].sort((a, b) => a.localeCompare(b));
+  }
+
+  function renderResponsaveis() {
+    const pessoas = responsaveisDaFase();
+    $("#tecnicos-resp-row").hidden = !pessoas.length;
+    $("#tecnicos-resp-painel").hidden = !pessoas.length;
+    if (!pessoas.length) return;
+    const eu = pessoas.find((p) => normNome(p) === normNome(testerName()));
+    if (tecnicoFiltros.responsavel === null) tecnicoFiltros.responsavel = eu || "";
+    const semDono = TECNICOS.filter((t) => !t.responsavel).length;
+    const chips = [`<button type="button" class="chip${tecnicoFiltros.responsavel ? "" : " active"}" data-resp="">Todos</button>`]
+      .concat(pessoas.map((p) => {
+        const n = TECNICOS.filter((t) => t.responsavel === p).length;
+        const ativo = tecnicoFiltros.responsavel !== "__sem__" && normNome(tecnicoFiltros.responsavel) === normNome(p);
+        return `<button type="button" class="chip${ativo ? " active" : ""}" data-resp="${esc(p)}">${p === eu ? "Meus" : esc(p)} <b>${n}</b></button>`;
+      }));
+    if (semDono) chips.push(`<button type="button" class="chip${tecnicoFiltros.responsavel === "__sem__" ? " active" : ""}" data-resp="__sem__">Sem responsável <b>${semDono}</b></button>`);
+    const box = $("#tecnicos-chips-resp");
+    box.innerHTML = chips.join("");
+    $$(".chip", box).forEach((c) => c.addEventListener("click", () => {
+      tecnicoFiltros.responsavel = c.dataset.resp;
+      renderTecnicos();
+    }));
+
+    // painel: o andamento da fila de cada um — quem já chamou todo mundo, quem está atrasado
+    const INSTALOU = new Set(["instalado", "em_teste", "concluido"]);
+    $("#tecnicos-resp-painel").innerHTML = `<div class="resp-cards">${pessoas.map((p) => {
+      const fila = TECNICOS.filter((t) => t.responsavel === p);
+      const aContatar = fila.filter((t) => t.status === "a_contatar").length;
+      const contatados = fila.length - aContatar;
+      const instalaram = fila.filter((t) => INSTALOU.has(t.status)).length;
+      const concluidos = fila.filter((t) => t.status === "concluido").length;
+      const semRetorno = fila.filter((t) => t.status === "sem_retorno").length;
+      const pct = fila.length ? Math.round((contatados / fila.length) * 100) : 0;
+      const ufs = {};
+      fila.forEach((t) => { const uf = (t.regional || "—").toUpperCase(); ufs[uf] = (ufs[uf] || 0) + 1; });
+      const ufsTxt = Object.entries(ufs).sort((a, b) => b[1] - a[1]).map(([uf, n]) => `${uf} ${n}`).join(" · ");
+      return `<div class="resp-card${p === eu ? " eu" : ""}">
+        <div class="resp-topo"><b>${esc(p)}</b>${p === eu ? '<span class="resp-eu">você</span>' : ""}<span class="resp-total">${fila.length} técnicos</span></div>
+        <div class="resp-barra" title="${contatados} de ${fila.length} contatados"><span style="width:${pct}%"></span></div>
+        <div class="resp-nums">
+          <span><b>${contatados}</b> contatados (${pct}%)</span>
+          <span><b>${aContatar}</b> a contatar</span>
+          <span><b>${instalaram}</b> instalaram</span>
+          <span><b>${concluidos}</b> concluídos</span>
+          ${semRetorno ? `<span class="resp-alerta"><b>${semRetorno}</b> sem retorno</span>` : ""}
+        </div>
+        <div class="resp-ufs">${esc(ufsTxt)}</div>
+      </div>`;
+    }).join("")}</div>`;
+  }
+
   function tecnicosFiltrados() {
     const busca = tecnicoFiltros.busca.toLowerCase();
     return TECNICOS
+      .filter(bateResponsavel)
       .filter((t) => !tecnicoFiltros.status || t.status === tecnicoFiltros.status)
       .filter((t) => !tecnicoFiltros.papel || t.papel === tecnicoFiltros.papel)
       .filter((t) => bateVinculo(t, tecnicoFiltros.vinculo))
@@ -5827,6 +5897,7 @@
 
   function renderTecnicos() {
     tecnicosVisiveis = PAGINA_CARDS;   // recarregou a lista: volta pro primeiro pedaço
+    renderResponsaveis();
     renderTecnicoStats();
     renderTecnicoStatusChips();
     renderTecnicoList();
@@ -5979,6 +6050,7 @@
             <span>${t.papel === "lider" ? "Líder de equipe" : "Técnico"}</span>
             ${t.regional ? `<span>${esc(t.regional)}</span>` : ""}
             ${t.lider_nome ? `<span>responde a ${esc(t.lider_nome)}</span>` : ""}
+            ${t.responsavel ? `<span class="tecnico-resp">com ${esc(t.responsavel)}</span>` : ""}
             ${t.numero_do_direto ? "" : `<span class="tecnico-tel">${esc(formatTelefone(t.telefone))}</span>`}
           </div>
         </div>
@@ -6231,6 +6303,7 @@
       tecnicoForm.regional.value = t.regional || "";
       tecnicoForm.lider_nome.value = t.lider_nome || "";
       tecnicoForm.vinculo.value = t.vinculo || "";
+      tecnicoForm.responsavel.value = t.responsavel || "";
       tecnicoForm.codigo.value = t.codigo || "";
       tecnicoForm.direto_nome.value = t.direto_nome || "";
       tecnicoForm.direto_codigo.value = t.direto_codigo || "";
@@ -6375,6 +6448,40 @@
         + (semFase ? ` ${semFase} ficaram sem fase (UF sem fase: ${Object.keys(dist.ufs_sem_fase).join(", ")}).` : "")
         + (dist.sem_uf ? ` ${dist.sem_uf} sem UF reconhecida.` : ""));
     } catch (err) { toast("Erro ao distribuir: " + err.message, true); }
+  });
+
+  // divide a fase aberta entre as pessoas do time, por UF
+  $("#btn-dividir").addEventListener("click", async () => {
+    const fase = FASES.find((f) => f.id === FASE_ATUAL);
+    if (!fase) { toast("Abra a fase que vai ser dividida.", true); return; }
+    let padrao = "Luis, Rafael, Renato";
+    try { padrao = localStorage.getItem(PESSOAS_KEY) || padrao; } catch (e) { /* sem storage */ }
+    const resp = prompt(`Dividir os ${fase.total_tecnicos} técnicos da "${fase.nome}" por UF entre (separe por vírgula):`, padrao);
+    if (resp === null) return;
+    const pessoas = resp.split(",").map((p) => p.trim()).filter(Boolean);
+    if (!pessoas.length) return;
+    try { localStorage.setItem(PESSOAS_KEY, pessoas.join(", ")); } catch (e) { /* sem storage */ }
+    const jaTem = TECNICOS.some((t) => t.responsavel);
+    // padrão: quem já tem dono fica com ele (a pessoa pode já ter mandado mensagem)
+    const refazer = jaTem && confirm("Já tem técnico com responsável nessa fase.\n\nOK = refazer a divisão do zero (todo mundo é redistribuído)\nCancelar = manter quem já tem dono e dividir só os sem responsável");
+    try {
+      const res = await api(`/api/piloto/fases/${fase.id}/dividir`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pessoas, manter_atribuidos: !refazer }),
+      });
+      tecnicoFiltros.responsavel = null;   // volta pro "Meus" de quem está na tela
+      await loadTecnicos();
+      toast("Fase dividida: " + res.pessoas.map((p) => `${p.pessoa} ${p.tecnicos}`).join(" · "));
+    } catch (err) { toast("Erro ao dividir: " + err.message, true); }
+  });
+
+  // modo fila: abre o convite do próximo que ainda não foi contatado, dentro do
+  // filtro atual (normalmente "Meus") — abrir já marca como convidado, então o
+  // clique seguinte pega o próximo
+  $("#btn-proximo").addEventListener("click", () => {
+    const proximo = tecnicosFiltrados().find((t) => t.status === "a_contatar");
+    if (!proximo) { toast("Ninguém a contatar nessa fila."); return; }
+    abrirMensagemTecnico(proximo.id, "convite");
   });
 
   function baixarRelatorioImportacao() {
@@ -6527,6 +6634,7 @@
       lider_nome: fd.get("lider_nome") || null,
       vinculo,
       codigo: (fd.get("codigo") || "").trim() || null,
+      responsavel: (fd.get("responsavel") || "").trim() || null,
       // só repasse tem direto
       direto_nome: vinculo === "repasse" ? (fd.get("direto_nome") || "").trim() || null : null,
       direto_codigo: vinculo === "repasse" ? (fd.get("direto_codigo") || "").trim() || null : null,

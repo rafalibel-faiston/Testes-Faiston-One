@@ -497,6 +497,7 @@ class TecnicoOut(BaseModel):
     direto_codigo: Optional[str] = None    # repasse: código do direto
     numero_do_direto: bool = False         # repasse sem número próprio: o telefone é do direto
     repasses: List[TecnicoRepasseOut] = [] # direto: os repasses debaixo dele
+    responsavel: Optional[str] = None      # quem do time está com ele
     status: str = "a_contatar"
     autor: Optional[str] = None
     fase_id: Optional[int] = None          # leva do piloto em que ele entrou
@@ -535,6 +536,7 @@ class TecnicoUpdate(BaseModel):
     codigo: Optional[str] = None
     direto_nome: Optional[str] = None
     direto_codigo: Optional[str] = None
+    responsavel: Optional[str] = None
     status: Optional[str] = None
 
 
@@ -633,6 +635,16 @@ class AdicionarNaFase(BaseModel):
     incluir_de_outras_fases: bool = False
 
 
+class DividirFase(BaseModel):
+    """Divide a fase entre as pessoas do time, por UF: cada UF fica inteira com
+    uma pessoa sempre que der, e a UF grande demais é repartida pra ninguém
+    ficar com a fila muito maior que os outros."""
+    pessoas: List[str]
+    # True (padrão) = quem já tem responsável da lista fica com ele, e só os
+    # sem responsável são divididos (descontando o que cada um já tem)
+    manter_atribuidos: bool = True
+
+
 class TecnicoResumoOut(BaseModel):
     """Versão leve pra listar a base inteira sem arrastar observações junto —
     com milhares de cadastros, a lista completa era megabytes de JSON."""
@@ -652,6 +664,7 @@ class TecnicoResumoOut(BaseModel):
     direto_codigo: Optional[str] = None
     numero_do_direto: bool = False
     repasses_qtd: int = 0                  # direto: quantos repasses tem
+    responsavel: Optional[str] = None
 
 
 class BaseTecnicosOut(BaseModel):

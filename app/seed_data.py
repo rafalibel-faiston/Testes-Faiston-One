@@ -496,6 +496,9 @@ def migrate_schema(engine):
             stmts.append("ALTER TABLE tecnicos ADD COLUMN direto_nome VARCHAR")
             stmts.append("UPDATE tecnicos SET direto_nome = (SELECT d.nome FROM tecnicos d "
                          "WHERE d.id = tecnicos.pai_id) WHERE pai_id IS NOT NULL")
+        # quem do time está com esse técnico (divisão da fase entre pessoas)
+        if "responsavel" not in tec_cols:
+            stmts.append("ALTER TABLE tecnicos ADD COLUMN responsavel VARCHAR")
         if "direto_codigo" not in tec_cols:
             stmts.append("ALTER TABLE tecnicos ADD COLUMN direto_codigo VARCHAR")
             stmts.append("UPDATE tecnicos SET direto_codigo = (SELECT d.codigo_parc FROM tecnicos d "

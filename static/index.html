@@ -482,6 +482,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v6"/><path d="M12 9 5 15"/><path d="m12 9 7 6"/><path d="M12 9v6"/><circle cx="5" cy="18" r="2.5"/><circle cx="12" cy="18" r="2.5"/><circle cx="19" cy="18" r="2.5"/></svg>
           Distribuir por região
         </button>
+        <button type="button" class="tool-btn" id="btn-dividir" title="Dividir os técnicos da fase aberta entre as pessoas do time, por UF">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M3 20a5 5 0 0 1 10 0"/><path d="M11 20a5 5 0 0 1 10 0"/></svg>
+          Dividir entre pessoas
+        </button>
         <button type="button" class="tool-btn tool-danger" id="btn-limpar-base" title="Apagar os técnicos da fase aberta ou da base inteira">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9.5 7V5.5A1.5 1.5 0 0 1 11 4h2a1.5 1.5 0 0 1 1.5 1.5V7"/><path d="M6.5 7l.8 12a2 2 0 0 0 2 1.9h5.4a2 2 0 0 0 2-1.9L17.5 7"/></svg>
           Limpar base
@@ -522,6 +526,7 @@
     </section>
 
     <div class="ajustes-stats" id="tecnicos-stats"></div>
+    <section class="resp-painel" id="tecnicos-resp-painel" hidden></section>
 
     <section class="base-sel" id="base-sel" hidden>
       <div class="base-sel-head">
@@ -567,6 +572,11 @@
     </section>
 
     <div class="ajustes-filters">
+      <div class="chip-row" id="tecnicos-resp-row" hidden>
+        <span class="chip-row-label">Fila</span>
+        <div class="chips" id="tecnicos-chips-resp"></div>
+        <button type="button" class="btn-primary btn-proximo" id="btn-proximo" title="Abre o convite do próximo técnico da fila que ainda não foi contatado">Próximo da fila →</button>
+      </div>
       <div class="chip-row">
         <span class="chip-row-label">Situação</span>
         <div class="chips" id="tecnicos-chips-status"></div>
@@ -1099,6 +1109,9 @@
           <input name="codigo" placeholder="código do técnico" autocomplete="off">
         </label>
       </div>
+      <label class="fld">Responsável
+        <input name="responsavel" placeholder="quem do time está com ele (ex.: Rafael)" autocomplete="off">
+      </label>
       <div class="form-grid" id="tecnico-direto-campos" hidden>
         <label class="fld">Direto
           <input name="direto_nome" placeholder="nome do direto dele" autocomplete="off">

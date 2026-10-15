@@ -672,6 +672,12 @@ app já usa entre a lista de status do Python e a do JS).
   cada fase, `ufs_sem_fase` (UF sem nenhuma fase marcada) e
   `ufs_em_mais_de_uma_fase`. A importação faz o mesmo com `distribuir=true`
   (o botão Importar da tela já manda)
+- `POST /api/piloto/fases/{id}/dividir` — divide a fase entre pessoas do time
+  (`{"pessoas": ["Luis", "Rafael", "Renato"]}`) por UF: filas do mesmo tamanho,
+  UF inteira com uma pessoa quando cabe, UF grande repartida mantendo direto e
+  repasses juntos. Com `manter_atribuidos` (padrão) quem já tem responsável fica
+  com ele. Na tela: filtro "Fila" (abre em "Meus"), painel por pessoa e botão
+  "Próximo da fila", que abre o convite do próximo a contatar
 - `DELETE /api/piloto/fases/{id}/tecnicos/{tecnico_id}` — tira um da fase
 - `GET  /api/tecnicos/resumo` — contagem por status + total de feedback por tipo
 - `POST /api/tecnicos` — cadastra (telefone sem DDI de 10/11 dígitos ganha o 55 na frente sozinho)

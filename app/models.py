@@ -534,6 +534,9 @@ class Tecnico(Base):
     direto_codigo = Column(String, nullable=True)
     status = Column(String, nullable=False, default="a_contatar", server_default="a_contatar")
     autor = Column(String, nullable=True)         # quem cadastrou/está conduzindo o teste
+    # quem do time manda a mensagem e acompanha esse técnico — a fase é dividida
+    # entre algumas pessoas (por UF) e cada uma trabalha a fila dela
+    responsavel = Column(String, nullable=True, index=True)
     # em qual leva do piloto ele entrou; NULL = ainda na base geral, sem ser chamado
     fase_id = Column(Integer, ForeignKey("piloto_fases.id", ondelete="SET NULL"), nullable=True, index=True)
     # chave do link do formulário de feedback (/formulario/{token}) que o técnico
