@@ -360,3 +360,35 @@ def test_religar_pelo_endpoint(client):
                                        "vinculo": "direto", "codigo": "PARC0856"})
     assert client.post("/api/tecnicos/religar").json() == {"religados": 1, "ambiguos": []}
     assert _por_nome(client)["IGOR"]["direto_nome"] == "VALMIR"
+
+
+def test_convite_do_direto_pergunta_se_pode_chamar_os_repasses(client):
+    _importa(client, [
+        ["VALMIR DIAS RIBEIRO", "Direto", "SP", "SP PARC0856", "13981900175"],
+        ["IGOR SALOMAO", "Repasse", "ES", "ES PARC0856 REPASSE", "13981900175"],
+        ["MARCOS ANTONIO INTRA", "Repasse", "ES", "ES PARC0856 REPASSE", "13981900175"],
+        ["ANA SOZINHA", "Direto", "SP", "SP PARC0001", "11911112222"],
+    ], cabecalho=CAB_AGENTES)
+    tecs = _por_nome(client)
+
+    for tipo in ("convite", "acionamento"):
+        msg = client.get(f"/api/tecnicos/{tecs['VALMIR DIAS RIBEIRO']['id']}/mensagem",
+                         params={"tipo": tipo}).json()["mensagem"]
+        assert "técnicos de repasse trabalhando com você: Igor Salomao, Marcos Antonio Intra." in msg
+        assert "Podemos mandar esse mesmo convite pra eles também?" in msg
+        # entra antes do fecho da mensagem
+        assert msg.index("Podemos mandar") < msg.index("Qualquer dúvida")
+
+    # direto sem repasse e o próprio repasse recebem o convite normal
+    for nome in ("ANA SOZINHA", "IGOR SALOMAO"):
+        msg = client.get(f"/api/tecnicos/{tecs[nome]['id']}/mensagem").json()["mensagem"]
+        assert "técnicos de repasse" not in msg
+
+
+def test_convite_do_direto_com_muitos_repasses_resume(client):
+    linhas = [["DIRETO GRANDE", "Direto", "SP", "SP PARC0900", "11900000000"]]
+    linhas += [[f"REPASSE {i:02d}", "Repasse", "SP", "SP PARC0900 REPASSE", f"119100000{i:02d}"] for i in range(10)]
+    _importa(client, linhas, cabecalho=CAB_AGENTES)
+    direto = _por_nome(client)["DIRETO GRANDE"]
+    msg = client.get(f"/api/tecnicos/{direto['id']}/mensagem").json()["mensagem"]
+    assert "Repasse 07 e mais 2." in msg

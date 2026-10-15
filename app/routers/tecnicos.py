@@ -178,6 +178,31 @@ def _link_apk(db: Session, base_url: str) -> Optional[str]:
     return f"{(base_url or '').rstrip('/')}{CAMINHO_APK}"
 
 
+# direto que tem repasse: o convite pede autorização pra chamar o pessoal dele —
+# o repasse trabalha debaixo do direto e muitas vezes nem tem número próprio
+# na base (está com o do direto), então é o direto quem libera e passa o contato
+BLOCO_REPASSES = """Vi aqui que você tem técnicos de repasse trabalhando com você: {lista}.
+Podemos mandar esse mesmo convite pra eles também? Se sim, me passa o WhatsApp de cada um (ou me avisa se o contato é por este número mesmo)."""
+# nomes listados no convite; acima disso vira "e mais N"
+MAX_REPASSES_NA_MENSAGEM = 8
+# o bloco entra antes do "Qualquer dúvida…", que fecha a mensagem
+ANTES_DO_FECHO = "Qualquer dúvida ou dificuldade no aplicativo"
+
+
+def _com_repasses(texto: str, tecnico: models.Tecnico) -> str:
+    """No convite do direto com repasses, pergunta se pode chamar os repasses."""
+    if tecnico.vinculo != "direto" or not tecnico.repasses:
+        return texto
+    nomes = [r.nome.strip().title() for r in tecnico.repasses]
+    lista = ", ".join(nomes[:MAX_REPASSES_NA_MENSAGEM])
+    if len(nomes) > MAX_REPASSES_NA_MENSAGEM:
+        lista += f" e mais {len(nomes) - MAX_REPASSES_NA_MENSAGEM}"
+    bloco = BLOCO_REPASSES.format(lista=lista)
+    if ANTES_DO_FECHO in texto:
+        return texto.replace(ANTES_DO_FECHO, f"{bloco}\n\n{ANTES_DO_FECHO}", 1)
+    return f"{texto}\n\n{bloco}"
+
+
 def _com_apk(texto: str, apk_link: Optional[str]) -> str:
     """Põe o link do APK dentro da mensagem: no lugar do "(o link será enviado a
     seguir)" quando o template promete o link, ou no fim quando não promete."""
@@ -215,11 +240,13 @@ def _mensagem_para(
         # vai com o APK de novo: se ele não conseguiu instalar, o link já está ali
         return _com_apk(TEMPLATE_FOLLOWUP.format(nome=primeiro_nome), apk_link)
     if tipo == "acionamento":
-        return _com_apk(TEMPLATE_ACIONAMENTO.format(nome=primeiro_nome, remetente=remetente), apk_link)
+        texto = TEMPLATE_ACIONAMENTO.format(nome=primeiro_nome, remetente=remetente)
+        return _com_apk(_com_repasses(texto, tecnico), apk_link)
     if tecnico.papel == "lider":
         # o líder só avisa o time — quem instala é cada técnico, no convite dele
         return TEMPLATE_LIDER.format(nome=primeiro_nome)
-    return _com_apk(TEMPLATE_TECNICO.format(nome=primeiro_nome, remetente=remetente), apk_link)
+    texto = TEMPLATE_TECNICO.format(nome=primeiro_nome, remetente=remetente)
+    return _com_apk(_com_repasses(texto, tecnico), apk_link)
 
 
 def _versao_da_fase(tecnico: models.Tecnico) -> Optional[str]:
