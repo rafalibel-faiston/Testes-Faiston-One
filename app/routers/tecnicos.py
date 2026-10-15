@@ -273,6 +273,9 @@ def _vinculo_valido(vinculo: Optional[str]) -> Optional[str]:
     return vinculo
 
 
+# teto de segurança da lista com observações — acima de qualquer fase real
+LIMITE_FASE = 10000
+
 FASE_STATUSES = ["planejada", "em_andamento", "concluida", "liberada"]
 
 
@@ -284,18 +287,25 @@ def list_tecnicos(
     busca: Optional[str] = None,
     fase_id: Optional[int] = None,
     vinculo: Optional[str] = None,
-    limite: int = 300,
+    limite: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
     """Lista completa (com observações) — é o que alimenta os cards.
 
-    Sempre limitada: a base tem milhares de cadastros e a tela trabalha uma fase
-    por vez. Pra varrer a base inteira, use /tecnicos/base, que é leve e paginada.
+    Dentro de uma fase vem a fase inteira: a tela desenha os cards aos poucos e
+    conta status/filtros em cima dessa lista, então cortar escondia técnico da
+    fase (a fase 1 tinha 412 e só 300 apareciam). Sem fase, a lista continua
+    limitada — pra varrer a base inteira, use /tecnicos/base, leve e paginada.
     """
+    na_fase = fase_id is not None and fase_id > 0
+    if limite is None:
+        limite = LIMITE_FASE if na_fase else 300
     q = (
         db.query(models.Tecnico)
         .options(
-            joinedload(models.Tecnico.observacoes).joinedload(models.TecnicoObservacao.ajuste),
+            # selectin, não joined: com LIMIT, o join das observações multiplica as
+            # linhas e obriga o banco a paginar uma subquery
+            selectinload(models.Tecnico.observacoes).joinedload(models.TecnicoObservacao.ajuste),
             selectinload(models.Tecnico.direto),
             selectinload(models.Tecnico.repasses),
         )
@@ -310,7 +320,7 @@ def list_tecnicos(
         q = q.filter(models.Tecnico.regional == regional)
     q = _filtra_busca(q, busca)
     q = _filtra_vinculo(q, vinculo)
-    return q.order_by(models.Tecnico.nome).limit(max(1, min(limite, 1000))).all()
+    return q.order_by(models.Tecnico.nome).limit(max(1, min(limite, LIMITE_FASE))).all()
 
 
 @router.get("/tecnicos/base", response_model=schemas.BaseTecnicosOut)
