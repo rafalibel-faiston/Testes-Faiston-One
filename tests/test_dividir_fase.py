@@ -123,3 +123,23 @@ def test_sem_pessoas_da_400(client):
     fase = _fase_com(client, {"MG": 1})
     assert client.post(f"/api/piloto/fases/{fase['id']}/dividir", json={"pessoas": [" "]}).status_code == 400
     assert client.post("/api/piloto/fases/99999/dividir", json={"pessoas": PESSOAS}).status_code == 404
+
+
+def test_mensagem_sai_no_nome_do_responsavel(client):
+    """Cada um manda da própria fila: o convite tem que se apresentar com o nome
+    de quem está mandando, não sempre "Rafael"."""
+    fase = _fase_com(client, {"MG": 3, "ES": 3, "RJ": 3})
+    _dividir(client, fase)
+    for t in client.get("/api/tecnicos", params={"fase_id": fase["id"]}).json():
+        for tipo in ("convite", "acionamento"):
+            msg = client.get(f"/api/tecnicos/{t['id']}/mensagem", params={"tipo": tipo}).json()["mensagem"]
+            assert f"Aqui é o {t['responsavel']}, da Faiston." in msg
+
+
+def test_mensagem_sem_responsavel_continua_rafael(client):
+    tec = client.post("/api/tecnicos", json={"nome": "Sem Dono", "telefone": "11999990000"}).json()
+    msg = client.get(f"/api/tecnicos/{tec['id']}/mensagem").json()["mensagem"]
+    assert "Aqui é o Rafael, da Faiston." in msg
+    client.patch(f"/api/tecnicos/{tec['id']}", json={"responsavel": "Renato"})
+    msg = client.get(f"/api/tecnicos/{tec['id']}/mensagem").json()["mensagem"]
+    assert "Aqui é o Renato, da Faiston." in msg

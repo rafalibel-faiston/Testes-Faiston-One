@@ -48,9 +48,12 @@ STATUS_LABELS = {
 }
 TIPOS_OBS = {"positivo", "melhoria", "problema"}
 
-# textos enviados exatamente como definidos com o Rafa — {nome} é a única
-# substituição feita na hora de gerar o link do WhatsApp.
-TEMPLATE_TECNICO = """Olá, {nome}. Aqui é o Rafael, da Faiston.
+# textos enviados exatamente como definidos com o Rafa — {nome} e {remetente}
+# (quem do time manda: o responsável pelo técnico) são substituídos na hora de
+# gerar o link do WhatsApp.
+# sem responsável definido, a mensagem sai no nome de quem escreveu os textos
+REMETENTE_PADRAO = "Rafael"
+TEMPLATE_TECNICO = """Olá, {nome}. Aqui é o {remetente}, da Faiston.
 
 Você foi selecionado para participar de um teste de um novo sistema da Faiston, o *Faiston One*.
 
@@ -93,7 +96,7 @@ Pode ser sincero, é justamente pra ajustar o que estiver ruim antes de liberar 
 # reais (ex.: Fase 2 - Acionamento SP) — diferente do convite genérico, já
 # fala da instalação do Track One, do cadastro de competências (obrigatório
 # pro chamado ser direcionado) e do fluxo em paralelo com o GO.ON
-TEMPLATE_ACIONAMENTO = """Olá, {nome}. Aqui é o Rafael, da Faiston.
+TEMPLATE_ACIONAMENTO = """Olá, {nome}. Aqui é o {remetente}, da Faiston.
 
 Você foi selecionado para participar de um teste de um novo sistema da Faiston, o *Faiston One*.
 
@@ -195,6 +198,8 @@ def _mensagem_para(
     `apk_link` (ver _link_apk) vai embutido em toda mensagem que pede pra
     instalar o app — o wa.me não anexa arquivo, então o APK vai como link."""
     primeiro_nome = (tecnico.nome or "").strip().split(" ")[0] or tecnico.nome
+    # quem manda é o responsável pela fila desse técnico (Luis, Rafael, Renato…)
+    remetente = (tecnico.responsavel or "").strip() or REMETENTE_PADRAO
     link = f"{(base_url or '').rstrip('/')}/formulario/{tecnico.token or ''}"
     if tipo == "cobranca":
         # quem ainda nem foi convidado não tem o que cobrar: recebe o convite
@@ -210,11 +215,11 @@ def _mensagem_para(
         # vai com o APK de novo: se ele não conseguiu instalar, o link já está ali
         return _com_apk(TEMPLATE_FOLLOWUP.format(nome=primeiro_nome), apk_link)
     if tipo == "acionamento":
-        return _com_apk(TEMPLATE_ACIONAMENTO.format(nome=primeiro_nome), apk_link)
+        return _com_apk(TEMPLATE_ACIONAMENTO.format(nome=primeiro_nome, remetente=remetente), apk_link)
     if tecnico.papel == "lider":
         # o líder só avisa o time — quem instala é cada técnico, no convite dele
         return TEMPLATE_LIDER.format(nome=primeiro_nome)
-    return _com_apk(TEMPLATE_TECNICO.format(nome=primeiro_nome), apk_link)
+    return _com_apk(TEMPLATE_TECNICO.format(nome=primeiro_nome, remetente=remetente), apk_link)
 
 
 def _versao_da_fase(tecnico: models.Tecnico) -> Optional[str]:
