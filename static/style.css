@@ -827,6 +827,17 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
   border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin:0 0 10px; font-family:'Roboto',sans-serif;
 }
 .resolvido-acoes { display:flex; gap:8px; flex-wrap:wrap; }
+.resgate { margin-bottom:14px; }
+.resgate-painel { border:1px dashed var(--line-2); border-radius:12px; padding:12px 14px; margin-top:10px; background:var(--surface-2); }
+.resgate-form { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin-bottom:10px; }
+.resgate-form label { font-size:11px; color:var(--text-3); display:flex; flex-direction:column; gap:3px; }
+.resgate-form input { font:inherit; font-size:13px; padding:7px 9px; border:1px solid var(--line-2); border-radius:8px; background:var(--surface); color:var(--text); }
+.resgate-resumo { font-size:13px; color:var(--text); margin-bottom:8px; }
+.resgate-lista { max-height:220px; overflow:auto; border:1px solid var(--line); border-radius:8px; background:var(--surface); margin-bottom:10px; }
+.resgate-linha { padding:7px 10px; border-bottom:1px solid var(--line); font-size:12px; color:var(--text-2); }
+.resgate-linha:last-child { border-bottom:none; }
+.resgate-linha b { color:var(--text); }
+.resgate-linha.ja { opacity:.55; }
 
 /* ---------- lista de novidades ---------- */
 .act-item { display:flex; gap:11px; align-items:flex-start; padding:10px 4px; border-bottom:1px solid var(--line); }

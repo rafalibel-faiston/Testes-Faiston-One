@@ -82,8 +82,9 @@ e `marcar_resolvido_comunicado`.
 
 **Histórico anterior ao recurso.** Toda mudança de status já ficava na trilha de
 Novidades, então dá pra reconstruir o que virou de Reprovado para Aprovado *antes* do
-lembrete existir: `POST /api/resolvidos/resgatar` (ou a ferramenta MCP
-`resgatar_resolvidos_antigos`). Sem `aplicar=true` é só **simulação** — devolve a lista
+lembrete existir. Pela tela: **Avisar operação → Puxar o histórico antigo** (escolhe a
+data, *Ver o que tem* lista o achado, *Criar N lembretes* confirma). Também por
+`POST /api/resolvidos/resgatar` e pela ferramenta MCP `resgatar_resolvidos_antigos`. Sem `aplicar=true` é só **simulação** — devolve a lista
 do que seria criado e não grava nada; `desde=AAAA-MM-DD` ignora viradas mais antigas.
 Vale a mesma regra de hoje (passar por "Não testado" no meio não conta), os itens
 resgatados levam a data da aprovação original, e rodar de novo não duplica. Teste
