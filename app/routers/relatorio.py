@@ -144,6 +144,13 @@ def _coletar(db: Session, fluxo: Optional[str]) -> dict:
         "situacoes": _dump(schemas.SituacaoOut, situacoes),
         "ativos_ajustes": _dump(schemas.AtivoAjusteOut, ajustes),
         "piloto": _coletar_piloto(db),
+        "resolvidos": _dump(
+            schemas.ResolvidoComunicarOut,
+            db.query(models.ResolvidoComunicar)
+            .filter(models.ResolvidoComunicar.comunicado.is_(False))
+            .order_by(models.ResolvidoComunicar.created_at, models.ResolvidoComunicar.id)
+            .all(),
+        ),
         "summary": {
             "total": total,
             "counts": counts,

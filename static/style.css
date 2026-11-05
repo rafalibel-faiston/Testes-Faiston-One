@@ -803,6 +803,31 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
 }
 .activity-count[hidden] { display:none; }
 
+/* ---------- "Avisar operação" (resolvidos pra comunicar) ---------- */
+.resolvidos-btn {
+  position:relative; display:inline-flex; align-items:center; gap:9px; cursor:pointer;
+  border:1px solid var(--ok); color:var(--ok); background:var(--ok-bg);
+  border-radius:12px; padding:11px 18px; font-size:13.5px; font-weight:600; font-family:'Roboto',sans-serif;
+  transition:transform .14s var(--ease), box-shadow .18s var(--ease), background .15s var(--ease);
+}
+.resolvidos-btn:hover { transform:translateY(-2px); background:var(--ok-bg); box-shadow:0 10px 22px -14px var(--ok-ln); }
+.resolvidos-count {
+  min-width:19px; height:19px; padding:0 6px; border-radius:999px; background:var(--ok); color:#fff;
+  font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;
+}
+.resolvidos-count[hidden] { display:none; }
+.resolvido-item { border:1px solid var(--line-2); border-radius:12px; padding:12px 14px; margin-bottom:12px; background:var(--surface); }
+.resolvido-item.feito { opacity:.6; }
+.resolvido-ok { font-size:10.5px; font-weight:700; color:var(--ok); text-transform:uppercase; letter-spacing:.4px; }
+.resolvido-head { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
+.resolvido-titulo { font-weight:600; font-size:13.5px; color:var(--text); flex:1; min-width:0; word-break:break-word; }
+.resolvido-meta { font-size:10.5px; color:var(--text-3); margin:2px 0 8px; }
+.resolvido-msg {
+  white-space:pre-wrap; font-size:12.5px; line-height:1.5; color:var(--text-2); background:var(--surface-2);
+  border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin:0 0 10px; font-family:'Roboto',sans-serif;
+}
+.resolvido-acoes { display:flex; gap:8px; flex-wrap:wrap; }
+
 /* ---------- lista de novidades ---------- */
 .act-item { display:flex; gap:11px; align-items:flex-start; padding:10px 4px; border-bottom:1px solid var(--line); }
 .act-item:last-child { border-bottom:none; }

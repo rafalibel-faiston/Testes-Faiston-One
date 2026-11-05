@@ -65,6 +65,12 @@
       try { detail = (await res.json()).detail || detail; } catch (e) {}
       throw new Error(detail);
     }
+    // mudou status de caso/situação/ajuste? Pode ter nascido um "resolvido pra
+    // comunicar" — atualiza o contador sem o usuário ter que recarregar a tela.
+    if (opts && opts.method && opts.method !== "GET" && /^\/api\/(cases|situacoes|ativos\/ajustes)\//.test(path)) {
+      clearTimeout(api._resolvidos);
+      api._resolvidos = setTimeout(loadResolvidos, 400);
+    }
     const ct = res.headers.get("content-type") || "";
     return ct.includes("application/json") ? res.json() : res;
   }
@@ -6712,7 +6718,88 @@
   testerInput.value = localStorage.getItem(TESTER_KEY) || "";
   testerInput.addEventListener("change", () => localStorage.setItem(TESTER_KEY, testerInput.value.trim()));
 
+  // ---------------- resolvidos pra comunicar à operação ----------------
+  // Teste que virou de Reprovado para Aprovado deixa um lembrete (criado pelo
+  // servidor) com a mensagem já rascunhada. Fica aqui até alguém marcar que avisou.
+  let RESOLVIDOS = [];
+  const resolvidosModal = $("#resolvidos-modal");
+
+  async function loadResolvidos() {
+    try { RESOLVIDOS = await api("/api/resolvidos"); } catch (e) { RESOLVIDOS = []; }
+    updateResolvidosCount();
+    if (!resolvidosModal.hidden) renderResolvidos();
+  }
+
+  function updateResolvidosCount() {
+    const n = RESOLVIDOS.filter((r) => !r.comunicado).length;
+    ["#resolvidos-count", "#resolvidos-count-ativos"].forEach((sel) => {
+      const el = $(sel);
+      if (el) { el.textContent = n > 99 ? "99+" : n; el.hidden = n === 0; }
+    });
+  }
+
+  function renderResolvidos() {
+    const el = $("#resolvidos-list");
+    if (!RESOLVIDOS.length) {
+      el.innerHTML = '<div class="notes-empty">Nada por aqui ainda. Quando um teste reprovado passar para aprovado, ele aparece nesta lista com a mensagem pronta.</div>';
+      return;
+    }
+    const card = (r) => `<div class="resolvido-item ${r.comunicado ? "feito" : ""}" data-id="${r.id}">
+        <div class="resolvido-head">
+          <span class="resolvido-titulo">${esc(r.titulo)}</span>
+          ${r.comunicado ? '<span class="resolvido-ok">avisada</span>' : ""}
+        </div>
+        <div class="resolvido-meta">${esc(r.nivel_label)}${r.resolvido_por ? " · " + esc(r.resolvido_por) : ""} · ${fmtWhen(r.created_at)}${r.comunicado ? ` · avisada${r.comunicado_por ? " por " + esc(r.comunicado_por) : ""} ${fmtWhen(r.comunicado_em)}` : ""}</div>
+        <pre class="resolvido-msg">${esc(r.mensagem)}</pre>
+        <div class="resolvido-acoes">
+          <button type="button" class="tiflux-btn primary" data-copiar>Copiar mensagem</button>
+          ${r.comunicado
+            ? '<button type="button" class="tiflux-btn" data-desfazer>Desfazer</button>'
+            : '<button type="button" class="tiflux-btn" data-avisei>Já avisei a operação</button>'}
+          <button type="button" class="tiflux-btn" data-ir>Ver ${r.origem === "ajuste" ? "o ajuste" : r.origem === "situacao" ? "a situação" : "o teste"} →</button>
+        </div>
+      </div>`;
+    const abertos = RESOLVIDOS.filter((r) => !r.comunicado);
+    const feitos = RESOLVIDOS.filter((r) => r.comunicado);
+    el.innerHTML = (abertos.length ? abertos.map(card).join("")
+        : '<div class="notes-empty">Tudo avisado. 👏</div>')
+      + (feitos.length ? `<div class="act-divider">já avisadas</div>${feitos.map(card).join("")}` : "");
+  }
+
+  async function marcarResolvido(id, comunicado) {
+    try {
+      await api(`/api/resolvidos/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comunicado, comunicado_por: testerName() || null }),
+      });
+      await loadResolvidos();
+      toast(comunicado ? "Anotado: operação avisada." : "Voltou pra lista.");
+    } catch (e) { toast("Não foi possível atualizar: " + e.message, true); }
+  }
+
+  $("#resolvidos-list").addEventListener("click", (ev) => {
+    const card = ev.target.closest(".resolvido-item");
+    const btn = ev.target.closest("button");
+    if (!card || !btn) return;
+    const item = RESOLVIDOS.find((r) => String(r.id) === card.dataset.id);
+    if (!item) return;
+    if (btn.hasAttribute("data-copiar")) copiarTexto(item.mensagem, "Mensagem copiada.");
+    else if (btn.hasAttribute("data-avisei")) marcarResolvido(item.id, true);
+    else if (btn.hasAttribute("data-desfazer")) marcarResolvido(item.id, false);
+    else if (btn.hasAttribute("data-ir")) { closeResolvidosModal(); goToCase(item.codigo); }
+  });
+
+  function openResolvidosModal() { renderResolvidos(); resolvidosModal.hidden = false; }
+  function closeResolvidosModal() { resolvidosModal.hidden = true; }
+  ["#btn-resolvidos", "#btn-resolvidos-ativos"].forEach((sel) => {
+    $(sel).addEventListener("click", async () => { await loadResolvidos(); openResolvidosModal(); });
+  });
+  $("#resolvidos-close").addEventListener("click", closeResolvidosModal);
+  resolvidosModal.addEventListener("click", (e) => { if (e.target.id === "resolvidos-modal") closeResolvidosModal(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !resolvidosModal.hidden) closeResolvidosModal(); });
+
   // ---------------- boot ----------------
+  loadResolvidos();
   loadActivities();
   loadCases().catch((e) => {
     $("#cases-loading").textContent = "Erro ao carregar casos: " + e.message;

@@ -41,6 +41,7 @@ ENDPOINTS = {
     "ativos_ajustes": "/api/ativos/ajustes",
     "situacoes": "/api/situacoes",
     "piloto": "/api/piloto/pauta",
+    "resolvidos": "/api/resolvidos?comunicado=false",
 }
 
 # quais seções vêm como objeto (o resto é lista) — usado pro fallback quando o

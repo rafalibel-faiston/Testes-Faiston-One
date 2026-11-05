@@ -562,6 +562,37 @@ def secao_nao_executados(casos: list) -> str:
       </div>"""
 
 
+def secao_resolvidos(itens: list) -> str:
+    """O que estava reprovado, passou, e a operação ainda não foi avisada. Some
+    da pauta quando alguém marca "já avisei" — aparece vazia só quando não há
+    nada a comunicar, então a seção inteira é omitida."""
+    abertos = [i for i in itens if not i.get("comunicado")]
+    if not abertos:
+        return ""
+    linhas = ""
+    for i in abertos:
+        meta = " · ".join(filter(None, [
+            e(i.get("nivel_label") or i.get("nivel")), e(i.get("resolvido_por")), data_br(i.get("created_at")),
+        ]))
+        linhas += f"""
+            <li>
+              <div class="item-head">
+                <span class="num">{e(i.get("codigo"))}</span>
+                <span class="titulo">{e(i.get("titulo"))}</span>
+                {badge("avisar a operação", "b-ok")}
+              </div>
+              <div class="item-corpo">
+                <div class="item-meta">{meta}</div>
+                <div style="margin-top:6px;font-size:13px;color:var(--muted)">{nl2br(i.get("mensagem"))}</div>
+              </div>
+            </li>"""
+    return f"""
+      <div class="callout" style="margin-bottom:14px"><b>{len(abertos)} resolvido(s)</b> — estavam reprovados
+        e passaram. Falta contar pra operação; a mensagem pronta está na tela do console, em
+        <b>Avisar operação</b>.</div>
+      <div class="card"><ul class="itens">{linhas}</ul></div>"""
+
+
 # --------------------------------------------------------------------------- página
 
 
@@ -641,6 +672,7 @@ def montar_html(dados: dict, fonte: str, editavel: bool = False) -> str:
     summary = dados.get("summary") or {}
     piloto = dados.get("piloto") or {}
     piloto_soltos = piloto.get("relatos_sem_ajuste") or []
+    resolvidos_abertos = [r for r in (dados.get("resolvidos") or []) if not r.get("comunicado")]
 
     pontos_abertos = [n for n in notas if not n.get("resolvido")]
     fluxos = sorted({f for f in ({c.get("fluxo") for c in casos}
@@ -692,7 +724,7 @@ def montar_html(dados: dict, fonte: str, editavel: bool = False) -> str:
             ("ajustes", f"Ajustes ({len(ajustes_abertos)})"),
             ("piloto", f"Track One ({len(piloto_soltos)})"),
             ("pendentes", f"Por executar ({len(casos_pendentes)})"),
-        ]
+        ] + ([("resolvidos", f"Avisar operação ({len(resolvidos_abertos)})")] if resolvidos_abertos else [])
     )
 
     # O botão salva direto na API do app. Fora do app (arquivo .html gerado pelo
@@ -713,6 +745,9 @@ def montar_html(dados: dict, fonte: str, editavel: bool = False) -> str:
         sec("06", "Testes sem os dois níveis fechados",
             "não executados e os que passaram num nível só — agrupados por estágio",
             secao_nao_executados(casos), "pendentes"),
+        sec("07", "Resolvidos — avisar a operação",
+            "estavam reprovados, passaram e a operação ainda não foi avisada",
+            secao_resolvidos(resolvidos_abertos), "resolvidos"),
     ])
 
     return f"""<!DOCTYPE html>

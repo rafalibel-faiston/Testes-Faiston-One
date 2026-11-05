@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session, joinedload
 
-from .. import models, niveis, schemas
+from .. import models, niveis, resolvidos, schemas
 from ..activity import log as log_activity, normaliza_cor, normaliza_prazo, snippet
 from ..database import get_db
 from ..relatorio import AJUSTE_LABEL
@@ -134,6 +134,8 @@ def update_ajuste(ajuste_id: int, payload: schemas.AtivoAjusteUpdate, db: Sessio
     if not ajuste:
         raise HTTPException(status_code=404, detail="Ajuste não encontrado")
     status_antigo = ajuste.status
+    validacoes_antes = {niveis.NIVEL_INTERNO: ajuste.validacao,
+                        niveis.NIVEL_OPERACAO: ajuste.validacao_operacao}
     if payload.titulo is not None:
         titulo = payload.titulo.strip()
         if not titulo:
@@ -194,6 +196,14 @@ def update_ajuste(ajuste_id: int, payload: schemas.AtivoAjusteUpdate, db: Sessio
     for campo in ("validado_por", "validado_por_operacao"):
         if getattr(payload, campo) is not None:
             setattr(ajuste, campo, (getattr(payload, campo) or "").strip() or None)
+    # reprovado que virou aprovado (por qualquer caminho, inclusive o status
+    # "validado" legado): deixa o lembrete de avisar a operação
+    for nivel, atual, quem in (
+        (niveis.NIVEL_INTERNO, ajuste.validacao, ajuste.validado_por),
+        (niveis.NIVEL_OPERACAO, ajuste.validacao_operacao, ajuste.validado_por_operacao),
+    ):
+        if resolvidos.virou_aprovado(validacoes_antes[nivel], atual):
+            resolvidos.registrar_ajuste(db, ajuste, nivel, quem)
     validacao_nova = niveis.status_geral(ajuste.validacao, ajuste.validacao_operacao)
     if validacao_nova != validacao_antiga:
         log_activity(db, FLUXO_ATIVOS, "ajuste",

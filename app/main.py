@@ -22,6 +22,7 @@ from .routers import ativos as ativos_router
 from .routers import relatorio as relatorio_router
 from .routers import tecnicos as tecnicos_router
 from .routers import nomes_tiflux as nomes_tiflux_router
+from .routers import resolvidos as resolvidos_router
 from .mcp_server import mcp as mcp_server, oauth_provider, MCP_TOKEN
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -68,6 +69,7 @@ app.include_router(export_router.router, prefix="/api")
 app.include_router(export_completo_router.router, prefix="/api")
 app.include_router(diagrams_router.router, prefix="/api")
 app.include_router(activity_router.router, prefix="/api")
+app.include_router(resolvidos_router.router, prefix="/api")
 app.include_router(situacoes_router.router, prefix="/api")
 app.include_router(agenda_router.router, prefix="/api")
 app.include_router(todo_router.router, prefix="/api")
