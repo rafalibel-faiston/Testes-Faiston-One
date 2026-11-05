@@ -80,6 +80,15 @@ não há nada a comunicar; API `GET /api/resolvidos?comunicado=false` e
 `PATCH /api/resolvidos/{id}`; e as ferramentas MCP `listar_resolvidos_para_comunicar`
 e `marcar_resolvido_comunicado`.
 
+**Histórico anterior ao recurso.** Toda mudança de status já ficava na trilha de
+Novidades, então dá pra reconstruir o que virou de Reprovado para Aprovado *antes* do
+lembrete existir: `POST /api/resolvidos/resgatar` (ou a ferramenta MCP
+`resgatar_resolvidos_antigos`). Sem `aplicar=true` é só **simulação** — devolve a lista
+do que seria criado e não grava nada; `desde=AAAA-MM-DD` ignora viradas mais antigas.
+Vale a mesma regra de hoje (passar por "Não testado" no meio não conta), os itens
+resgatados levam a data da aprovação original, e rodar de novo não duplica. Teste
+excluído, ajuste apagado ou estágio renomeado são ignorados.
+
 ## Stack
 
 - **Backend**: FastAPI + SQLAlchemy
