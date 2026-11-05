@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.sql import func
 
-from .. import models, niveis, schemas
+from .. import models, niveis, resolvidos, schemas
 from ..activity import log as log_activity, snippet, normaliza_cor
 from ..database import get_db
 
@@ -140,6 +140,7 @@ def get_case(code: str, db: Session = Depends(get_db)):
 def update_case(code: str, payload: schemas.TestCaseUpdate, db: Session = Depends(get_db)):
     case = _get_case_or_404(db, code)
     old_geral = case.status_geral
+    antes = {niveis.NIVEL_INTERNO: case.status, niveis.NIVEL_OPERACAO: case.status_operacao}
     mudancas = []   # (nível, status novo, quem testou) — pra trilha de atividade
 
     # nível interno: a validação técnica
@@ -191,6 +192,9 @@ def update_case(code: str, payload: schemas.TestCaseUpdate, db: Session = Depend
         log_activity(db, case.fluxo, "status",
                      f"{case.code} · {niveis.NIVEL_LABEL[nivel]} mudou para {status_novo}",
                      autor=autor, case_code=case.code)
+        # reprovado que virou aprovado: deixa o lembrete de avisar a operação
+        if resolvidos.virou_aprovado(antes[nivel], status_novo):
+            resolvidos.registrar_caso(db, case, nivel, autor)
     # o consolidado virando outra coisa é o que interessa pra reunião — por isso
     # entra na trilha como uma linha própria, separada da mudança de nível
     novo_geral = niveis.status_geral(case.status, case.status_operacao)

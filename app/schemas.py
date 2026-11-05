@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, computed_field, field_validator
 
 
 class ScreenshotOut(BaseModel):
@@ -832,3 +832,31 @@ class NomeTifluxOut(BaseModel):
     nome: str
     gerado_por: Optional[str] = None
     created_at: Optional[datetime] = None
+
+
+class ResolvidoComunicarOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    fluxo: str = "C"
+    origem: str
+    codigo: str
+    titulo: str
+    nivel: str = "interno"
+    resolvido_por: Optional[str] = None
+    mensagem: str = ""
+    comunicado: bool = False
+    comunicado_em: Optional[datetime] = None
+    comunicado_por: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    @computed_field
+    @property
+    def nivel_label(self) -> str:
+        from . import niveis
+        return niveis.NIVEL_LABEL.get(self.nivel, self.nivel)
+
+
+class ResolvidoComunicarUpdate(BaseModel):
+    comunicado: bool
+    comunicado_por: Optional[str] = None

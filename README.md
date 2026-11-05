@@ -56,6 +56,30 @@ técnica aprovada, esperando a operação confirmar. Uma chamada antiga que aind
 Na migração, o que já estava gravado continua sendo o **meu teste**: todo caso
 antes "Aprovado" passa a aparecer como *Pendente na operação* até a operação validar.
 
+### Reprovado que virou Aprovado: avisar a operação
+
+Quando um teste que estava **Reprovado** passa para **Aprovado** — num caso, num
+estágio de situação ou num ajuste da Gestão de Ativos, em qualquer um dos dois
+níveis —, o sistema deixa um lembrete pra você contar à operação que o bug foi
+corrigido ou a feature chegou. A regra está em `app/resolvidos.py`:
+
+- só a virada direta **Reprovado → Aprovado** gera lembrete (Bloqueado ou Não
+  testado → Aprovado não é "algo que quebrou e foi consertado");
+- é por nível, não pelo consolidado: a técnica reaprovando um caso reprovado deixa o
+  caso como *Pendente na operação*, e é aí que a operação precisa ser avisada;
+- a **mensagem já vem rascunhada** (o problema que havia, como deve funcionar agora,
+  quem aprovou e quando, o chamado de teste); no ajuste ela diz se foi correção de
+  bug ou melhoria;
+- o item fica na lista até alguém marcar **Já avisei a operação** (dá pra desfazer).
+  Reprovar e aprovar de novo antes de avisar atualiza o mesmo item, sem duplicar.
+
+Onde aparece: botão **Avisar operação** (com contador) ao lado de *Novidades*, tanto no
+Dispatcher quanto na Gestão de Ativos — abre a lista com *Copiar mensagem*, *Já avisei*
+e *Ver o teste*; seção **07 — Resolvidos** da pauta (`/relatorio`), que some quando
+não há nada a comunicar; API `GET /api/resolvidos?comunicado=false` e
+`PATCH /api/resolvidos/{id}`; e as ferramentas MCP `listar_resolvidos_para_comunicar`
+e `marcar_resolvido_comunicado`.
+
 ## Stack
 
 - **Backend**: FastAPI + SQLAlchemy
@@ -108,6 +132,8 @@ app/
   routers/cases.py        # API: listar/atualizar casos, observações, upload/download/remover print, resumo
   routers/ativos.py        # API: ajustes do módulo Gestão de Ativos (v2 e as próximas levas)
   routers/nomes_tiflux.py  # API: nome padrão do chamado de teste no Tiflux
+  routers/resolvidos.py    # API: lembretes de "reprovado que virou aprovado — avisar a operação"
+  resolvidos.py            # a regra da virada e o rascunho da mensagem
   nomes_tiflux.py          # a regra do nome ([TESTE IA] - rodada - assunto)
   routers/relatorio.py      # página /relatorio — a pauta da reunião semanal
   relatorio.py               # monta o HTML da pauta (usado pela rota e pelo script)
@@ -165,7 +191,8 @@ Com o app rodando (local ou no domínio do Railway), a URL do servidor MCP é
 Depois disso as ferramentas (`listar_casos`, `obter_caso`,
 `atualizar_status_caso`, `adicionar_observacao`, `atualizar_observacao`, `resumo_execucao`,
 `listar_tarefas`, `criar_tarefa`, `listar_ajustes_ativos`, `criar_ajuste_ativos`,
-`validar_ajuste_ativos`, `gerar_nome_tiflux`, `listar_nomes_tiflux`)
+`validar_ajuste_ativos`, `gerar_nome_tiflux`, `listar_nomes_tiflux`,
+`listar_resolvidos_para_comunicar`, `marcar_resolvido_comunicado`)
 ficam disponíveis pra pedir direto na
 conversa, tipo "marca o FC-12 como aprovado" ou "lista os casos reprovados do
 Grupo B". As ferramentas de status e observação aceitam `nivel`

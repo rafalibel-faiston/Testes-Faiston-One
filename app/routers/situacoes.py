@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from .. import models, niveis, schemas
+from .. import models, niveis, resolvidos, schemas
 from ..activity import log as log_activity, snippet, normaliza_cor
 from ..database import get_db
 from .cases import VALID_STATUSES, MAX_UPLOAD_BYTES, ALLOWED_CONTENT_TYPES
@@ -173,6 +173,7 @@ def update_estagio(code: str, estagio_id: int, payload: schemas.SituacaoEstagioU
     sit = _get_situacao_or_404(db, code)
     est = _get_estagio_in(sit, estagio_id)
     old_geral = est.status_geral
+    antes = {niveis.NIVEL_INTERNO: est.status, niveis.NIVEL_OPERACAO: est.status_operacao}
     mudancas = []   # (nível, status novo, quem testou)
 
     # nível interno: a validação técnica
@@ -213,6 +214,9 @@ def update_estagio(code: str, estagio_id: int, payload: schemas.SituacaoEstagioU
         log_activity(db, sit.fluxo, "status",
                      f"{code} · {est.nome} · {niveis.NIVEL_LABEL[nivel]} mudou para {status_novo}",
                      autor=autor, case_code=code)
+        # reprovado que virou aprovado: deixa o lembrete de avisar a operação
+        if resolvidos.virou_aprovado(antes[nivel], status_novo):
+            resolvidos.registrar_estagio(db, sit, est, nivel, autor)
     novo_geral = niveis.status_geral(est.status, est.status_operacao)
     if mudancas and novo_geral != old_geral:
         log_activity(db, sit.fluxo, "status", f"{code} · {est.nome} agora está {novo_geral}",

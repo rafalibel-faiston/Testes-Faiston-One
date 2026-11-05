@@ -30,7 +30,7 @@ from sqlalchemy.orm import joinedload
 
 from fastapi import HTTPException
 
-from . import models, niveis
+from . import models, niveis, resolvidos
 from .activity import log as log_activity, snippet, normaliza_cor
 from .database import SessionLocal
 from .routers.nomes_tiflux import gerar as gerar_nome_tiflux_db
@@ -350,6 +350,9 @@ def atualizar_status_caso(
                 f"{case.code} · {niveis.NIVEL_LABEL[alvo]} mudou para {status}",
                 autor=autor, case_code=case.code,
             )
+            # reprovado que virou aprovado: deixa o lembrete de avisar a operação
+            if resolvidos.virou_aprovado(old_status, status):
+                resolvidos.registrar_caso(db, case, alvo, autor)
             novo_geral = niveis.status_geral(case.status, case.status_operacao)
             if novo_geral != old_geral:
                 log_activity(db, case.fluxo, "status", f"{case.code} agora está {novo_geral}",
@@ -728,6 +731,7 @@ def validar_ajuste_ativos(
             return {"erro": f"Ajuste {ajuste_id} não encontrado"}
         antes = ajuste.validacao_geral
         if alvo == niveis.NIVEL_INTERNO:
+            status_anterior = ajuste.validacao
             mudou = status != ajuste.validacao
             ajuste.validacao = status
             if validado_por is not None:
@@ -736,6 +740,7 @@ def validar_ajuste_ativos(
                 ajuste.validado_em = func.now() if status != niveis.NAO_TESTADO else None
             autor = validado_por or ajuste.validado_por
         else:
+            status_anterior = ajuste.validacao_operacao
             mudou = status != ajuste.validacao_operacao
             ajuste.validacao_operacao = status
             if validado_por is not None:
@@ -750,6 +755,9 @@ def validar_ajuste_ativos(
                 f"{niveis.NIVEL_LABEL[alvo]}: {status} — {ajuste.titulo}",
                 autor=autor, case_code=f"AJT-{ajuste.id}",
             )
+            # reprovado que virou aprovado: deixa o lembrete de avisar a operação
+            if resolvidos.virou_aprovado(status_anterior, status):
+                resolvidos.registrar_ajuste(db, ajuste, alvo, autor)
         depois = niveis.status_geral(ajuste.validacao, ajuste.validacao_operacao)
         if depois != antes:
             log_activity(db, "ATIVOS", "ajuste",
@@ -764,6 +772,49 @@ def validar_ajuste_ativos(
             "validacao": ajuste.validacao_geral,
             "em_aberto": not ajuste.fechado,
         }
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def listar_resolvidos_para_comunicar(incluir_comunicados: bool = False) -> list[dict]:
+    """Lista o que foi de Reprovado para Aprovado e ainda precisa ser comunicado à
+    operação — bug corrigido ou feature entregue. Cada item traz a `mensagem` já
+    rascunhada, pronta pra copiar e mandar. Por padrão só os que ainda não foram
+    avisados; `incluir_comunicados=true` traz o histórico todo."""
+    db = SessionLocal()
+    try:
+        q = db.query(models.ResolvidoComunicar)
+        if not incluir_comunicados:
+            q = q.filter(models.ResolvidoComunicar.comunicado.is_(False))
+        itens = q.order_by(models.ResolvidoComunicar.created_at.desc(),
+                           models.ResolvidoComunicar.id.desc()).all()
+        return [resolvidos.serializa(i) for i in itens]
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def marcar_resolvido_comunicado(
+    id: int, comunicado_por: Optional[str] = None, comunicado: bool = True,
+) -> dict:
+    """Marca um item de listar_resolvidos_para_comunicar como já avisado à
+    operação (ou desfaz, com `comunicado=false`). O `id` vem da listagem."""
+    db = SessionLocal()
+    try:
+        item = db.query(models.ResolvidoComunicar).filter(models.ResolvidoComunicar.id == id).first()
+        if not item:
+            return {"erro": f"Item {id} não encontrado"}
+        if comunicado != item.comunicado:
+            item.comunicado = comunicado
+            item.comunicado_em = func.now() if comunicado else None
+            item.comunicado_por = comunicado_por if comunicado else None
+            if comunicado:
+                log_activity(db, item.fluxo, "status", f"{item.codigo} · operação avisada da resolução",
+                             autor=comunicado_por, case_code=item.codigo)
+        db.commit()
+        db.refresh(item)
+        return resolvidos.serializa(item)
     finally:
         db.close()
 

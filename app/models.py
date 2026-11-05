@@ -253,6 +253,32 @@ class ActivityLog(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class ResolvidoComunicar(Base):
+    """Lembrete de "isso foi resolvido — avisa a operação".
+
+    Nasce sozinho quando um teste (caso, estágio de situação ou ajuste da Gestão
+    de Ativos) vira de Reprovado para Aprovado em algum nível. A pessoa que
+    acompanha o projeto precisa levar a boa notícia pra operação (o bug sumiu, a
+    feature chegou), e sem um registro isso dependia de lembrar. Guarda a
+    mensagem já rascunhada, pra só copiar e mandar, e fica na lista até alguém
+    marcar que comunicou.
+    """
+    __tablename__ = "resolvidos_comunicar"
+
+    id = Column(Integer, primary_key=True)
+    fluxo = Column(String, nullable=False, default="C", server_default="C")
+    origem = Column(String, nullable=False)     # caso / situacao / ajuste
+    codigo = Column(String, nullable=False, index=True)   # FC-05-APP-01, SIT-03, AJT-12
+    titulo = Column(String, nullable=False)     # o que foi resolvido, em uma linha
+    nivel = Column(String, nullable=False, default="interno", server_default="interno")
+    resolvido_por = Column(String, nullable=True)   # quem aprovou
+    mensagem = Column(Text, nullable=False, default="")  # rascunho pronto pra enviar
+    comunicado = Column(Boolean, nullable=False, default=False, server_default=expression.false())
+    comunicado_em = Column(DateTime(timezone=True), nullable=True)
+    comunicado_por = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class TeamView(Base):
     """Marca de 'até onde este time já viu as Novidades', por perfil e fluxo.
     Guarda o id do último evento visto (monotônico) em vez de um horário — evita
