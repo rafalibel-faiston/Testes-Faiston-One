@@ -6789,6 +6789,52 @@
     else if (btn.hasAttribute("data-ir")) { closeResolvidosModal(); goToCase(item.codigo); }
   });
 
+  // Resgate: o que virou aprovado ANTES do lembrete existir, reconstruído pela
+  // trilha de Novidades. Primeiro só simula (o servidor não grava nada); criar
+  // os lembretes é um segundo clique, depois de ver a lista.
+  let RESGATE_DESDE = "";
+
+  function renderResgate(r) {
+    const el = $("#resgate-resultado");
+    if (!r.total) {
+      el.innerHTML = '<div class="notes-empty">Não achei nenhum reprovado que virou aprovado nesse período.</div>';
+      return;
+    }
+    const linha = (i) => `<div class="resgate-linha ${i.novo ? "" : "ja"}">
+        <b>${esc(i.titulo)}</b> · ${i.nivel === "operacao" ? "operação" : "técnica"}${i.resolvido_por ? " · " + esc(i.resolvido_por) : ""} · ${fmtWhen(i.quando)}${i.novo ? "" : " · já está na lista"}
+      </div>`;
+    el.innerHTML = `<div class="resgate-resumo">Achei <b>${r.total}</b>: <b>${r.novos}</b> ${r.novos === 1 ? "novo" : "novos"}`
+      + `${r.ja_existentes ? `, ${r.ja_existentes} já ${r.ja_existentes === 1 ? "está" : "estão"} na lista` : ""}`
+      + `${r.ignorados ? ` (${r.ignorados} ignorado${r.ignorados === 1 ? "" : "s"}: teste excluído ou renomeado)` : ""}.</div>`
+      + `<div class="resgate-lista">${r.itens.map(linha).join("")}</div>`
+      + (r.novos ? `<button type="button" class="tiflux-btn primary" id="resgate-criar">Criar ${r.novos} ${r.novos === 1 ? "lembrete" : "lembretes"}</button>` : "");
+    const criar = $("#resgate-criar");
+    if (criar) criar.addEventListener("click", () => resgatar(true));
+  }
+
+  async function resgatar(aplicar) {
+    const btn = aplicar ? $("#resgate-criar") : $("#resgate-buscar");
+    if (!aplicar) RESGATE_DESDE = $("#resgate-desde").value;
+    btn.disabled = true;
+    try {
+      const qs = new URLSearchParams({ aplicar: aplicar ? "true" : "false" });
+      if (RESGATE_DESDE) qs.set("desde", RESGATE_DESDE);   // o mesmo filtro da simulação que o usuário viu
+      const r = await api(`/api/resolvidos/resgatar?${qs}`, { method: "POST" });
+      if (aplicar) {
+        toast(`${r.novos} ${r.novos === 1 ? "lembrete criado" : "lembretes criados"}.`);
+        $("#resgate-resultado").innerHTML = "";
+        $("#resgate-painel").hidden = true;
+        await loadResolvidos();
+      } else {
+        renderResgate(r);
+      }
+    } catch (e) { toast("Não foi possível puxar o histórico: " + e.message, true); }
+    btn.disabled = false;
+  }
+
+  $("#resgate-abrir").addEventListener("click", () => { $("#resgate-painel").hidden = !$("#resgate-painel").hidden; });
+  $("#resgate-buscar").addEventListener("click", () => resgatar(false));
+
   function openResolvidosModal() { renderResolvidos(); resolvidosModal.hidden = false; }
   function closeResolvidosModal() { resolvidosModal.hidden = true; }
   ["#btn-resolvidos", "#btn-resolvidos-ativos"].forEach((sel) => {

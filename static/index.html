@@ -851,6 +851,18 @@
       <p class="notes-hint">Tudo que estava <b>reprovado</b> e passou para <b>aprovado</b> — bug corrigido ou
       feature entregue. A mensagem já vem rascunhada: copie, mande pra operação e marque como
       <b>já avisei</b>. Enquanto não marcar, o item fica aqui.</p>
+      <div class="resgate" id="resgate">
+        <button type="button" class="tiflux-btn" id="resgate-abrir">Puxar o histórico antigo</button>
+        <div class="resgate-painel" id="resgate-painel" hidden>
+          <p class="notes-hint">Procura na trilha de <b>Novidades</b> o que já passou de reprovado para aprovado
+          <b>antes</b> deste recurso existir. Primeiro só mostra o que achou — nada é criado até você confirmar.</p>
+          <div class="resgate-form">
+            <label>A partir de <input type="date" id="resgate-desde"></label>
+            <button type="button" class="tiflux-btn primary" id="resgate-buscar">Ver o que tem</button>
+          </div>
+          <div id="resgate-resultado"></div>
+        </div>
+      </div>
       <div class="notes-list" id="resolvidos-list"></div>
     </div>
   </div>
