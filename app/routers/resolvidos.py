@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 
-from .. import models, schemas
+from .. import models, resolvidos, schemas
 from ..activity import log as log_activity
 from ..database import get_db
 
@@ -20,6 +20,18 @@ def list_resolvidos(comunicado: Optional[bool] = None, db: Session = Depends(get
         q = q.filter(models.ResolvidoComunicar.comunicado.is_(comunicado))
     return q.order_by(models.ResolvidoComunicar.created_at.desc(),
                       models.ResolvidoComunicar.id.desc()).all()
+
+
+@router.post("/resolvidos/resgatar")
+def resgatar_antigos(desde: Optional[str] = None, aplicar: bool = False,
+                     db: Session = Depends(get_db)):
+    """Puxa, pela trilha de Novidades, o que virou de Reprovado para Aprovado antes
+    do lembrete automático existir. Sem `aplicar=true` é só simulação — devolve a
+    lista do que seria criado, sem gravar nada. `desde=AAAA-MM-DD` limita a data."""
+    try:
+        return resolvidos.resgatar(db, desde=desde, aplicar=aplicar)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Data inválida — use o formato AAAA-MM-DD.")
 
 
 @router.patch("/resolvidos/{item_id}", response_model=schemas.ResolvidoComunicarOut)

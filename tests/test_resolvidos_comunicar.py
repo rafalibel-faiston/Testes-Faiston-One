@@ -21,6 +21,12 @@ def lista_limpa(client):
         db = SessionLocal()
         try:
             db.query(models.ResolvidoComunicar).delete(synchronize_session=False)
+            # o SQLite de teste reaproveita códigos/ids depois de apagar (FC-MAN-01,
+            # AJT-8): sem limpar a trilha, o histórico de um teste anterior vazaria
+            # pro resgate do seguinte. No Postgres os ids não se repetem.
+            db.query(models.ActivityLog).filter(
+                models.ActivityLog.tipo.in_(("status", "ajuste"))
+            ).delete(synchronize_session=False)
             db.commit()
         finally:
             db.close()
@@ -273,3 +279,122 @@ def test_pauta_lista_o_que_falta_avisar_e_esconde_o_ja_avisado(client, caso):
     client.patch(f"/api/resolvidos/{item['id']}", json={"comunicado": True})
     html = client.get("/relatorio").text
     assert 'id="resolvidos"' not in html     # nada a comunicar: a seção some
+
+
+# --------------------------------------------------------------- resgate do histórico
+
+def apaga_lembretes():
+    """Simula o banco de antes do recurso: a trilha de Novidades existe, o lembrete não."""
+    from app import models
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        db.query(models.ResolvidoComunicar).delete(synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
+
+
+def resgatar(client, **params):
+    resp = client.post("/api/resolvidos/resgatar", params=params)
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def test_resgate_acha_a_virada_antiga_pela_trilha_e_so_simula_por_padrao(client, caso):
+    code = caso["code"]
+    client.patch(f"/api/cases/{code}", json={"status": "Reprovado", "testado_por": "Rafael"})
+    client.patch(f"/api/cases/{code}", json={"status": "Aprovado", "testado_por": "Rafael"})
+    apaga_lembretes()
+
+    simulacao = resgatar(client)
+    meus = [i for i in simulacao["itens"] if i["codigo"] == code]
+    assert len(meus) == 1 and meus[0]["novo"] is True and meus[0]["resolvido_por"] == "Rafael"
+    assert simulacao["aplicado"] is False
+    assert pendentes(client) == []          # simular não grava nada
+
+
+def test_resgate_aplicado_cria_o_lembrete_e_rodar_de_novo_nao_duplica(client, caso):
+    code = caso["code"]
+    client.patch(f"/api/cases/{code}", json={"status": "Reprovado"})
+    client.patch(f"/api/cases/{code}", json={"status": "Aprovado", "testado_por": "Rafael"})
+    apaga_lembretes()
+
+    resgatar(client, aplicar="true")
+    (item,) = [i for i in pendentes(client) if i["codigo"] == code]
+    assert "Rafael" in item["mensagem"]
+    assert item["created_at"] is not None
+
+    segunda = resgatar(client, aplicar="true")
+    assert [i for i in segunda["itens"] if i["codigo"] == code][0]["novo"] is False
+    assert len([i for i in pendentes(client) if i["codigo"] == code]) == 1
+
+
+def test_resgate_nao_duplica_o_que_ja_nasceu_ao_vivo(client, caso):
+    code = caso["code"]
+    client.patch(f"/api/cases/{code}", json={"status": "Reprovado"})
+    client.patch(f"/api/cases/{code}", json={"status": "Aprovado"})    # lembrete já criado
+    resgatar(client, aplicar="true")
+    assert len([i for i in pendentes(client) if i["codigo"] == code]) == 1
+
+
+def test_resgate_respeita_a_regra_de_passar_por_nao_testado(client, caso):
+    code = caso["code"]
+    for status in ("Reprovado", "Não testado", "Aprovado"):
+        client.patch(f"/api/cases/{code}", json={"status": status})
+    apaga_lembretes()
+    assert [i for i in resgatar(client)["itens"] if i["codigo"] == code] == []
+
+
+def test_resgate_separa_os_niveis_e_os_estagios_da_situacao(client, estagio):
+    code, estagio_id = estagio
+    extra = client.post(f"/api/situacoes/{code}/estagios", json={
+        "nome": "02 · Técnico aceita", "resultado_esperado": "Aceito",
+    }).json()["estagios"][-1]["id"]
+    for eid in (estagio_id, extra):
+        url = f"/api/situacoes/{code}/estagios/{eid}"
+        client.patch(url, json={"status": "Reprovado"})
+        client.patch(url, json={"status": "Aprovado"})
+    # ao vivo também: dois estágios da mesma situação não se fundem num item só
+    assert len([i for i in pendentes(client) if i["codigo"] == code]) == 2
+    apaga_lembretes()
+
+    resgatar(client, aplicar="true")
+    meus = [i for i in pendentes(client) if i["codigo"] == code]
+    assert len(meus) == 2                    # um por estágio, sem se fundirem
+    assert {"01 · Criar chamado" in m["titulo"] for m in meus} == {True, False}
+
+
+def test_resgate_ignora_teste_excluido_e_filtra_por_data(client, caso):
+    code = caso["code"]
+    client.patch(f"/api/cases/{code}", json={"status": "Reprovado"})
+    client.patch(f"/api/cases/{code}", json={"status": "Aprovado"})
+    apaga_lembretes()
+
+    assert [i for i in resgatar(client, desde="2999-01-01")["itens"] if i["codigo"] == code] == []
+    assert client.post("/api/resolvidos/resgatar", params={"desde": "ontem"}).status_code == 400
+
+    client.delete(f"/api/cases/{code}")
+    assert [i for i in resgatar(client)["itens"] if i["codigo"] == code] == []
+
+
+def test_resgate_acha_a_virada_antiga_de_ajuste(client, ajuste):
+    aid = ajuste["id"]
+    client.patch(f"/api/ativos/ajustes/{aid}", json={"validacao": "Reprovado"})
+    client.patch(f"/api/ativos/ajustes/{aid}", json={"validacao": "Aprovado", "validado_por": "Rafael"})
+    apaga_lembretes()
+    resgatar(client, aplicar="true")
+    (item,) = [i for i in pendentes(client) if i["codigo"] == f"AJT-{aid}"]
+    assert "correção de bug" in item["mensagem"]
+
+
+def test_mcp_resgatar_simula_e_aplica(client, caso):
+    code = caso["code"]
+    mcp_server.atualizar_status_caso(code, "Reprovado")
+    mcp_server.atualizar_status_caso(code, "Aprovado")
+    apaga_lembretes()
+    assert mcp_server.resgatar_resolvidos_antigos()["aplicado"] is False
+    assert mcp_server.listar_resolvidos_para_comunicar() == []
+    mcp_server.resgatar_resolvidos_antigos(aplicar=True)
+    assert any(i["codigo"] == code for i in mcp_server.listar_resolvidos_para_comunicar())

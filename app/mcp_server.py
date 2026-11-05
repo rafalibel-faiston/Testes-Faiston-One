@@ -795,6 +795,22 @@ def listar_resolvidos_para_comunicar(incluir_comunicados: bool = False) -> list[
 
 
 @mcp.tool()
+def resgatar_resolvidos_antigos(desde: Optional[str] = None, aplicar: bool = False) -> dict:
+    """Puxa o que virou de Reprovado para Aprovado ANTES do lembrete automático
+    existir, reconstruindo pela trilha de Novidades. Por padrão é só simulação:
+    devolve a lista do que seria criado, sem gravar. Mostre a lista ao usuário e só
+    chame com `aplicar=true` depois que ele confirmar. `desde` ("AAAA-MM-DD") ignora
+    viradas anteriores àquele dia. Pode rodar de novo sem duplicar."""
+    db = SessionLocal()
+    try:
+        return resolvidos.resgatar(db, desde=desde, aplicar=aplicar)
+    except ValueError:
+        return {"erro": "Data inválida — use o formato AAAA-MM-DD."}
+    finally:
+        db.close()
+
+
+@mcp.tool()
 def marcar_resolvido_comunicado(
     id: int, comunicado_por: Optional[str] = None, comunicado: bool = True,
 ) -> dict:
