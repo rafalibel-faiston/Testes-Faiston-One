@@ -640,35 +640,66 @@ FLOW_C_ATUAL = """flowchart TD
 # cria estes quando ainda NAO existe nenhum diagrama daquele fluxo (idempotente).
 # Financeiro — como o valor da atividade é definido, nos 3 cenários descritos pelo
 # time (e as respostas dele às dúvidas do desenho). Só o que foi dito: nada de etapa,
-# aprovação ou prazo inventado. Rótulos sem aspas/parênteses/chaves, que o
-# "Editar aqui" da tela interpreta de volta.
-FLUXO_FINANCEIRO_CENARIOS = """flowchart TD
-    n1["Como o valor da atividade é definido"] --> n2{"Qual o cenário?"}
-    n2 -->|Contratual N1, M1 e S1| n3["Atividades têm valor previamente estabelecido em contrato"]
-    n3 --> n4["Técnico recebe o acionamento já sabendo o valor previsto"]
-    n4 --> n5{"Dúvida sobre a remuneração?"}
-    n5 -->|Sim| n6["Técnico é direcionado à equipe de Rede Credenciada para esclarecer os valores acordados"]
-    n5 -->|Não| n7{"Técnico aceita o chamado?"}
-    n6 --> n7
-    n7 -->|Sim| n8["Atendimento realizado normalmente"]
-    n7 -->|Não| n9["Técnico recusa, pois não é obrigado a aceitar todos os chamados"]
-    n8 --> n10["O valor contratual acordado do chamado fica atrelado ao financeiro do técnico"]
-    n10 --> n11["Na finalização o técnico informa as despesas adicionais, se houver, como pedágio, estacionamento ou materiais, com os comprovantes"]
-    n11 --> n12["As despesas passam por aprovação na hora do próprio chamado"]
-    n12 --> n13["As despesas aprovadas vão juntas com o chamado para o financeiro, ao final dele"]
-    n2 -->|Projetos D1| n14["Cada novo projeto tem um orçamento da equipe de Projetos para a execução das atividades"]
-    n14 --> n15["Valores não são padronizados e variam conforme o projeto, suas características e o orçamento disponível"]
-    n15 --> n16["Chamados identificados pela sigla D1"]
-    n16 --> n17["Operação cria a campanha de valores e dispara para os técnicos pais, tanto os que têm filhos quanto os que atuam sozinhos"]
-    n17 --> n18{"Técnico pai está de acordo com o valor?"}
-    n18 -->|Sim| n19["O técnico pai entra na lista de chamados da campanha"]
-    n19 --> n20["Quando houver chamados dessa campanha, eles caem para os técnicos pais que aceitaram e para os filhos deles"]
-    n20 --> n21["O valor nunca é mostrado ao técnico filho"]
-    n18 -->|Não| n22["Os chamados da campanha não vão para esse técnico pai nem para os filhos dele"]
-    n2 -->|Atendimento CLT| n23["Operação precisa direcionar um profissional CLT para uma atividade"]
-    n23 --> n24["Na abertura do chamado é criada a sigla CLT dentro do Tiflux"]
-    n24 --> n25["Valores já previamente conhecidos"]
-    n25 --> n26["Sem negociação financeira no acionamento, pois as condições já estão estabelecidas"]
+# aprovação ou prazo inventado. Quatro diagramas curtos em vez de um gigante: a visão
+# geral e um por cenário, pra o texto aparecer em tamanho de leitura. Usam os tipos de
+# card do editor: etapa, decisão, botão (ação de sistema: Tiflux, cadastro, financeiro)
+# e notificação ao técnico. Rótulos sem aspas/parênteses/chaves, que o "Editar aqui" da
+# tela interpreta de volta.
+FINANCEIRO_VISAO_GERAL = """flowchart TD
+    n1("Tiflux · abre o chamado e define a sigla") --> n2{"Qual a sigla?"}
+    n2 -->|N1, M1 ou S1| n3["Contratual · valor vem do cadastro do técnico"]
+    n2 -->|D1| n4["Projetos · valor vem da campanha"]
+    n2 -->|CLT| n5["CLT · valores já conhecidos"]
+    n6["Técnico · entra no sistema"] --> n7("Cadastro · guarda o valor contratual de cada sigla")
+    n7 -.-> n3
+    class n1,n7 botao;
+    classDef botao fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#075985;
+    classDef notifTec fill:#e8f0ff,stroke:#0054ec,stroke-width:1.5px,color:#0b2e75;
+"""
+
+FINANCEIRO_CONTRATUAL = """flowchart TD
+    n1("Tiflux · chamado aberto com a sigla N1, M1 ou S1") --> n2["Valor da sigla vem do cadastro do técnico"]
+    n2 --> n3(["🔔 Notifica o técnico: acionamento já com o valor"])
+    n3 --> n4{"Dúvida no valor?"}
+    n4 -->|Sim| n5["Rede Credenciada · esclarece o valor acordado"]
+    n4 -->|Não| n6{"Aceita o chamado?"}
+    n5 --> n6
+    n6 -->|Não| n7["Recusa · sem obrigação de aceitar todos"]
+    n6 -->|Sim| n8["Técnico · atende o chamado"]
+    n8 --> n9("Financeiro · valor contratual atrelado ao técnico")
+    n9 --> n10["Despesas extras, com comprovante: pedágio, estacionamento ou materiais"]
+    n10 --> n11{"Despesa aprovada?"}
+    n11 -->|Sim| n12("Financeiro · despesa entra junto, no fim do chamado")
+    n11 -->|Não| n13["Despesa não entra no financeiro"]
+    class n1,n9,n12 botao;
+    class n3 notifTec;
+    classDef botao fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#075985;
+    classDef notifTec fill:#e8f0ff,stroke:#0054ec,stroke-width:1.5px,color:#0b2e75;
+"""
+
+FINANCEIRO_PROJETOS = """flowchart TD
+    n1("Tiflux · chamado aberto com a sigla D1") --> n2["Projetos · cada projeto tem um orçamento"]
+    n2 --> n3["Valores variam por projeto, sem padrão"]
+    n3 --> n4["Operação · cria a campanha de valores"]
+    n4 --> n5(["🔔 Notifica o técnico: campanha enviada aos pais, com ou sem filhos"])
+    n5 --> n6{"Pai aceita o valor?"}
+    n6 -->|Sim| n7["Pai entra na lista de chamados da campanha"]
+    n7 --> n8(["🔔 Notifica o técnico: chamado cai para o pai e para os filhos"])
+    n8 --> n9["Filho nunca vê o valor"]
+    n6 -->|Não| n10["Fora da campanha · pai e filhos não recebem"]
+    class n1 botao;
+    class n5,n8 notifTec;
+    classDef botao fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#075985;
+    classDef notifTec fill:#e8f0ff,stroke:#0054ec,stroke-width:1.5px,color:#0b2e75;
+"""
+
+FINANCEIRO_CLT = """flowchart TD
+    n1("Tiflux · cria a sigla CLT na abertura do chamado") --> n2["Operação · direciona um profissional CLT"]
+    n2 --> n3["Valores já conhecidos"]
+    n3 --> n4["Sem negociação financeira no acionamento"]
+    class n1 botao;
+    classDef botao fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#075985;
+    classDef notifTec fill:#e8f0ff,stroke:#0054ec,stroke-width:1.5px,color:#0b2e75;
 """
 
 SEED_DIAGRAMS = [
@@ -692,10 +723,32 @@ SEED_DIAGRAMS = [
     dict(
         fluxo="financeiro", kind="ideal", ordem=0,
         titulo="Valores do serviço — os 3 cenários",
-        descricao="Como o valor da atividade chega ao técnico em cada cenário: contratual "
-                  "(N1, M1 e S1), projetos (D1) e atendimento CLT. Desenho inicial a partir "
-                  "da descrição dos cenários — ajuste conforme o processo for detalhado.",
-        mermaid=FLUXO_FINANCEIRO_CENARIOS,
+        descricao="Toda sigla sai do Tiflux na abertura do chamado. O valor contratual de cada "
+                  "sigla fica no cadastro do técnico (N1, M1 e S1); em projetos (D1) o valor "
+                  "vem de uma campanha; no CLT os valores já são conhecidos. Visão geral — o "
+                  "detalhe de cada cenário está nos diagramas seguintes.",
+        mermaid=FINANCEIRO_VISAO_GERAL,
+    ),
+    dict(
+        fluxo="financeiro", kind="ideal", ordem=1,
+        titulo="Cenário 1 — Contratual (N1, M1 e S1)",
+        descricao="Valor previsto em contrato, atrelado ao cadastro do técnico. O técnico pode "
+                  "recusar; despesas extras são aprovadas na hora do próprio chamado.",
+        mermaid=FINANCEIRO_CONTRATUAL,
+    ),
+    dict(
+        fluxo="financeiro", kind="ideal", ordem=2,
+        titulo="Cenário 2 — Projetos (D1)",
+        descricao="Valor por campanha: a operação envia aos técnicos pais, e os chamados caem "
+                  "para quem aceitou e para os filhos deles, sem nunca mostrar o valor ao filho.",
+        mermaid=FINANCEIRO_PROJETOS,
+    ),
+    dict(
+        fluxo="financeiro", kind="ideal", ordem=3,
+        titulo="Cenário 3 — Atendimento CLT",
+        descricao="A sigla CLT é criada no Tiflux na abertura do chamado; os valores já são "
+                  "conhecidos e não há negociação no acionamento.",
+        mermaid=FINANCEIRO_CLT,
     ),
 ]
 
@@ -707,22 +760,31 @@ def seed_diagrams(db):
       daquele fluxo+tipo (o time é dono do desenho do fluxo);
     - módulos (Financeiro...): insere se ainda não houver um diagrama com aquele
       TÍTULO no módulo. O desenho semeado é conteúdo novo e não pode deixar de
-      aparecer só porque alguém já rabiscou outro diagrama na aba."""
+      aparecer só porque alguém já rabiscou outro diagrama na aba. Se ele já existe e o
+      time ainda não o editou (`seeded`), é atualizado pra versão atual do seed."""
     from .models import FlowDiagram
     from .modulos import e_modulo
 
     added = 0
+    atualizados = 0
     for d in SEED_DIAGRAMS:
         q = db.query(FlowDiagram).filter(FlowDiagram.fluxo == d["fluxo"])
         if e_modulo(d["fluxo"]):
             q = q.filter(FlowDiagram.titulo == d["titulo"])
         else:
             q = q.filter(FlowDiagram.kind == d["kind"])
-        if q.first():
+        existente = q.first()
+        if existente:
+            # modelo inicial que o time ainda não mexeu (seeded=True) acompanha a versão nova
+            # do seed; qualquer edição pela tela zera o `seeded` e a partir daí é do time
+            if (e_modulo(d["fluxo"]) and existente.seeded
+                    and (existente.mermaid != d["mermaid"] or existente.descricao != d["descricao"])):
+                existente.mermaid, existente.descricao = d["mermaid"], d["descricao"]
+                atualizados += 1
             continue
         db.add(FlowDiagram(seeded=True, **d))
         added += 1
-    if added:
+    if added or atualizados:
         db.commit()
     return added
 
