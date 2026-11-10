@@ -33,6 +33,7 @@ from fastapi import HTTPException
 from . import models
 from .activity import log as log_activity, snippet, normaliza_cor
 from .database import SessionLocal
+from .modulos import norm_modulo, versao_padrao
 from .routers.tecnicos import PAPEIS as TECNICO_PAPEIS
 from .routers.tecnicos import STATUSES as TECNICO_STATUSES
 from .routers.tecnicos import TIPOS_OBS as TECNICO_TIPOS_OBS
@@ -489,24 +490,33 @@ def criar_tarefa(
 
 
 @mcp.tool()
-def listar_ajustes_ativos(versao: Optional[str] = None, tipo: Optional[str] = None) -> list[dict]:
-    """Lista os ajustes pedidos no módulo Gestão de Ativos do Faiston One.
-    versao opcional (ex.: "v2", "v3"); tipo opcional: "Bug" ou "Melhoria"."""
+def listar_ajustes_ativos(
+    versao: Optional[str] = None,
+    tipo: Optional[str] = None,
+    modulo: Optional[str] = None,
+) -> list[dict]:
+    """Lista os ajustes do backlog do Faiston One (Gestão de Ativos e os módulos de
+    pendências da LPD). modulo opcional: ativos, plataforma, financeiro, projetos,
+    dashboard ou fluxo-a (sem ele, lista todos); versao opcional (ex.: "v2", "v3");
+    tipo opcional: "Bug" ou "Melhoria"."""
     db = SessionLocal()
     try:
         query = db.query(models.AtivoAjuste)
+        if modulo:
+            query = query.filter(models.AtivoAjuste.modulo == norm_modulo(modulo))
         if versao:
             query = query.filter(models.AtivoAjuste.versao == versao.strip().lower())
         if tipo:
             query = query.filter(models.AtivoAjuste.tipo == tipo)
         # mesma ordem da tela: prioridade primeiro, número do item como desempate
         ajustes = query.order_by(
-            models.AtivoAjuste.versao, models.AJUSTE_PRIORIDADE_ORDEM,
+            models.AtivoAjuste.modulo, models.AtivoAjuste.versao, models.AJUSTE_PRIORIDADE_ORDEM,
             models.AtivoAjuste.numero, models.AtivoAjuste.id,
         ).all()
         return [
             {
                 "id": a.id,
+                "modulo": a.modulo,
                 "versao": a.versao,
                 "numero": a.numero,
                 "titulo": a.titulo,
@@ -532,32 +542,37 @@ def criar_ajuste_ativos(
     atual: str,
     esperado: str,
     tipo: str = "Melhoria",
-    versao: str = "v2",
+    versao: Optional[str] = None,
     area: Optional[str] = None,
     prioridade: str = "Média",
     autor: Optional[str] = None,
+    modulo: Optional[str] = None,
 ) -> dict:
-    """Cadastra um ajuste do módulo Gestão de Ativos: `atual` é como está hoje e
+    """Cadastra um ajuste no backlog do Faiston One: `atual` é como está hoje e
     `esperado` é como deve ser. tipo: "Bug" (está quebrado) ou "Melhoria".
-    versao agrupa a leva de ajustes — usar uma versão nova (v3, v4...) abre a
-    próxima rodada na tela automaticamente. O número do item é atribuído
-    sozinho, na sequência da versão."""
+    modulo: ativos (padrão), plataforma, financeiro, projetos, dashboard ou fluxo-a.
+    versao agrupa a leva de ajustes — sem ela vale a versão padrão do módulo
+    (v2 em Gestão de Ativos, v1 nos demais); usar uma versão nova (v3, v4...) abre
+    a próxima rodada na tela automaticamente. O número do item é atribuído
+    sozinho, na sequência do módulo+versão."""
     titulo = (titulo or "").strip()
     if not titulo:
         return {"erro": "Título vazio."}
     if tipo not in {"Bug", "Melhoria"}:
         return {"erro": 'Tipo inválido — use "Bug" ou "Melhoria".'}
-    versao = (versao or "v2").strip().lower() or "v2"
+    modulo = norm_modulo(modulo)
+    versao = (versao or "").strip().lower() or versao_padrao(modulo)
     if versao.isdigit():
         versao = "v" + versao
     db = SessionLocal()
     try:
         maior = (
             db.query(func.max(models.AtivoAjuste.numero))
-            .filter(models.AtivoAjuste.versao == versao)
+            .filter(models.AtivoAjuste.modulo == modulo, models.AtivoAjuste.versao == versao)
             .scalar()
         )
         ajuste = models.AtivoAjuste(
+            modulo=modulo,
             versao=versao,
             numero=(maior or 0) + 1,
             titulo=titulo,
@@ -572,7 +587,7 @@ def criar_ajuste_ativos(
         db.add(ajuste)
         db.commit()
         db.refresh(ajuste)
-        return {"id": ajuste.id, "versao": ajuste.versao, "numero": ajuste.numero,
+        return {"id": ajuste.id, "modulo": ajuste.modulo, "versao": ajuste.versao, "numero": ajuste.numero,
                 "titulo": ajuste.titulo, "tipo": ajuste.tipo}
     finally:
         db.close()
