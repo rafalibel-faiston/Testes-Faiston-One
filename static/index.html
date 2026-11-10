@@ -341,9 +341,9 @@
   <div id="module-ativos" hidden>
     <section class="diagrams-head">
       <div class="diagrams-head-copy">
-        <h2>Gestão de Ativos — Ajustes</h2>
-        <p>O módulo de Gestão de Ativos já está no ar; aqui ficam os ajustes pedidos em cima dele.
-        Cada item conta <b>como está hoje</b> e <b>como deve ser</b>, e é classificado como
+        <h2 id="ajustes-titulo">Gestão de Ativos — ajustes</h2>
+        <p id="ajustes-descricao"></p>
+        <p class="ajustes-ajuda">Cada item conta <b>como está hoje</b> e <b>como deve ser</b>, e é classificado como
         <b>Bug</b> (está quebrado) ou <b>Melhoria</b> (funciona, mas precisa evoluir).
         As próximas levas entram como uma versão nova — v3, v4… — sem perder o histórico das anteriores.</p>
       </div>
@@ -1039,24 +1039,27 @@
         <input name="titulo" placeholder="ex.: Entrada Manual não atribui Cliente e Valor" required>
       </label>
       <div class="form-grid">
-        <label class="fld">Tipo
-          <select name="tipo">
-            <option value="Bug">Bug</option>
-            <option value="Melhoria" selected>Melhoria</option>
-          </select>
+        <label class="fld">Módulo
+          <select name="modulo" id="ajuste-modulo-sel"></select>
         </label>
         <label class="fld">Versão
           <input name="versao" list="ajuste-versao-opts" placeholder="v2" autocomplete="off">
           <datalist id="ajuste-versao-opts"></datalist>
           <span class="fld-hint">Digite uma versão nova (v3, v4…) pra abrir a próxima leva.</span>
         </label>
+        <label class="fld">Tipo
+          <select name="tipo">
+            <option value="Bug">Bug</option>
+            <option value="Melhoria" selected>Melhoria</option>
+          </select>
+        </label>
+      </div>
+      <div class="form-grid">
         <label class="fld">Prioridade
           <select name="prioridade">
             <option>Alta</option><option selected>Média</option><option>Baixa</option><option>A definir</option>
           </select>
         </label>
-      </div>
-      <div class="form-grid">
         <label class="fld">Área / tela
           <input name="area" list="ajuste-area-opts" placeholder="ex.: Entrada, Cotação, Tracking" autocomplete="off">
           <datalist id="ajuste-area-opts">
@@ -1074,9 +1077,6 @@
             <option value="descartado">Descartado</option>
           </select>
         </label>
-        <label class="fld">Responsável
-          <input name="responsavel" placeholder="quem está tocando (opcional)" autocomplete="off">
-        </label>
       </div>
       <label class="fld">Como está hoje <b>*</b>
         <textarea name="atual" rows="4" placeholder="O comportamento atual do sistema" required></textarea>
@@ -1089,6 +1089,9 @@
         <textarea name="observacao" rows="2" placeholder="decisões, dúvidas, links (opcional)"></textarea>
       </label>
       <div class="form-grid">
+        <label class="fld">Responsável
+          <input name="responsavel" placeholder="quem está tocando (opcional)" autocomplete="off">
+        </label>
         <label class="fld">Prazo prometido
           <input type="date" name="prazo">
           <span class="fld-hint">A data que o time de dev se comprometeu na reunião.</span>

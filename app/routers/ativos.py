@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, joinedload
 from .. import models, niveis, resolvidos, schemas
 from ..activity import log as log_activity, normaliza_cor, normaliza_prazo, snippet
 from ..database import get_db
+from ..modulos import MODULOS, label as modulo_label, norm_modulo, versao_padrao
 from ..relatorio import AJUSTE_LABEL
 
 router = APIRouter(tags=["ativos"])
@@ -59,17 +60,33 @@ def _norm_versao(valor: Optional[str], padrao: str = "v2") -> str:
     return v
 
 
-def _next_numero(db: Session, versao: str) -> int:
-    maior = (
+def _next_numero(db: Session, modulo: str, versao: str, ignorar_id: Optional[int] = None) -> int:
+    """Próximo número livre do módulo+versão — cada módulo conta do 1 por conta
+    própria. `ignorar_id` é o item que está sendo movido: o número dele no lugar
+    de origem não pode empurrar o contador do destino."""
+    q = (
         db.query(sa_func.max(models.AtivoAjuste.numero))
-        .filter(models.AtivoAjuste.versao == versao)
-        .scalar()
+        .filter(models.AtivoAjuste.modulo == modulo, models.AtivoAjuste.versao == versao)
     )
-    return (maior or 0) + 1
+    if ignorar_id is not None:
+        q = q.filter(models.AtivoAjuste.id != ignorar_id)
+    return (q.scalar() or 0) + 1
+
+
+def _ref(ajuste: models.AtivoAjuste) -> str:
+    """"Financeiro v1" — o módulo e a leva do ajuste nas mensagens de Novidades."""
+    return f"{modulo_label(ajuste.modulo)} {ajuste.versao}"
+
+
+@router.get("/ativos/modulos", response_model=List[schemas.AjusteModuloOut])
+def list_modulos():
+    """O catálogo de módulos (app/modulos.py): a tela monta as abas a partir daqui."""
+    return MODULOS
 
 
 @router.get("/ativos/ajustes", response_model=List[schemas.AtivoAjusteOut])
 def list_ajustes(
+    modulo: Optional[str] = None,
     versao: Optional[str] = None,
     tipo: Optional[str] = None,
     status: Optional[str] = None,
@@ -79,6 +96,8 @@ def list_ajustes(
         joinedload(models.AtivoAjuste.prints),
         joinedload(models.AtivoAjuste.observations).joinedload(models.AtivoAjusteObservation.revisions),
     )
+    if modulo:
+        q = q.filter(models.AtivoAjuste.modulo == norm_modulo(modulo))
     if versao:
         q = q.filter(models.AtivoAjuste.versao == _norm_versao(versao))
     if tipo:
@@ -86,7 +105,7 @@ def list_ajustes(
     if status:
         q = q.filter(models.AtivoAjuste.status == status)
     return q.order_by(
-        models.AtivoAjuste.versao, models.AJUSTE_PRIORIDADE_ORDEM,
+        models.AtivoAjuste.modulo, models.AtivoAjuste.versao, models.AJUSTE_PRIORIDADE_ORDEM,
         models.AtivoAjuste.numero, models.AtivoAjuste.id,
     ).all()
 
@@ -96,7 +115,8 @@ def create_ajuste(payload: schemas.AtivoAjusteCreate, db: Session = Depends(get_
     titulo = (payload.titulo or "").strip()
     if not titulo:
         raise HTTPException(status_code=400, detail="Título vazio.")
-    versao = _norm_versao(payload.versao)
+    modulo = norm_modulo(payload.modulo)
+    versao = _norm_versao(payload.versao, versao_padrao(modulo))
     tipo = (payload.tipo or "Melhoria").strip()
     if tipo not in TIPOS:
         raise HTTPException(status_code=400, detail="Tipo inválido — use Bug ou Melhoria.")
@@ -105,8 +125,9 @@ def create_ajuste(payload: schemas.AtivoAjusteCreate, db: Session = Depends(get_
         prioridade = "Média"
     status, validacao = _status_do_payload(payload.status)
     ajuste = models.AtivoAjuste(
+        modulo=modulo,
         versao=versao,
-        numero=payload.numero if payload.numero else _next_numero(db, versao),
+        numero=payload.numero if payload.numero else _next_numero(db, modulo, versao),
         titulo=titulo,
         tipo=tipo,
         area=(payload.area or "").strip() or None,
@@ -121,7 +142,7 @@ def create_ajuste(payload: schemas.AtivoAjusteCreate, db: Session = Depends(get_
     )
     db.add(ajuste)
     db.flush()  # garante ajuste.id pra amarrar o evento da trilha de Novidades
-    log_activity(db, FLUXO_ATIVOS, "ajuste", f'Ajuste #{ajuste.numero} criado em {ajuste.versao}: "{titulo}"',
+    log_activity(db, FLUXO_ATIVOS, "ajuste", f'Ajuste #{ajuste.numero} criado em {_ref(ajuste)}: "{titulo}"',
                  autor=ajuste.autor, case_code=f"AJT-{ajuste.id}")
     db.commit()
     db.refresh(ajuste)
@@ -141,13 +162,20 @@ def update_ajuste(ajuste_id: int, payload: schemas.AtivoAjusteUpdate, db: Sessio
         if not titulo:
             raise HTTPException(status_code=400, detail="Título vazio.")
         ajuste.titulo = titulo
+    novo_modulo = norm_modulo(payload.modulo) if payload.modulo is not None else ajuste.modulo
     if payload.versao is not None:
         nova = _norm_versao(payload.versao, ajuste.versao)
-        if nova != ajuste.versao:
-            ajuste.versao = nova
-            # ao mudar de versão o número antigo pode já existir lá — renumera pro fim
-            if payload.numero is None:
-                ajuste.numero = _next_numero(db, nova)
+    elif novo_modulo != ajuste.modulo:
+        # mudou de módulo sem dizer a versão: cai na leva padrão do módulo novo
+        nova = versao_padrao(novo_modulo)
+    else:
+        nova = ajuste.versao
+    if novo_modulo != ajuste.modulo or nova != ajuste.versao:
+        ajuste.modulo = novo_modulo
+        ajuste.versao = nova
+        # ao mudar de módulo/versão o número antigo pode já existir lá — renumera pro fim
+        if payload.numero is None:
+            ajuste.numero = _next_numero(db, novo_modulo, nova, ignorar_id=ajuste.id)
     if payload.numero is not None:
         ajuste.numero = payload.numero
     if payload.tipo is not None:
@@ -188,7 +216,7 @@ def update_ajuste(ajuste_id: int, payload: schemas.AtivoAjusteUpdate, db: Sessio
             setattr(ajuste, campo_quando,
                     sa_func.now() if novo_status != niveis.NAO_TESTADO else None)
             log_activity(db, FLUXO_ATIVOS, "ajuste",
-                         f'Ajuste #{ajuste.numero} ({ajuste.versao}) · '
+                         f'Ajuste #{ajuste.numero} ({_ref(ajuste)}) · '
                          f'{niveis.NIVEL_LABEL[nivel]}: {novo_status} — {ajuste.titulo}',
                          autor=getattr(payload, campo_quem) or getattr(ajuste, campo_quem),
                          case_code=f"AJT-{ajuste.id}")
@@ -207,7 +235,7 @@ def update_ajuste(ajuste_id: int, payload: schemas.AtivoAjusteUpdate, db: Sessio
     validacao_nova = niveis.status_geral(ajuste.validacao, ajuste.validacao_operacao)
     if validacao_nova != validacao_antiga:
         log_activity(db, FLUXO_ATIVOS, "ajuste",
-                     f'Ajuste #{ajuste.numero} ({ajuste.versao}) agora está '
+                     f'Ajuste #{ajuste.numero} ({_ref(ajuste)}) agora está '
                      f'{validacao_nova.lower()}: {ajuste.titulo}',
                      case_code=f"AJT-{ajuste.id}")
 
@@ -225,11 +253,11 @@ def update_ajuste(ajuste_id: int, payload: schemas.AtivoAjusteUpdate, db: Sessio
     # Retorno/prazo sozinhos (autosave da pauta) não geram evento — vira ruído.
     if payload.status is not None and ajuste.status != status_antigo:
         log_activity(db, FLUXO_ATIVOS, "ajuste",
-                     f'Ajuste #{ajuste.numero} ({ajuste.versao}) mudou para "{AJUSTE_LABEL.get(ajuste.status, ajuste.status)}": {ajuste.titulo}',
+                     f'Ajuste #{ajuste.numero} ({_ref(ajuste)}) mudou para "{AJUSTE_LABEL.get(ajuste.status, ajuste.status)}": {ajuste.titulo}',
                      case_code=f"AJT-{ajuste.id}")
     elif payload.titulo is not None or payload.atual is not None or payload.esperado is not None:
         log_activity(db, FLUXO_ATIVOS, "ajuste",
-                     f'Ajuste #{ajuste.numero} ({ajuste.versao}) editado: "{ajuste.titulo}"',
+                     f'Ajuste #{ajuste.numero} ({_ref(ajuste)}) editado: "{ajuste.titulo}"',
                      case_code=f"AJT-{ajuste.id}")
 
     db.commit()
@@ -242,7 +270,7 @@ def delete_ajuste(ajuste_id: int, db: Session = Depends(get_db)):
     ajuste = db.query(models.AtivoAjuste).filter(models.AtivoAjuste.id == ajuste_id).first()
     if not ajuste:
         raise HTTPException(status_code=404, detail="Ajuste não encontrado")
-    log_activity(db, FLUXO_ATIVOS, "ajuste", f'Ajuste #{ajuste.numero} ({ajuste.versao}) excluído: "{ajuste.titulo}"',
+    log_activity(db, FLUXO_ATIVOS, "ajuste", f'Ajuste #{ajuste.numero} ({_ref(ajuste)}) excluído: "{ajuste.titulo}"',
                  case_code=f"AJT-{ajuste.id}")
     db.delete(ajuste)
     db.commit()
@@ -282,7 +310,7 @@ def add_ajuste_observation(ajuste_id: int, payload: schemas.ObservationCreate, d
     ))
     log_activity(db, FLUXO_ATIVOS, "ajuste-obs",
                  f'Nota ({niveis.NIVEL_LABEL[nivel]}) em ajuste #{ajuste.numero} '
-                 f'({ajuste.versao}): "{snippet(texto)}"',
+                 f'({_ref(ajuste)}): "{snippet(texto)}"',
                  autor=payload.autor, case_code=f"AJT-{ajuste.id}")
     db.commit()
     db.refresh(ajuste)
@@ -317,12 +345,12 @@ def update_ajuste_observation(observation_id: int, payload: schemas.ObservationU
         obs.editado_por = payload.autor
         obs.editado_em = sa_func.now()
         log_activity(db, FLUXO_ATIVOS, "ajuste-obs",
-                     f'Nota atualizada em ajuste #{ajuste.numero} ({ajuste.versao}): "{snippet(texto)}"',
+                     f'Nota atualizada em ajuste #{ajuste.numero} ({_ref(ajuste)}): "{snippet(texto)}"',
                      autor=payload.autor, case_code=f"AJT-{ajuste.id}")
     elif cor != obs.cor:
         marca = cor or "sem cor"
         log_activity(db, FLUXO_ATIVOS, "ajuste-obs",
-                     f'Nota do ajuste #{ajuste.numero} ({ajuste.versao}) marcada como {marca}: "{snippet(texto)}"',
+                     f'Nota do ajuste #{ajuste.numero} ({_ref(ajuste)}) marcada como {marca}: "{snippet(texto)}"',
                      case_code=f"AJT-{ajuste.id}")
     obs.cor = cor
     db.commit()
@@ -342,7 +370,7 @@ def delete_ajuste_observation(observation_id: int, db: Session = Depends(get_db)
     ajuste = _get_ajuste_or_404(db, obs.ajuste_id)
     db.delete(obs)
     log_activity(db, FLUXO_ATIVOS, "ajuste-obs",
-                 f'Nota removida do ajuste #{ajuste.numero} ({ajuste.versao})', case_code=f"AJT-{ajuste.id}")
+                 f'Nota removida do ajuste #{ajuste.numero} ({_ref(ajuste)})', case_code=f"AJT-{ajuste.id}")
     db.commit()
     db.refresh(ajuste)
     return ajuste

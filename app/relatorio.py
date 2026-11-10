@@ -15,6 +15,8 @@ import html
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+from .modulos import MODULOS, label as modulo_label, norm_modulo
+
 # Status de caso de teste que contam como resolvido — o resto entra na pauta.
 # Leia-se sempre o status CONSOLIDADO (`status_geral`): um caso que passou só
 # na validação técnica e ainda não foi validado na operação continua na pauta,
@@ -24,7 +26,7 @@ STATUS_PROBLEMA = {"Reprovado", "Bloqueado"}
 # passou num nível e falta o outro
 STATUS_PARCIAL = {"Pendente na operação", "Pendente na técnica"}
 
-# Ajuste da Gestão de Ativos: só sai da pauta quando descartado ou validado nos
+# Ajuste do backlog (de qualquer módulo): só sai da pauta quando descartado ou validado nos
 # DOIS níveis (técnica + operação) — entregue e conferido só na técnica continua
 # na reunião, mesma régua dos casos de teste.
 AJUSTE_FECHADO = {"validado", "descartado"}
@@ -405,20 +407,31 @@ def secao_situacoes(situacoes: list, multi_fluxo: bool = False) -> str:
     return f'<div class="grid g2" style="align-items:start">{blocos}</div>'
 
 
+def _ordem_versao(versao: str) -> int:
+    """Chave pra ordenar levas ("v10" depois de "v9"), mais nova primeiro."""
+    digitos = "".join(c for c in str(versao) if c.isdigit())
+    return -(int(digitos) if digitos else 0)
+
+
 def secao_ajustes(ajustes: list, editavel: bool = False) -> str:
-    """Os ajustes pendentes em lista, na ordem em que o time ataca (prioridade e
-    depois o número do item) — é por esse número que eles se referem ao ajuste na
-    reunião."""
+    """Os ajustes pendentes em lista, agrupados por módulo (na ordem do catálogo)
+    e depois por leva, na ordem em que o time ataca (prioridade e depois o número
+    do item) — é por esse número que eles se referem ao ajuste na reunião."""
     abertos = [a for a in ajustes if ajuste_aberto(a)]
     if not abertos:
-        return vazio("Nenhum ajuste em aberto na Gestão de Ativos.")
-    versoes: dict = {}
+        return vazio("Nenhum ajuste em aberto em nenhum módulo.")
+    levas: dict = {}
     for a in abertos:
-        versoes.setdefault(a.get("versao") or "—", []).append(a)
+        chave = (norm_modulo(a.get("modulo")), a.get("versao") or "—")
+        levas.setdefault(chave, []).append(a)
+
+    ordem_modulo = {m["key"]: i for i, m in enumerate(MODULOS)}
+    # catálogo na ordem das abas; dentro do módulo, a leva mais nova primeiro
+    chaves = sorted(levas, key=lambda k: (ordem_modulo.get(k[0], len(ordem_modulo)), _ordem_versao(k[1])))
 
     blocos = ""
-    for versao in sorted(versoes, reverse=True):
-        itens = ordena_prioridade(versoes[versao])
+    for modulo, versao in chaves:
+        itens = ordena_prioridade(levas[(modulo, versao)])
         bugs = sum(1 for a in itens if a.get("tipo") == "Bug")
         linhas = ""
         for a in itens:
@@ -448,7 +461,7 @@ def secao_ajustes(ajustes: list, editavel: bool = False) -> str:
               </div>
             </li>"""
         blocos += f"""
-        <div class="callout" style="margin-bottom:14px"><b>Leva {e(versao)}</b> — {len(itens)} ajuste(s) em aberto, sendo {bugs} bug(s).</div>
+        <div class="callout" style="margin-bottom:14px"><b>{e(modulo_label(modulo))} · Leva {e(versao)}</b> — {len(itens)} ajuste(s) em aberto, sendo {bugs} bug(s).</div>
         <div class="card" style="margin-bottom:26px"><ul class="itens">{linhas}</ul></div>"""
     return blocos
 
@@ -738,7 +751,7 @@ def montar_html(dados: dict, fonte: str, editavel: bool = False) -> str:
             secao_reprovados(casos, situacoes, multi_fluxo), "problemas"),
         sec("03", "Situações — onde cada cenário parou", "os próximos estágios da fila de cada situação",
             secao_situacoes(situacoes, multi_fluxo), "situacoes"),
-        sec("04", "Ajustes da Gestão de Ativos", "hoje é assim / deveria ser assim — pendentes de validação",
+        sec("04", "Ajustes por módulo", "hoje é assim / deveria ser assim — Gestão de Ativos e pendências da LPD",
             secao_ajustes(ajustes, editavel), "ajustes"),
         sec("05", "Track One — piloto com os técnicos", "como está cada fase e o que os técnicos relataram",
             secao_piloto(piloto), "piloto"),
@@ -835,7 +848,7 @@ def montar_html(dados: dict, fonte: str, editavel: bool = False) -> str:
   <div class="hero">
     <h2>O que precisa de decisão nesta reunião</h2>
     <p class="lead">{len(pontos_abertos)} ponto(s) em aberto · {len(reprovados)} item(ns) reprovado(s) ou bloqueado(s) ·
-      {len(ajustes_abertos)} ajuste(s) da Gestão de Ativos pendente(s) · {len(casos_pendentes)} teste(s) na fila de execução
+      {len(ajustes_abertos)} ajuste(s) pendente(s) nos módulos · {len(casos_pendentes)} teste(s) na fila de execução
       ({pct:.0f}% do plano já executado).</p>
   </div>
 

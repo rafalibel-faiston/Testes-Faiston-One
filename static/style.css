@@ -1845,6 +1845,7 @@ body.inline-connecting * { cursor:crosshair !important; }
 .module-tab.active .module-tab-count { background:rgba(255,255,255,.24); color:#fff; }
 .module-tab-count[hidden] { display:none; }
 
+.ajustes-ajuda { margin-top:6px; }
 .ajustes-versoes { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 14px; }
 .ajuste-versao {
   display:flex; flex-direction:column; gap:2px; align-items:flex-start; cursor:pointer;

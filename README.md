@@ -140,7 +140,8 @@ app/
   schemas.py            # Pydantic
   seed_data.py           # os 51 casos de teste (fonte: dashboard LP 02/07) + migração de observações antigas
   routers/cases.py        # API: listar/atualizar casos, observações, upload/download/remover print, resumo
-  routers/ativos.py        # API: ajustes do módulo Gestão de Ativos (v2 e as próximas levas)
+  modulos.py                # catálogo de módulos do backlog de ajustes (uma entrada = uma aba)
+  routers/ativos.py        # API: ajustes por módulo (Gestão de Ativos, pendências da LPD...) e o catálogo
   routers/nomes_tiflux.py  # API: nome padrão do chamado de teste no Tiflux
   routers/resolvidos.py    # API: lembretes de "reprovado que virou aprovado — avisar a operação"
   resolvidos.py            # a regra da virada e o rascunho da mensagem
@@ -202,7 +203,9 @@ Depois disso as ferramentas (`listar_casos`, `obter_caso`,
 `atualizar_status_caso`, `adicionar_observacao`, `atualizar_observacao`, `resumo_execucao`,
 `listar_tarefas`, `criar_tarefa`, `listar_ajustes_ativos`, `criar_ajuste_ativos`,
 `validar_ajuste_ativos`, `gerar_nome_tiflux`, `listar_nomes_tiflux`,
-`listar_resolvidos_para_comunicar`, `marcar_resolvido_comunicado`)
+`listar_resolvidos_para_comunicar`, `marcar_resolvido_comunicado`
+— `listar_ajustes_ativos` e `criar_ajuste_ativos` aceitam `modulo`; sem ele, valem
+pra Gestão de Ativos como antes)
 ficam disponíveis pra pedir direto na
 conversa, tipo "marca o FC-12 como aprovado" ou "lista os casos reprovados do
 Grupo B". As ferramentas de status e observação aceitam `nivel`
@@ -230,8 +233,10 @@ Faiston, com tudo que está em aberto, na ordem em que interessa discutir:
 3. **Situações — onde cada cenário parou** — os próximos estágios da fila de
    cada situação (no máximo três; a lista inteira viraria parede de texto). O
    que está reprovado já apareceu no item 2.
-4. **Ajustes da Gestão de Ativos** — os que ainda não foram validados, no
-   formato *hoje é assim / deveria ser assim*, agrupados por leva.
+4. **Ajustes por módulo** — os que ainda não foram validados, no formato *hoje é
+   assim / deveria ser assim*, agrupados por módulo (na ordem do catálogo) e depois
+   por leva; a etiqueta de cada bloco mostra o módulo. O KPI "Ajustes em aberto"
+   soma todos os módulos.
 5. **Track One — piloto com os técnicos** — em que pé está cada fase (situação,
    versão testada, quantos responderam, nota e o que falta pros critérios) e os
    relatos de problema/melhoria que **ainda não viraram item de backlog** — que
@@ -391,6 +396,11 @@ anexar imagem.
 
 ## Gestão de Ativos — ajustes (v2 e as próximas)
 
+> **Módulos.** O backlog de ajustes é um só e atende a mais de um módulo: cada
+> ajuste tem um campo `modulo` (ver [Módulos do backlog](#módulos-do-backlog)
+> mais abaixo). Tudo que está descrito nesta seção vale pra todos eles; "Gestão
+> de Ativos" é só o módulo original (`ativos`, v2).
+
 O módulo **Gestão de Ativos** do Faiston One já está no ar; a aba *Gestão de
 Ativos* aqui no console é o backlog dos ajustes pedidos em cima dele. A aba
 aparece pros dois perfis: a Faiston levanta os ajustes, a LP é quem desenvolve
@@ -418,6 +428,47 @@ existe (`v3`, `v4`…), a aba dessa versão aparece sozinha na tela, com o hist�
 das anteriores intacto ao lado. Dá pra cadastrar pela tela (**Novo ajuste**) ou
 pelo Claude, via a tool MCP `criar_ajuste_ativos`.
 
+### Módulos do backlog
+
+Além da Gestão de Ativos, o backlog acompanha as **pendências da LPD** (Dispatcher
+e finalização do projeto). Em vez de uma tela por módulo, o ajuste ganhou o campo
+**`modulo`** e a tela de ajustes (versões, estatísticas, filtros, card, modal,
+prints Ctrl+V, observações com trilha) é a mesma pra todos. As abas da barra de
+módulos são **geradas a partir do catálogo** (`GET /api/ativos/modulos`), visíveis
+aos dois perfis (Faiston e LP), cada uma com o próprio badge de itens em aberto.
+
+| `modulo` | Aba | Versão padrão | O que acompanha |
+|---|---|---|---|
+| `ativos` | Gestão de Ativos | v2 | o backlog original (inclusive os relatos dos técnicos) |
+| `plataforma` | Plataforma | v1 | SLA, perfis e permissões do Dispatcher, publicação nas lojas (Google Play e App Store) |
+| `financeiro` | Financeiro | v1 | Módulo Financeiro |
+| `projetos` | Projetos | v1 | Fluxo de Projetos |
+| `dashboard` | Dashboard e Relatórios | v1 | Dashboard e relatórios com exportação |
+| `fluxo-a` | Fluxo A — Finalização | v1 | ajustes estéticos e de funcionamento que faltam pra fechar o Fluxo A |
+
+- **Numeração por módulo + versão:** cada módulo conta do 1 por conta própria
+  (`Financeiro v1 #01`, `Plataforma v1 #01`…). Mover um item de módulo ou de versão
+  renumera ele pro fim do destino, sem pular lugar.
+- **`modulo` desconhecido** (ou vazio) cai em `ativos` — a normalização
+  (`norm_modulo`) nunca levanta erro, então um conector antigo que não manda o
+  campo continua caindo na Gestão de Ativos, v2.
+- **Relatos dos técnicos** (Track One) continuam virando ajuste de `ativos`, na
+  leva ativa de `ativos` — as levas dos outros módulos não entram na conta.
+- **Pendências da LPD semeadas:** `seed_pendencias_lpd` (`app/seed_data.py`, chamado
+  em `app/main.py`) cria os 15 itens da v1 — `responsavel="LPD"`,
+  `autor="Pendências LPD"`, situação *Levantado*, idempotente por
+  (módulo, versão, título). Onde a lista da LPD só nomeia a entrega (SLA,
+  Financeiro, Projetos) o "como está hoje" diz que o escopo ainda não foi
+  detalhado — o detalhamento entra pela tela quando a LPD passar.
+- **Migração:** `migrate_schema` acrescenta a coluna (`modulo VARCHAR NOT NULL
+  DEFAULT 'ativos'`) em bancos que já existiam; os itens antigos viram `ativos`.
+  Funciona em SQLite e Postgres e é idempotente.
+
+**Como acrescentar um módulo:** uma entrada na lista `MODULOS` de
+`app/modulos.py` (`key`, `label`, `titulo`, `descricao`, `versao_padrao`). A ordem
+da lista é a ordem das abas. Não precisa de migração, tela nem rota nova — a aba,
+o select do modal, a pauta (`/relatorio`), o export e o MCP já enxergam o módulo.
+
 ### Prints no ajuste
 
 Cada ajuste aceita imagens — normalmente o print da tela do Faiston One mostrando
@@ -426,9 +477,10 @@ próprio banco e somem junto se o ajuste for excluído.
 
 ### API
 
-- `GET  /api/ativos/ajustes` — lista os ajustes com seus prints (filtros opcionais: `versao`, `tipo`, `status`)
-- `POST /api/ativos/ajustes` — cadastra um ajuste (sem `numero`, ele entra na sequência da versão)
-- `PATCH /api/ativos/ajustes/{id}` — edita qualquer campo, inclusive mover de versão, e
+- `GET  /api/ativos/modulos` — o catálogo de módulos (`key`, `label`, `titulo`, `descricao`, `versao_padrao`), na ordem das abas
+- `GET  /api/ativos/ajustes` — lista os ajustes com seus prints (filtros opcionais: `modulo`, `versao`, `tipo`, `status`; sem `modulo` vêm todos)
+- `POST /api/ativos/ajustes` — cadastra um ajuste (`modulo` e `versao` são opcionais: o módulo cai em `ativos` e a versão na padrão dele; sem `numero`, entra na sequência do módulo + versão)
+- `PATCH /api/ativos/ajustes/{id}` — edita qualquer campo, inclusive mover de módulo e de versão (renumera pro fim do destino), e
   registra a validação de cada nível (`validacao`/`validado_por` e
   `validacao_operacao`/`validado_por_operacao`)
 - `DELETE /api/ativos/ajustes/{id}` — remove o ajuste (e os prints dele)
