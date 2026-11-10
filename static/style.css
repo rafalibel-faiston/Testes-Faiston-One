@@ -1203,6 +1203,9 @@ footer { max-width:1160px; margin:10px auto 0; padding:0 24px; color:var(--text-
   border-radius:12px; padding:18px; text-align:center;
 }
 .diagram-canvas svg { max-width:100%; height:auto; }
+/* Se o texto sair um pouco mais largo que a caixa medida pelo Mermaid (fonte de reserva, zoom,
+   Windows com escala de tela), ele aparece inteiro em vez de ser cortado na borda. */
+.diagram-canvas svg foreignObject, #diagram-preview svg foreignObject { overflow:visible; }
 .diagram-canvas .diagram-error {
   color:var(--bad); font-size:12.5px; font-family:'Roboto Mono',monospace; text-align:left; white-space:pre-wrap;
 }
