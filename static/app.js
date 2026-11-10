@@ -1287,6 +1287,22 @@
     });
   }
 
+  // O Mermaid mede cada caixa na hora de desenhar. A Roboto vem do Google Fonts (display=swap):
+  // se o desenho é medido com a fonte de reserva (mais estreita) e a Roboto chega depois, o
+  // texto passa da caixa e fica cortado ("Dúvida no valc"). Por isso o desenho espera a fonte
+  // ficar pronta — com limite de tempo, pra uma rede lenta não segurar o diagrama.
+  let fontesProntas = null;
+  function aguardaFontes() {
+    if (!fontesProntas) {
+      const carrega = document.fonts && document.fonts.load
+        ? Promise.all(["400 14px Roboto", "500 14px Roboto", "600 14px Roboto"]
+            .map((f) => document.fonts.load(f, "Aáçã🔔").catch(() => null))).then(() => document.fonts.ready)
+        : Promise.resolve();
+      fontesProntas = Promise.race([carrega, new Promise((ok) => setTimeout(ok, 2500))]).catch(() => null);
+    }
+    return fontesProntas;
+  }
+
   // Renderiza um código Mermaid dentro de um container. Mostra erro amigável se o
   // desenho estiver inválido, sem quebrar o resto da tela.
   async function renderMermaidInto(container, code) {
@@ -1295,6 +1311,7 @@
     let mermaid;
     try { mermaid = await whenMermaid(); }
     catch (e) { container.innerHTML = `<div class="diagram-error">${esc(e.message)}</div>`; return; }
+    await aguardaFontes();
     const id = "mmd-" + (++mermaidSeq);
     try {
       const { svg } = await mermaid.render(id, src);
