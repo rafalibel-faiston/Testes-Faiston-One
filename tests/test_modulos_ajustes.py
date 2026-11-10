@@ -407,7 +407,12 @@ def test_financeiro_nasce_com_o_diagrama_dos_tres_cenarios(client):
     assert len(cenarios) == 1 and cenarios[0]["kind"] == "ideal"
     mermaid = cenarios[0]["mermaid"]
     for trecho in ("N1, M1 e S1", "Rede Credenciada", "pedágio, estacionamento", "comprovantes",
-                   "sigla D1", "orçamento", "CLT", "Sem negociação financeira"):
+                   "sigla D1", "orçamento", "CLT", "Sem negociação financeira",
+                   # respostas do time às dúvidas do desenho
+                   "não é obrigado a aceitar todos os chamados",
+                   "aprovação na hora do próprio chamado",
+                   "campanha", "técnicos pais", "filhos", "nunca é mostrado ao técnico filho",
+                   "sigla CLT dentro do Tiflux"):
         assert trecho in mermaid
     # toda caixa citada numa seta foi definida (senão o Mermaid desenha uma caixa com o id cru)
     import re

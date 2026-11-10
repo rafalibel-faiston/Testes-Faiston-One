@@ -639,24 +639,33 @@ FLOW_C_ATUAL = """flowchart TD
 # Diagramas iniciais por fluxo. O time pode editar/adicionar depois; o seed só
 # cria estes quando ainda NAO existe nenhum diagrama daquele fluxo (idempotente).
 # Financeiro — como o valor da atividade é definido, nos 3 cenários descritos pelo
-# time. Só o que foi descrito: nada de etapa, aprovação ou prazo inventado. Rótulos
-# sem aspas/parênteses/chaves, que o "Editar aqui" da tela interpreta de volta.
+# time (e as respostas dele às dúvidas do desenho). Só o que foi dito: nada de etapa,
+# aprovação ou prazo inventado. Rótulos sem aspas/parênteses/chaves, que o
+# "Editar aqui" da tela interpreta de volta.
 FLUXO_FINANCEIRO_CENARIOS = """flowchart TD
     n1["Como o valor da atividade é definido"] --> n2{"Qual o cenário?"}
     n2 -->|Contratual N1, M1 e S1| n3["Atividades têm valor previamente estabelecido em contrato"]
     n3 --> n4["Técnico recebe o acionamento já sabendo o valor previsto"]
     n4 --> n5{"Dúvida sobre a remuneração?"}
     n5 -->|Sim| n6["Técnico é direcionado à equipe de Rede Credenciada para esclarecer os valores acordados"]
-    n5 -->|Não| n7["Aceite do chamado"]
+    n5 -->|Não| n7{"Técnico aceita o chamado?"}
     n6 --> n7
-    n7 --> n8["Atendimento realizado normalmente"]
-    n8 --> n9["Na finalização o técnico informa despesas adicionais, como pedágio, estacionamento ou materiais, com os comprovantes"]
-    n2 -->|Projetos D1| n10["Cada novo projeto tem um orçamento da equipe de Projetos para a execução das atividades"]
-    n10 --> n11["Valores não são padronizados e variam conforme o projeto, suas características e o orçamento disponível"]
-    n11 --> n12["Chamados identificados pela sigla D1"]
-    n2 -->|Atendimento CLT| n13["Operação precisa direcionar um profissional CLT para uma atividade"]
-    n13 --> n14["Valores já previamente conhecidos"]
-    n14 --> n15["Sem negociação financeira no acionamento, pois as condições já estão estabelecidas"]
+    n7 -->|Sim| n8["Atendimento realizado normalmente"]
+    n7 -->|Não| n9["Técnico recusa, pois não é obrigado a aceitar todos os chamados"]
+    n8 --> n10["Na finalização o técnico informa despesas adicionais, como pedágio, estacionamento ou materiais, com os comprovantes"]
+    n10 --> n11["As despesas adicionais passam por aprovação na hora do próprio chamado"]
+    n2 -->|Projetos D1| n12["Cada novo projeto tem um orçamento da equipe de Projetos para a execução das atividades"]
+    n12 --> n13["Valores não são padronizados e variam conforme o projeto, suas características e o orçamento disponível"]
+    n13 --> n14["Chamados identificados pela sigla D1"]
+    n14 --> n15["Operação cria uma campanha e envia aos técnicos pais"]
+    n15 --> n16{"Técnico pai aceita o valor?"}
+    n16 -->|Sim| n17["No acionamento, os chamados vão só para os filhos dos técnicos pais que aceitaram"]
+    n17 --> n18["O valor nunca é mostrado ao técnico filho"]
+    n16 -->|Não| n19["Os chamados não vão para os filhos desse técnico pai"]
+    n2 -->|Atendimento CLT| n20["Operação precisa direcionar um profissional CLT para uma atividade"]
+    n20 --> n21["Na abertura do chamado é criada a sigla CLT dentro do Tiflux"]
+    n21 --> n22["Valores já previamente conhecidos"]
+    n22 --> n23["Sem negociação financeira no acionamento, pois as condições já estão estabelecidas"]
 """
 
 SEED_DIAGRAMS = [
