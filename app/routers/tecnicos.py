@@ -1400,9 +1400,12 @@ def virar_ajuste(observacao_id: int, payload: schemas.VirarAjuste, db: Session =
     quando = obs.created_at.strftime("%d/%m/%Y") if obs.created_at else "durante o teste"
     origem = f"Relatado por {tecnico.nome} no teste do Track One ({quando})."
 
+    # o relato do técnico é sobre o app em teste: sempre cai no backlog de Gestão
+    # de Ativos, não nos módulos de pendências da LPD
     ajuste = models.AtivoAjuste(
+        modulo="ativos",
         versao=versao,
-        numero=ativos._next_numero(db, versao),
+        numero=ativos._next_numero(db, "ativos", versao),
         titulo=titulo,
         tipo=tipo,
         area=(payload.area or "Track One (app do técnico)").strip() or None,
@@ -1453,10 +1456,14 @@ def pagina_formulario(token: str, db: Session = Depends(get_db)):
 
 
 def _versao_ativa(db: Session) -> str:
-    """A leva mais recente do backlog da Gestão de Ativos — é pra onde vai o item
+    """A leva mais recente do backlog da Gestão de Ativos (só o módulo `ativos`,
+    as versões dos outros módulos não contam) — é pra onde vai o item
     criado a partir de um relato, pra ele cair junto do que o time está tratando
     agora, e não numa rodada antiga já fechada."""
-    versoes = [v for (v,) in db.query(models.AtivoAjuste.versao).distinct().all() if v]
+    versoes = [
+        v for (v,) in db.query(models.AtivoAjuste.versao)
+        .filter(models.AtivoAjuste.modulo == "ativos").distinct().all() if v
+    ]
     if not versoes:
         return "v2"
 

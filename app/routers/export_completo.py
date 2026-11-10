@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from .. import models, niveis
 from ..database import get_db
+from ..modulos import label as modulo_label
 
 router = APIRouter(tags=["export"])
 
@@ -174,12 +175,12 @@ def export_completo(db: Session = Depends(get_db)):
     ajustes = (
         db.query(models.AtivoAjuste)
         .options(selectinload(models.AtivoAjuste.observations), selectinload(models.AtivoAjuste.prints))
-        .order_by(models.AtivoAjuste.versao, models.AtivoAjuste.numero)
+        .order_by(models.AtivoAjuste.modulo, models.AtivoAjuste.versao, models.AtivoAjuste.numero)
         .all()
     )
     _add_sheet(
         wb, "Ajustes de ativos",
-        ["Versão", "Nº", "Título", "Tipo", "Área", "Prioridade", "Status", "Responsável", "Autor",
+        ["Módulo", "Versão", "Nº", "Título", "Tipo", "Área", "Prioridade", "Status", "Responsável", "Autor",
          "Validação (consolidada)",
          "Validação técnica", "Validado por", "Validado em",
          "Validação na operação", "Validado por (operação)", "Validado em (operação)",
@@ -187,7 +188,7 @@ def export_completo(db: Session = Depends(get_db)):
          "Hoje é assim", "Deveria ser assim", "Observação", "Retorno do dev", "Prazo",
          "Qtd. observações", "Qtd. prints", "Atualizado em"],
         [
-            [a.versao, a.numero, a.titulo, a.tipo, a.area, a.prioridade, a.status, a.responsavel, a.autor,
+            [modulo_label(a.modulo), a.versao, a.numero, a.titulo, a.tipo, a.area, a.prioridade, a.status, a.responsavel, a.autor,
              a.validacao_geral,
              a.validacao, a.validado_por, _dt(a.validado_em),
              a.validacao_operacao, a.validado_por_operacao, _dt(a.validado_em_operacao),
@@ -196,20 +197,20 @@ def export_completo(db: Session = Depends(get_db)):
              len(a.observations), len(a.prints), _dt(a.updated_at)]
             for a in ajustes
         ],
-        [8, 5, 26, 10, 14, 10, 12, 14, 14, 20, 14, 16, 16, 18, 20, 18, 9,
+        [18, 8, 5, 26, 10, 14, 10, 12, 14, 14, 20, 14, 16, 16, 18, 20, 18, 9,
          30, 30, 26, 26, 12, 8, 8, 16],
     )
 
     aj_obs_rows = []
     for a in ajustes:
-        ref = f"{a.versao} #{a.numero:02d}"
+        ref = f"{modulo_label(a.modulo)} {a.versao} #{a.numero:02d}"
         for o in a.observations:
             aj_obs_rows.append([ref, a.titulo, niveis.NIVEL_LABEL.get(o.nivel, o.nivel), o.autor,
                                 o.texto, o.cor or "", o.editado_por, _dt(o.created_at)])
     _add_sheet(
         wb, "Observações (ajustes)",
         ["Ajuste", "Título", "Nível", "Autor", "Texto", "Cor", "Editado por", "Criado em"],
-        aj_obs_rows, [10, 24, 12, 16, 46, 10, 16, 16],
+        aj_obs_rows, [24, 24, 12, 16, 46, 10, 16, 16],
     )
 
     # ---------------- track one: piloto e técnicos ----------------

@@ -3778,7 +3778,7 @@
   // A Gestão de Ativos não tem Fluxo A/B/C — reaproveita a mesma trilha de
   // Novidades (activity_log/team_views) com essa chave fixa como "fluxo".
   const FLUXO_ATIVOS = "ATIVOS";
-  function activityFluxo() { return currentModule === "ativos" ? FLUXO_ATIVOS : currentFlow; }
+  function activityFluxo() { return ehModuloAjuste(currentModule) ? FLUXO_ATIVOS : currentFlow; }
 
   async function loadActivities() {
     const badges = ["#activity-count", "#activity-count-ativos"];
@@ -3816,8 +3816,8 @@
 
   function renderActivityList(boundary) {
     const el = $("#activity-list");
-    const vazio = currentModule === "ativos"
-      ? "Nenhuma atividade registrada ainda na Gestão de Ativos."
+    const vazio = ehModuloAjuste(currentModule)
+      ? "Nenhuma atividade registrada ainda nos ajustes."
       : "Nenhuma atividade registrada ainda neste fluxo.";
     if (!ACTIVITIES.length) {
       el.innerHTML = `<div class="notes-empty">${vazio}</div>`;
@@ -3900,17 +3900,19 @@
     }, 80);
   }
 
-  // mesma ideia de goToCase, mas pro ajuste da Gestão de Ativos: troca de
-  // módulo, recarrega a lista (o ajuste pode ter sido criado numa leva que
+  // mesma ideia de goToCase, mas pro ajuste (de qualquer módulo): troca pra
+  // aba do módulo dele, recarrega a lista (o ajuste pode ter sido criado numa leva que
   // ainda não tinha sido aberta nesta tela), abre a versão certa e destaca.
   async function goToAjuste(id) {
     closeActivityModal();
-    if (currentModule !== "ativos") switchModule("ativos");
-    await loadAjustes();
+    await loadAjustes();   // AJUSTES traz todos os módulos: dá pra descobrir em qual aba o ajuste mora
     const a = AJUSTES.find((x) => String(x.id) === String(id));
     if (!a) { toast("Esse ajuste não está mais na lista (pode ter sido excluído)."); return; }
+    const modulo = moduloDoAjuste(a);
+    // troca pra aba do módulo do ajuste (a lista já está carregada, não busca de novo)
+    if (currentModule !== modulo) switchModule(modulo, { recarregar: false });
     ajusteVersao = a.versao;
-    ajusteFiltros.tipo = ajusteFiltros.status = "";
+    resetAjusteFiltros();
     renderAjustes();
     setTimeout(() => {
       const card = document.querySelector(`.ajuste-item[data-id="${cssEscape(String(id))}"]`);
@@ -3936,11 +3938,11 @@
   }
 
   function openActivityModal() {
-    const emAtivos = currentModule === "ativos";
-    $("#activity-flow-label").textContent = (emAtivos ? "Gestão de Ativos" : "Fluxo " + currentFlow)
+    const emAtivos = ehModuloAjuste(currentModule);
+    $("#activity-flow-label").textContent = (emAtivos ? "Ajustes · " + moduloMeta(currentModule).label : "Fluxo " + currentFlow)
       + " · " + (PERFIL_LABEL[PERFIL] || "");
     $("#activity-hint").innerHTML = emAtivos
-      ? 'Tudo que mudou nos ajustes da Gestão de Ativos — criação, mudança de situação e edição — do mais recente pro mais antigo. O que você ainda não tinha visto aparece marcado como <b>novo</b>.'
+      ? 'Tudo que mudou nos ajustes de todos os módulos (Gestão de Ativos e pendências da LPD) — criação, mudança de situação e edição — do mais recente pro mais antigo. O que você ainda não tinha visto aparece marcado como <b>novo</b>.'
       : 'Tudo que mudou neste fluxo — status, observações, prints, testes, pontos e diagramas — do mais recente pro mais antigo. O que você ainda não tinha visto aparece marcado como <b>novo</b>.';
     const boundary = LAST_SEEN_ID;       // fronteira do que era novo ao abrir
     renderActivityList(boundary);
@@ -3981,12 +3983,65 @@
     return true;
   }
 
+  // Módulos do backlog de ajustes (Gestão de Ativos e as pendências da LPD). O
+  // catálogo vem de GET /api/ativos/modulos (app/modulos.py) — as abas são geradas
+  // daqui, então módulo novo é uma entrada lá, sem HTML novo. Até a resposta chegar
+  // (ou se ela falhar) vale só o módulo original, que já tem aba no index.html.
+  let MODULOS_AJUSTE = [{
+    key: "ativos", label: "Gestão de Ativos", titulo: "Gestão de Ativos — ajustes",
+    descricao: "", versao_padrao: "v2",
+  }];
+  const ehModuloAjuste = (key) => MODULOS_AJUSTE.some((m) => m.key === key);
+  const moduloMeta = (key) => MODULOS_AJUSTE.find((m) => m.key === key) || MODULOS_AJUSTE[0];
+  const moduloDoAjuste = (a) => (ehModuloAjuste(a.modulo) ? a.modulo : "ativos");
+
+  // as abas dos módulos novos entram logo depois da Gestão de Ativos; visíveis
+  // pros dois perfis (a LP também acompanha as pendências dela)
+  function renderModuloTabs() {
+    $$(".module-tab[data-gerada]").forEach((t) => t.remove());
+    let ancora = $("#module-tab-ativos");
+    MODULOS_AJUSTE.filter((m) => m.key !== "ativos").forEach((m) => {
+      const t = document.createElement("button");
+      t.type = "button";
+      t.className = "module-tab";
+      t.dataset.module = m.key;
+      t.dataset.gerada = "1";
+      t.id = `module-tab-${m.key}`;
+      t.setAttribute("aria-selected", currentModule === m.key ? "true" : "false");
+      t.innerHTML = `${esc(m.label)} <span class="module-tab-count" id="module-tab-${esc(m.key)}-count" hidden>0</span>`;
+      if (currentModule === m.key) t.classList.add("active");
+      ancora.after(t);
+      ancora = t;
+    });
+    // o select do modal de ajuste lista os mesmos módulos
+    $("#ajuste-modulo-sel").innerHTML = MODULOS_AJUSTE
+      .map((m) => `<option value="${esc(m.key)}">${esc(m.label)}</option>`).join("");
+  }
+
+  async function loadModulos() {
+    try {
+      const lista = await api("/api/ativos/modulos");
+      if (Array.isArray(lista) && lista.some((m) => m.key === "ativos")) MODULOS_AJUSTE = lista;
+    } catch (e) {
+      toast("Não consegui carregar os módulos de ajustes: " + e.message, true);
+    }
+    renderModuloTabs();
+    atualizaContadorAba();
+  }
+
   function applyModuleVisibility() {
     $$(".module-tab").forEach((t) => { t.hidden = !moduloVisivel(t.dataset.module); });
     if (!moduloVisivel(currentModule)) switchModule("dispatcher");
   }
 
-  function switchModule(mod) {
+  function switchModule(mod, opts) {
+    opts = opts || {};
+    if (ehModuloAjuste(mod) && mod !== ajusteModulo) {
+      // cada módulo tem as próprias levas: ao trocar de aba, abre a mais nova dele
+      ajusteModulo = mod;
+      ajusteVersao = "";
+      resetAjusteFiltros();
+    }
     currentModule = mod;
     $$(".module-tab").forEach((t) => {
       const on = t.dataset.module === mod;
@@ -3994,21 +4049,24 @@
       t.setAttribute("aria-selected", on ? "true" : "false");
     });
     $("#module-dispatcher").hidden = mod !== "dispatcher";
-    $("#module-ativos").hidden = mod !== "ativos";
+    // um painel só serve a todos os módulos de ajustes; o módulo corrente decide o conteúdo
+    $("#module-ativos").hidden = !ehModuloAjuste(mod);
     $("#module-agenda").hidden = mod !== "agenda";
     $("#module-todo").hidden = mod !== "todo";
     $("#module-tecnicos").hidden = mod !== "tecnicos";
-    if (mod === "ativos") loadAjustes();
+    if (ehModuloAjuste(mod)) { if (opts.recarregar === false) renderAjustes(); else loadAjustes(); }
     if (mod === "agenda") loadAgenda();
     if (mod === "todo") loadTodo();
     if (mod === "tecnicos") { loadTecnicos(); loadApkInfo(); }
     loadActivities();   // o badge de Novidades segue o "fluxo" do módulo aberto
   }
 
-  $$(".module-tab").forEach((t) => t.addEventListener("click", () => {
-    if (t.hidden) return;
+  // delegado na barra: as abas dos módulos de ajustes são criadas depois, a partir do catálogo
+  $("#module-tabs").addEventListener("click", (e) => {
+    const t = e.target.closest(".module-tab");
+    if (!t || t.hidden) return;
     switchModule(t.dataset.module);
-  }));
+  });
 
   // ---------------- Agenda (compromissos do time Faiston — semana ou mês) ----------------
   let AGENDA_EVENTS = [];
@@ -4428,12 +4486,19 @@
   // Melhoria. A versão (v2, v3…) vem dos próprios dados: cadastrou um item numa
   // versão que ainda não existia, a aba dela aparece sozinha aqui.
   let AJUSTES = [];
+  let ajusteModulo = "ativos";                   // módulo da aba aberta
   let ajusteVersao = "";                         // "" enquanto não carregou nada
   const ajusteFiltros = { tipo: "", status: "" };
 
   // O ciclo de vida do pedido vai até "Entregue" — daí pra frente quem fecha o
   // ajuste é a VALIDAÇÃO em dois níveis (técnica e operação), igual ao
   // Dispatcher: entregue e conferido só na técnica não é ajuste pronto.
+
+  function resetAjusteFiltros() {
+    ajusteFiltros.tipo = ajusteFiltros.status = "";
+    $$("#ajustes-chips-tipo .chip").forEach((c) => c.classList.toggle("active", c.dataset.tipo === ""));
+  }
+
   const AJUSTE_STATUS = [
     { key: "levantado",       label: "Levantado",         cls: "st-levantado" },
     { key: "analise",         label: "Em análise",        cls: "st-analise" },
@@ -4485,26 +4550,48 @@
       toast("Erro ao carregar ajustes: " + e.message, true);
     }
     const versoes = versoesDisponiveis();
-    if (!versoes.includes(ajusteVersao)) ajusteVersao = versoes[0] || "v2";
+    // módulo ainda sem itens: a leva corrente é a padrão dele (v2 em Ativos, v1 nos novos)
+    if (!versoes.includes(ajusteVersao)) ajusteVersao = versoes[0] || moduloMeta(ajusteModulo).versao_padrao;
     renderAjustes();
   }
 
-  function versoesDisponiveis() {
-    return Array.from(new Set(AJUSTES.map((a) => a.versao))).sort((a, b) => versaoRank(b) - versaoRank(a));
+  // AJUSTES guarda os ajustes de todos os módulos (o badge de cada aba precisa deles);
+  // estas duas funções recortam o que a aba aberta mostra
+  function versoesDoModulo(modulo) {
+    return Array.from(new Set(AJUSTES.filter((a) => moduloDoAjuste(a) === modulo).map((a) => a.versao)))
+      .sort((a, b) => versaoRank(b) - versaoRank(a));
+  }
+
+  function versoesDisponiveis() { return versoesDoModulo(ajusteModulo); }
+
+  // a leva "corrente" de um módulo: a mais nova que ele tem, ou a padrão do catálogo
+  function versaoCorrenteDoModulo(modulo) {
+    return versoesDoModulo(modulo)[0] || moduloMeta(modulo).versao_padrao;
   }
 
   function ajustesDaVersao() {
-    return AJUSTES.filter((a) => a.versao === ajusteVersao);
+    return AJUSTES.filter((a) => moduloDoAjuste(a) === ajusteModulo && a.versao === ajusteVersao);
+  }
+
+  function renderAjusteCabecalho() {
+    const m = moduloMeta(ajusteModulo);
+    $("#ajustes-titulo").textContent = m.titulo || m.label;
+    $("#ajustes-descricao").textContent = m.descricao || "";
   }
 
   function renderAjustes() {
+    renderAjusteCabecalho();
     renderAjusteVersoes();
     renderAjusteStats();
     renderAjusteStatusChips();
     renderAjusteList();
     atualizaContadorAba();
     // datalist do modal: as versões que já existem, pra não digitar errado
-    $("#ajuste-versao-opts").innerHTML = versoesDisponiveis().map((v) => `<option value="${esc(v)}">`).join("");
+    preencheOpcoesVersao(ajusteModulo);
+  }
+
+  function preencheOpcoesVersao(modulo) {
+    $("#ajuste-versao-opts").innerHTML = versoesDoModulo(modulo).map((v) => `<option value="${esc(v)}">`).join("");
   }
 
   function renderAjusteVersoes() {
@@ -4512,7 +4599,7 @@
     const nav = $("#ajustes-versoes");
     if (!versoes.length) { nav.innerHTML = ""; return; }
     nav.innerHTML = versoes.map((v) => {
-      const itens = AJUSTES.filter((a) => a.versao === v);
+      const itens = AJUSTES.filter((a) => moduloDoAjuste(a) === ajusteModulo && a.versao === v);
       const abertos = itens.filter(ajusteAberto).length;
       return `<button type="button" class="ajuste-versao${v === ajusteVersao ? " active" : ""}" data-versao="${esc(v)}">
         <span class="ajuste-versao-name">Ajustes ${esc(v)}</span>
@@ -4752,12 +4839,15 @@
     });
   }
 
+  // o badge de cada aba conta só os ajustes em aberto do módulo dela
   function atualizaContadorAba() {
-    const badge = $("#module-tab-ativos-count");
-    if (!badge) return;
-    const abertos = AJUSTES.filter(ajusteAberto).length;
-    badge.textContent = abertos;
-    badge.hidden = !abertos;
+    MODULOS_AJUSTE.forEach((m) => {
+      const badge = document.getElementById(`module-tab-${m.key}-count`);
+      if (!badge) return;
+      const abertos = AJUSTES.filter((a) => moduloDoAjuste(a) === m.key && ajusteAberto(a)).length;
+      badge.textContent = abertos;
+      badge.hidden = !abertos;
+    });
   }
 
   function substituiAjusteLocal(atualizado) {
@@ -4819,12 +4909,24 @@
     $("#ajuste-modal-title").textContent = id
       ? "Editar ajuste"
       : (ajusteOrigemObs ? "Levar relato pro backlog" : "Novo ajuste");
+    const moduloSel = ajusteForm.modulo;
+    moduloSel.disabled = false;
+    // novo item nasce no módulo e na leva da aba aberta; editando, vale o do próprio item
+    const moduloAlvo = a ? moduloDoAjuste(a) : (prefill ? "ativos" : ajusteModulo);
+    const versaoAlvo = a ? a.versao
+      : (prefill ? (versoesDoModulo("ativos")[0] || "") : (ajusteVersao || versaoCorrenteDoModulo(ajusteModulo)));
+    moduloSel.value = moduloAlvo;
+    preencheOpcoesVersao(moduloAlvo);
+    ajusteForm.versao.dataset.auto = versaoAlvo;
     $("#ajuste-modal-code").textContent = a
-      ? `${esc(a.versao)} · item ${String(a.numero || 0).padStart(2, "0")}`
-      : `${esc(ajusteVersao || "v2")} · novo item`;
+      ? `${moduloMeta(moduloAlvo).label} · ${a.versao} · item ${String(a.numero || 0).padStart(2, "0")}`
+      : `${moduloMeta(moduloAlvo).label} · ${versaoAlvo || "leva atual"} · novo item`;
     $("#ajuste-delete").hidden = !id;
     if (!id && prefill) {
-      ajusteForm.versao.value = ajusteVersao || "v2";
+      // relato de técnico sempre vira ajuste da Gestão de Ativos (o servidor decide
+      // a leva ativa quando a versão fica em branco)
+      moduloSel.disabled = true;
+      ajusteForm.versao.value = versaoAlvo;
       ajusteForm.titulo.value = prefill.titulo || "";
       ajusteForm.tipo.value = prefill.tipo || "Melhoria";
       ajusteForm.area.value = prefill.area || "";
@@ -4849,10 +4951,21 @@
       ajusteForm.prazo.value = a.prazo || "";
       ajusteForm.retorno.value = a.retorno || "";
     } else {
-      ajusteForm.versao.value = ajusteVersao || "v2";
+      ajusteForm.versao.value = versaoAlvo;
     }
     ajusteModal.hidden = false;
   }
+
+  // trocar o módulo no modal leva a versão junto — a menos que a pessoa já tenha digitado a dela
+  ajusteForm.modulo.addEventListener("change", () => {
+    const novo = ajusteForm.modulo.value;
+    const campo = ajusteForm.versao;
+    const mexeu = campo.value.trim() && campo.value.trim() !== (campo.dataset.auto || "");
+    const alvo = versaoCorrenteDoModulo(novo);
+    if (!mexeu) campo.value = alvo;
+    campo.dataset.auto = alvo;
+    preencheOpcoesVersao(novo);
+  });
   function closeAjusteModal() { ajusteModal.hidden = true; editingAjusteId = null; ajusteOrigemObs = null; }
 
   $("#btn-add-ajuste").addEventListener("click", () => openAjusteModal(null));
@@ -4872,10 +4985,20 @@
     const fd = new FormData(ajusteForm);
     const titulo = (fd.get("titulo") || "").trim();
     if (!titulo) return;
+    // select desabilitado (relato de técnico) não vai no FormData: o servidor usa "ativos"
+    const modulo = fd.get("modulo") || (ajusteOrigemObs ? "ativos" : ajusteModulo);
+    const original = editingAjusteId ? AJUSTES.find((x) => x.id === editingAjusteId) : null;
+    let versao = (fd.get("versao") || "").trim();
+    if (original && modulo !== moduloDoAjuste(original) && (!versao || versao === original.versao)) {
+      // moveu de módulo sem escolher a leva: cai na leva corrente do módulo de destino
+      versao = versaoCorrenteDoModulo(modulo);
+    }
+    if (!versao && !ajusteOrigemObs) versao = ajusteVersao || versaoCorrenteDoModulo(modulo);
     const payload = {
       titulo,
       tipo: fd.get("tipo"),
-      versao: (fd.get("versao") || "").trim() || ajusteVersao || "v2",
+      modulo,
+      versao,
       prioridade: fd.get("prioridade"),
       area: fd.get("area") || null,
       status: fd.get("status"),
@@ -4901,22 +5024,26 @@
         toast("Relato virou ajuste no backlog.");
         return;
       }
+      let salvo;
       if (editingAjusteId) {
-        await api(`/api/ativos/ajustes/${editingAjusteId}`, {
+        salvo = await api(`/api/ativos/ajustes/${editingAjusteId}`, {
           method: "PATCH", headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
       } else {
-        const criado = await api("/api/ativos/ajustes", {
+        salvo = await api("/api/ativos/ajustes", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...payload, autor: testerName() || null }),
         });
-        // cadastrou numa versão nova: já pula pra ela
-        ajusteVersao = criado.versao;
       }
       closeAjusteModal();
+      // o item pode ter nascido (ou ido parar) em outro módulo/leva: a tela acompanha ele
+      const moduloSalvo = moduloDoAjuste(salvo);
+      if (moduloSalvo !== ajusteModulo) switchModule(moduloSalvo, { recarregar: false });
+      ajusteVersao = salvo.versao;
       await loadAjustes();
-      toast("Ajuste salvo.");
+      toast(moduloSalvo !== modulo || (original && moduloSalvo !== moduloDoAjuste(original))
+        ? `Ajuste salvo em ${moduloMeta(moduloSalvo).label}.` : "Ajuste salvo.");
     } catch (err) { toast("Erro ao salvar: " + err.message, true); }
   });
 
@@ -6852,7 +6979,7 @@
   });
   loadNotes();
   loadSituacoes();
-  loadAjustes();
+  loadModulos().then(loadAjustes);
   loadTecnicos();
   loadApkInfo();
 })();
