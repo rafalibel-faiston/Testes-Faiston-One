@@ -1369,46 +1369,53 @@ PENDENCIAS_LPD = [
         "atual": "Os relatórios da ferramenta, com exportação, estão pendentes.",
         "esperado": "Relatórios da ferramenta disponíveis com exportação.",
     },
-    # --- Finalização do Fluxo A: ajustes estéticos ---
+]
+
+
+# Finalização do Fluxo A (pendências da LPD): vivem como SITUAÇÕES do Fluxo A — cada
+# item é uma situação de um estágio só (o que falta fechar e como deve ficar) —, e não
+# como ajustes de um módulo. Só o que a LPD descreveu, sem etapa inventada.
+FLUXO_A_FINALIZACAO = [
+    # estéticos
     {
-        "modulo": "fluxo-a", "titulo": "Busca de chamados",
+        "titulo": "Busca de chamados",
         "tipo": "Melhoria", "area": "Fluxo A — estético", "prioridade": "Média",
         "atual": "Ajuste estético pendente na busca de chamados.",
         "esperado": "Busca de chamados com o ajuste estético aplicado.",
     },
     {
-        "modulo": "fluxo-a", "titulo": "Migração da tela de Calendário Técnico",
+        "titulo": "Migração da tela de Calendário Técnico",
         "tipo": "Melhoria", "area": "Fluxo A — estético", "prioridade": "Média",
         "atual": "A tela de Calendário Técnico ainda não foi migrada para a nova versão.",
         "esperado": "Tela de Calendário Técnico migrada.",
     },
     {
-        "modulo": "fluxo-a", "titulo": "Migração da tela de Self-Storage",
+        "titulo": "Migração da tela de Self-Storage",
         "tipo": "Melhoria", "area": "Fluxo A — estético", "prioridade": "Média",
         "atual": "A tela de Self-Storage ainda não foi migrada para a nova versão.",
         "esperado": "Tela de Self-Storage migrada.",
     },
     {
-        "modulo": "fluxo-a", "titulo": "Migração da tela de Cadastro de Técnico",
+        "titulo": "Migração da tela de Cadastro de Técnico",
         "tipo": "Melhoria", "area": "Fluxo A — estético", "prioridade": "Média",
         "atual": "A tela de Cadastro de Técnico ainda não foi migrada para a nova versão.",
         "esperado": "Tela de Cadastro de Técnico migrada.",
     },
-    # --- Finalização do Fluxo A: funcionamento ---
+    # funcionamento
     {
-        "modulo": "fluxo-a", "titulo": "Vinculação dos chamados logísticos às bases técnicas",
+        "titulo": "Vinculação dos chamados logísticos às bases técnicas",
         "tipo": "Melhoria", "area": "Fluxo A — funcionamento", "prioridade": "Alta",
         "atual": "Os chamados logísticos ainda não estão vinculados às bases técnicas.",
         "esperado": "Chamados logísticos vinculados às bases técnicas.",
     },
     {
-        "modulo": "fluxo-a", "titulo": "Troca de informações para retirada em base na 2ª e 3ª oferta",
+        "titulo": "Troca de informações para retirada em base na 2ª e 3ª oferta",
         "tipo": "Melhoria", "area": "Fluxo A — funcionamento", "prioridade": "Alta",
         "atual": "A troca de informações para retirada em base na 2ª e na 3ª oferta está pendente.",
         "esperado": "Troca de informações para retirada em base funcionando na 2ª e na 3ª oferta.",
     },
     {
-        "modulo": "fluxo-a", "titulo": "BUG: chamado reaparece para aceite após a finalização",
+        "titulo": "BUG: chamado reaparece para aceite após a finalização",
         "tipo": "Bug", "area": "Fluxo A — funcionamento", "prioridade": "Alta",
         "atual": "Depois de finalizado, o chamado aparece novamente para aceite.",
         "esperado": "Chamado finalizado não volta para aceite.",
@@ -1494,3 +1501,130 @@ def seed_pendencias_lpd(db):
     if added:
         db.commit()
     return added
+
+
+def _chave_titulo(titulo):
+    """Título comparável: sem acento, caixa nem espaço repetido — pra reconhecer a mesma
+    situação escrita de leve diferente e não repetir."""
+    import unicodedata
+
+    t = unicodedata.normalize("NFKD", str(titulo or ""))
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    return " ".join(t.casefold().split())
+
+
+def _proximo_codigo_situacao(db):
+    from .models import Situacao
+
+    existentes = {c for (c,) in db.query(Situacao.code).all()}
+    n = 1
+    while f"SIT-{n:02d}" in existentes:
+        n += 1
+    return f"SIT-{n:02d}"
+
+
+def _situacao_do_fluxo_a_por_titulo(db, titulo):
+    """A situação do Fluxo A com esse título — inclusive as excluídas (exclusão suave),
+    pra o que o time apagou não ressuscitar no boot."""
+    from .models import Situacao
+
+    chave = _chave_titulo(titulo)
+    for sit in db.query(Situacao).filter(Situacao.fluxo == "A").all():
+        if _chave_titulo(sit.titulo) == chave:
+            return sit
+    return None
+
+
+def _criar_situacao_fluxo_a(db, item):
+    from .models import Situacao, SituacaoEstagio
+
+    estetico = "estético" in (item.get("area") or "").lower()
+    sit = Situacao(
+        code=_proximo_codigo_situacao(db), fluxo="A", titulo=item["titulo"],
+        descricao=(f'{item["atual"]}\n\nTipo: {item["tipo"]} · Prioridade: {item["prioridade"]} · '
+                   "Pendência da LPD para finalizar o Fluxo A."),
+        origem="Pendências da LPD — finalização do Fluxo A",
+    )
+    db.add(sit)
+    db.flush()
+    est = SituacaoEstagio(
+        situacao_id=sit.id, ordem=1,
+        nome="01 · " + ("Ajuste estético" if estetico else "Funcionamento"),
+        frente="Transversal", passos="", resultado_esperado=item["esperado"],
+    )
+    db.add(est)
+    db.flush()
+    return sit
+
+
+def migrar_fluxo_a_para_situacoes(db):
+    """O Fluxo A deixou de ter um módulo de pendências: o que faltava pra finalizá-lo agora
+    é Situação do Fluxo A. Duas etapas, idempotentes:
+
+    1. os ajustes que já existem no módulo antigo `fluxo-a` viram situação (uma por ajuste,
+       com um estágio) levando junto validações, notas (com trilha), prints, retorno e
+       prazo, e então saem do backlog; se já há situação do Fluxo A com o mesmo título,
+       não cria outra — as notas vão pra ela;
+    2. as pendências da LPD que ainda não existem como situação do Fluxo A são criadas
+       (idempotente por título, sem repetir nem ressuscitar o que foi excluído).
+
+    Devolve quantas situações foram criadas."""
+    from .models import (
+        AtivoAjuste, Situacao, SituacaoObservation, SituacaoObservationRevision,
+        SituacaoScreenshot,
+    )
+
+    criadas = 0
+    antigos = db.query(AtivoAjuste).filter(AtivoAjuste.modulo == "fluxo-a").order_by(
+        AtivoAjuste.versao, AtivoAjuste.numero, AtivoAjuste.id).all()
+    for a in antigos:
+        sit = _situacao_do_fluxo_a_por_titulo(db, a.titulo)
+        if sit is None:
+            sit = _criar_situacao_fluxo_a(db, {
+                "titulo": a.titulo, "tipo": a.tipo, "prioridade": a.prioridade,
+                "area": a.area or "", "atual": a.atual or "", "esperado": a.esperado or "",
+            })
+            sit.active = a.status != "descartado"
+            est = sit.estagios[0]
+            # as duas validações do ajuste são as mesmas do estágio (técnica e operação)
+            est.status, est.testado_por, est.testado_em = a.validacao, a.validado_por, a.validado_em
+            est.status_operacao = a.validacao_operacao
+            est.testado_por_operacao = a.validado_por_operacao
+            est.testado_em_operacao = a.validado_em_operacao
+            criadas += 1
+        else:
+            est = sit.estagios[0] if sit.estagios else None
+        if est is None:
+            db.delete(a)
+            continue
+
+        def nota(texto, autor, cor=None, nivel="interno"):
+            if texto and str(texto).strip():
+                db.add(SituacaoObservation(estagio_id=est.id, autor=autor, texto=str(texto).strip(),
+                                           cor=cor, nivel=nivel))
+
+        nota(a.observacao, "Migração do backlog")
+        if (a.retorno or "").strip() or a.prazo:
+            nota(f'Retorno do time: {(a.retorno or "—").strip()} · Prazo: {a.prazo or "—"}', "Migração do backlog")
+        for o in a.observations:
+            nova = SituacaoObservation(
+                estagio_id=est.id, autor=o.autor, texto=o.texto, cor=o.cor, nivel=o.nivel or "interno",
+                editado_por=o.editado_por, editado_em=o.editado_em,
+            )
+            db.add(nova)
+            db.flush()
+            for r in o.revisions:
+                db.add(SituacaoObservationRevision(
+                    observation_id=nova.id, texto=r.texto, cor=r.cor, autor=r.autor, editado_por=r.editado_por))
+        for pr in a.prints:
+            db.add(SituacaoScreenshot(estagio_id=est.id, filename=pr.filename, content_type=pr.content_type,
+                                      data=pr.data, uploaded_by=pr.uploaded_by))
+        db.delete(a)
+        db.flush()
+
+    for item in FLUXO_A_FINALIZACAO:
+        if _situacao_do_fluxo_a_por_titulo(db, item["titulo"]) is None:
+            _criar_situacao_fluxo_a(db, item)
+            criadas += 1
+    db.commit()
+    return criadas

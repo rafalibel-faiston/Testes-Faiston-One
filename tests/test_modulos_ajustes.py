@@ -11,7 +11,7 @@ from app import modulos, models, seed_data
 from app.database import Base, SessionLocal
 from app.routers import ativos
 
-NOVOS = ["plataforma", "financeiro", "projetos", "fluxo-a"]
+NOVOS = ["plataforma", "financeiro", "projetos"]
 
 
 def _ajustes(client, **filtros):
@@ -27,12 +27,12 @@ def _novo(client, **campos):
 
 # ----------------------------------------------------------------- catálogo
 
-def test_catalogo_tem_os_cinco_modulos_na_ordem_das_abas(client):
+def test_catalogo_tem_os_quatro_modulos_na_ordem_das_abas(client):
     cat = client.get("/api/ativos/modulos").json()
     assert [m["key"] for m in cat] == ["ativos", *NOVOS]
     assert {m["key"]: m["versao_padrao"] for m in cat} == {
         "ativos": "v2", "plataforma": "v1", "financeiro": "v1",
-        "projetos": "v1", "fluxo-a": "v1",
+        "projetos": "v1",
     }
     assert all(m["label"] and m["titulo"] and m["descricao"] for m in cat)
 
@@ -41,7 +41,8 @@ def test_norm_modulo_nunca_levanta_e_cai_em_ativos():
     for lixo in (None, "", "   ", "nao-existe", 123, 0, [], {}, object()):
         assert modulos.norm_modulo(lixo) == "ativos"
     assert modulos.norm_modulo("  Financeiro ") == "financeiro"
-    assert modulos.norm_modulo("FLUXO-A") == "fluxo-a"
+    # o Fluxo A deixou de ser módulo (virou situações do Fluxo A): a chave cai no padrão
+    assert modulos.norm_modulo("fluxo-a") == "ativos"
     assert modulos.versao_padrao("nao-existe") == "v2"
     assert modulos.versao_padrao("projetos") == "v1"
     assert modulos.label("plataforma") == "Geral"
@@ -90,16 +91,16 @@ def test_seed_das_pendencias_lpd_em_banco_limpo_e_idempotente():
     Base.metadata.create_all(bind=engine)
     db = sessionmaker(bind=engine)()
     try:
-        assert seed_data.seed_pendencias_lpd(db) == 15
+        assert seed_data.seed_pendencias_lpd(db) == 8
         assert seed_data.seed_pendencias_lpd(db) == 0     # segunda rodada não duplica
         itens = db.query(models.AtivoAjuste).all()
-        assert len(itens) == 15
+        assert len(itens) == 8
 
         por_modulo = {}
         for a in itens:
             por_modulo.setdefault(a.modulo, []).append(a)
         assert {k: len(v) for k, v in por_modulo.items()} == {
-            "plataforma": 6, "financeiro": 1, "projetos": 1, "fluxo-a": 7}
+            "plataforma": 6, "financeiro": 1, "projetos": 1}
         for a in itens:
             assert (a.versao, a.status, a.responsavel, a.autor) == ("v1", "levantado", "LPD", "Pendências LPD")
         # numeração começa em 1 em cada módulo, sem buraco
@@ -119,20 +120,17 @@ def test_seed_das_pendencias_lpd_em_banco_limpo_e_idempotente():
 
 def test_pendencias_lpd_conteudo_conforme_a_lista(client):
     por_titulo = {a["titulo"]: a for a in _ajustes(client, versao="v1")}
-    assert len(por_titulo) == 15
-    bug = [a for a in por_titulo.values() if a["tipo"] == "Bug"]
-    assert [b["titulo"] for b in bug] == ["BUG: chamado reaparece para aceite após a finalização"]
-    assert bug[0]["modulo"] == "fluxo-a" and bug[0]["prioridade"] == "Alta"
+    assert len(por_titulo) == 8
+    # os 7 itens da finalização do Fluxo A moraram aqui antes; agora são situações do Fluxo A
+    assert not [t for t in por_titulo if "chamado" in t.lower() and "reaparece" in t.lower()]
+    assert not [a for a in por_titulo.values() if a["tipo"] == "Bug"]
 
     def prio(trecho):
         return {a["prioridade"] for t, a in por_titulo.items() if trecho in t}
 
     assert prio("Cálculo do SLA") == {"Alta"}
     assert prio("Google Play") == {"Alta"} and prio("Apple App Store") == {"Alta"}
-    assert prio("Relatórios") == {"Média"} and prio("Busca de chamados") == {"Média"}
-    assert prio("Migração da tela") == {"Média"}
-    assert len([t for t in por_titulo if t.startswith("Migração da tela")]) == 3
-    assert prio("Vinculação") == {"Alta"} and prio("2ª e 3ª oferta") == {"Alta"}
+    assert prio("Relatórios") == {"Média"}
 
     # onde a lista da LPD só nomeia a entrega, o item diz que o escopo não foi detalhado
     for titulo in ("Cálculo do SLA dentro do sistema", "Módulo Financeiro", "Fluxo de Projetos"):
@@ -158,9 +156,9 @@ def test_numeracao_e_independente_por_modulo(client):
         itens = _ajustes(client, modulo=modulo, versao=versao)
         return max(a["numero"] for a in itens) + 1
 
-    esperado = {m: proximo(m, "v1") for m in ("financeiro", "plataforma", "fluxo-a")}
+    esperado = {m: proximo(m, "v1") for m in ("financeiro", "plataforma", "projetos")}
     esperado_ativos = proximo("ativos", "v2")
-    for modulo in ("financeiro", "plataforma", "fluxo-a"):
+    for modulo in ("financeiro", "plataforma", "projetos"):
         assert _novo(client, modulo=modulo)["numero"] == esperado[modulo]
     assert _novo(client, modulo="ativos", versao="v2")["numero"] == esperado_ativos
     # o segundo item do financeiro segue a sequência do financeiro, não a do resto
@@ -191,12 +189,12 @@ def test_filtro_por_modulo(client):
     for modulo in NOVOS:
         itens = _ajustes(client, modulo=modulo)
         assert itens and {a["modulo"] for a in itens} == {modulo}
-    assert len(_ajustes(client, modulo="fluxo-a")) == 7
+    assert len(_ajustes(client, modulo="projetos")) == 1
     assert len(_ajustes(client, modulo="plataforma")) == 6
     # a chave antiga do Dashboard filtra o Geral
     assert {a["id"] for a in _ajustes(client, modulo="dashboard")} == {a["id"] for a in _ajustes(client, modulo="plataforma")}
     assert {a["modulo"] for a in _ajustes(client)} >= {"ativos", *NOVOS}      # sem filtro: todos
-    assert _ajustes(client, modulo="fluxo-a", tipo="Bug")[0]["titulo"].startswith("BUG:")
+    assert _ajustes(client, modulo="plataforma", tipo="Bug") == []
 
 
 def test_mover_item_de_modulo_renumera_pro_fim_sem_pular_lugar(client):
@@ -284,9 +282,9 @@ def test_mcp_lista_e_cria_com_modulo(client):
 
     todos = mcp_server.listar_ajustes_ativos()
     assert {a["modulo"] for a in todos} >= {"ativos", *NOVOS}
-    fluxo_a = mcp_server.listar_ajustes_ativos(modulo="fluxo-a")
-    assert len(fluxo_a) == 7 and {a["modulo"] for a in fluxo_a} == {"fluxo-a"}
-    assert mcp_server.listar_ajustes_ativos(modulo="fluxo-a", tipo="Bug")[0]["tipo"] == "Bug"
+    geral = mcp_server.listar_ajustes_ativos(modulo="plataforma")
+    assert len(geral) == 6 and {a["modulo"] for a in geral} == {"plataforma"}
+    assert mcp_server.listar_ajustes_ativos(modulo="plataforma", tipo="Bug") == []
 
     antes = max(a["numero"] for a in mcp_server.listar_ajustes_ativos(modulo="projetos"))
     criado = mcp_server.criar_ajuste_ativos(titulo="Via MCP", atual="a", esperado="b", modulo="projetos")
@@ -302,13 +300,12 @@ def test_mcp_lista_e_cria_com_modulo(client):
 def test_pauta_agrupa_por_modulo_e_mostra_o_nome(client):
     pauta = client.get("/relatorio").text
     for rotulo in ("Geral · Leva v1", "Financeiro · Leva v1", "Projetos · Leva v1",
-                   "Fluxo A — Finalização · Leva v1",
                    "Gestão de Ativos · Leva v2"):
         assert rotulo in pauta
     assert "Módulo Financeiro" in pauta and "Publicação do app na Apple App Store" in pauta
-    # módulos na ordem do catálogo: ativos antes de plataforma, fluxo-a por último
+    # módulos na ordem do catálogo: ativos, Geral, Financeiro, Projetos
     assert pauta.index("Gestão de Ativos · Leva v2") < pauta.index("Geral · Leva v1") \
-        < pauta.index("Financeiro · Leva v1") < pauta.index("Fluxo A — Finalização · Leva v1")
+        < pauta.index("Financeiro · Leva v1") < pauta.index("Projetos · Leva v1")
 
 
 def test_pauta_kpi_soma_todos_os_modulos_e_vazio_nao_diz_so_ativos(client):
@@ -338,8 +335,8 @@ def test_export_completo_traz_a_coluna_modulo(client):
     assert cabecalho[:3] == ["Módulo", "Versão", "Nº"]
     linhas = [[c.value for c in l] for l in aba.iter_rows(min_row=2)]
     modulos_na_planilha = {l[0] for l in linhas}
-    assert modulos_na_planilha >= {"Gestão de Ativos", "Geral", "Financeiro", "Projetos",
-                                   "Fluxo A — Finalização"}
+    assert modulos_na_planilha >= {"Gestão de Ativos", "Geral", "Financeiro", "Projetos"}
+    assert "Fluxo A — Finalização" not in modulos_na_planilha
     assert "Dashboard e Relatórios" not in modulos_na_planilha
     assert any(l[0] == "Financeiro" and l[3] == "Módulo Financeiro" for l in linhas)
 
@@ -411,8 +408,9 @@ def test_diagrama_de_fluxo_do_dispatcher_continua_na_trilha_do_fluxo(client):
 
 def test_catalogo_diz_quais_modulos_moram_no_dispatcher(client):
     cat = {m["key"]: m for m in client.get("/api/ativos/modulos").json()}
-    assert cat["fluxo-a"]["dispatcher_fluxo"] == "A"
+    assert "fluxo-a" not in cat          # o Fluxo A não é módulo: a finalização vive nas Situações
     assert cat["projetos"]["dispatcher_fluxo"] == "projetos"
+    assert [k for k, m in cat.items() if m["dispatcher_fluxo"]] == ["projetos"]
     assert all(cat[k]["dispatcher_fluxo"] is None for k in ("ativos", "plataforma", "financeiro"))
     assert cat["plataforma"]["label"] == "Geral" and "Dashboard" in cat["plataforma"]["descricao"]
     assert "dashboard" not in cat
@@ -554,5 +552,113 @@ def test_diagrama_de_fluxo_do_dispatcher_segue_so_quando_nao_ha_nenhum():
         db.commit()
         seed_data.seed_diagrams(db)
         assert [d.titulo for d in db.query(models.FlowDiagram).filter_by(fluxo="C", kind="ideal")] == ["Meu Fluxo C"]
+    finally:
+        db.close()
+
+
+# ------------------------------------------- Fluxo A: finalização como situações
+
+TITULOS_FLUXO_A = [i["titulo"] for i in seed_data.FLUXO_A_FINALIZACAO]
+
+
+def _banco():
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(bind=engine)
+    return sessionmaker(bind=engine)()
+
+
+def test_finalizacao_do_fluxo_a_nasce_como_situacoes_do_fluxo_a(client):
+    sits = [s for s in client.get("/api/situacoes").json() if s["fluxo"] == "A"]
+    assert sorted(s["titulo"] for s in sits) == sorted(TITULOS_FLUXO_A) and len(sits) == 7
+    # cada uma é uma situação de um estágio só, com o que deve ficar como resultado esperado
+    for s in sits:
+        assert len(s["estagios"]) == 1
+        assert s["estagios"][0]["resultado_esperado"] and s["estagios"][0]["status"] == "Não testado"
+        assert s["origem"] == "Pendências da LPD — finalização do Fluxo A"
+    bug = next(s for s in sits if s["titulo"].startswith("BUG:"))
+    assert "Tipo: Bug · Prioridade: Alta" in bug["descricao"]
+    # nada disso ficou no backlog de ajustes (e os fluxos B/C não ganharam nada)
+    assert not [a for a in _ajustes(client) if a["titulo"] in TITULOS_FLUXO_A]
+    assert not [s for s in client.get("/api/situacoes").json()
+                if s["fluxo"] in ("B", "C") and s["titulo"] in TITULOS_FLUXO_A]
+
+
+def test_seed_do_fluxo_a_e_idempotente_e_nao_repete_o_que_ja_existe():
+    from app.models import Situacao
+
+    db = _banco()
+    try:
+        # o time já tinha uma das situações no Fluxo A (título escrito de leve diferente)
+        db.add(Situacao(code="SIT-90", fluxo="A", titulo="busca de chamados ", descricao="a minha"))
+        db.commit()
+        assert seed_data.migrar_fluxo_a_para_situacoes(db) == 6        # 7 menos a que já existia
+        assert seed_data.migrar_fluxo_a_para_situacoes(db) == 0        # idempotente
+        sits = db.query(Situacao).filter_by(fluxo="A").all()
+        assert len(sits) == 7
+        assert [s.descricao for s in sits if s.code == "SIT-90"] == ["a minha"]    # não tocou
+        assert len({s.code for s in sits}) == 7
+
+        # excluída (exclusão suave) não ressuscita no próximo boot
+        db.query(Situacao).filter_by(fluxo="A").first().active = False
+        db.commit()
+        assert seed_data.migrar_fluxo_a_para_situacoes(db) == 0
+        assert db.query(Situacao).filter_by(fluxo="A").count() == 7
+    finally:
+        db.close()
+
+
+def test_migracao_leva_os_ajustes_do_fluxo_a_pra_situacoes_sem_perder_nada():
+    from datetime import datetime
+
+    from app.models import (
+        Situacao, SituacaoObservation, SituacaoScreenshot, AtivoAjuste, AtivoAjusteObservation,
+        AtivoAjusteObservationRevision, AtivoAjustePrint,
+    )
+
+    db = _banco()
+    try:
+        feito = AtivoAjuste(
+            modulo="fluxo-a", versao="v1", numero=1, titulo="Busca de chamados", tipo="Melhoria",
+            area="Fluxo A — estético", prioridade="Média", atual="a busca", esperado="busca nova",
+            observacao="decidimos no kickoff", retorno="LPD vai entregar", prazo="2026-12-01",
+            validacao="Aprovado", validado_por="Rafa", validado_em=datetime(2026, 11, 2),
+            validacao_operacao="Reprovado", validado_por_operacao="Operação",
+        )
+        db.add(feito)
+        db.flush()
+        nota = AtivoAjusteObservation(ajuste_id=feito.id, autor="Bruna", texto="conferir com a operação",
+                                      cor="vermelho", nivel="operacao")
+        db.add(nota)
+        db.flush()
+        db.add(AtivoAjusteObservationRevision(observation_id=nota.id, texto="texto antigo", autor="Bruna"))
+        db.add(AtivoAjustePrint(ajuste_id=feito.id, filename="p.png", content_type="image/png", data=b"\x89PNG",
+                                uploaded_by="Rafa"))
+        db.add(AtivoAjuste(modulo="fluxo-a", versao="v1", numero=2, titulo="Item descartado", tipo="Bug",
+                           area="Fluxo A — funcionamento", prioridade="Alta", atual="x", esperado="y",
+                           status="descartado"))
+        db.add(AtivoAjuste(modulo="ativos", versao="v2", numero=1, titulo="Outro módulo", atual="x", esperado="y"))
+        db.commit()
+
+        seed_data.migrar_fluxo_a_para_situacoes(db)
+        assert seed_data.migrar_fluxo_a_para_situacoes(db) == 0
+
+        # saiu do backlog, só o que era do Fluxo A (o de outro módulo segue lá)
+        restantes = [a.titulo for a in db.query(AtivoAjuste).all()]
+        assert restantes == ["Outro módulo"]
+
+        sit = db.query(Situacao).filter_by(fluxo="A", titulo="Busca de chamados").one()
+        est = sit.estagios[0]
+        assert (est.status, est.testado_por) == ("Aprovado", "Rafa")
+        assert (est.status_operacao, est.testado_por_operacao) == ("Reprovado", "Operação")
+        textos = {o.texto: o for o in est.observations}
+        assert "decidimos no kickoff" in textos
+        assert any("LPD vai entregar" in t and "2026-12-01" in t for t in textos)
+        migrada = textos["conferir com a operação"]
+        assert (migrada.autor, migrada.cor, migrada.nivel) == ("Bruna", "vermelho", "operacao")
+        assert [r.texto for r in migrada.revisions] == ["texto antigo"]
+        assert [(p.filename, p.data) for p in est.screenshots] == [("p.png", b"\x89PNG")]
+        # não duplicou: uma situação só pra esse título, e as 7 da lista existem uma vez cada
+        assert db.query(Situacao).filter_by(fluxo="A").count() == 8     # 7 da lista + "Item descartado"
+        assert db.query(Situacao).filter_by(fluxo="A", titulo="Item descartado").one().active is False
     finally:
         db.close()

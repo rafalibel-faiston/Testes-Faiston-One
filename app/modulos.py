@@ -13,7 +13,7 @@ Campos opcionais:
   de pendências, o editor de diagramas (os mesmos dos fluxos do Dispatcher, guardados
   com `fluxo` = a `key` do módulo).
 - `dispatcher_fluxo` — o módulo não tem aba própria na barra: ele mora dentro do
-  Dispatcher, na visão "Pendências" da aba de fluxo indicada ("A", "projetos"...).
+  Dispatcher, na visão "Pendências" da aba de fluxo indicada ("projetos"...).
 
 `ALIASES` guarda as chaves de módulos que já existiram e foram incorporados a outro:
 quem ainda manda a chave antiga (conector, script) cai no módulo novo.
@@ -59,14 +59,6 @@ MODULOS = [
                      "e as dúvidas e decisões em aberto aqui, nas pendências.",
         "versao_padrao": "v1",
         "dispatcher_fluxo": "projetos",
-    },
-    {
-        "key": "fluxo-a",
-        "label": "Fluxo A — Finalização",
-        "titulo": "Fluxo A — finalização",
-        "descricao": "O que falta pra fechar o Fluxo A: ajustes estéticos e de funcionamento.",
-        "versao_padrao": "v1",
-        "dispatcher_fluxo": "A",
     },
 ]
 
