@@ -709,6 +709,8 @@ class AjusteModuloOut(BaseModel):
     versao_padrao: str
     # o processo do módulo ainda não está desenhado: a aba ganha o editor de diagramas
     processo: bool = False
+    # o módulo mora dentro do Dispatcher (visão "Pendências" dessa aba de fluxo), sem aba própria
+    dispatcher_fluxo: Optional[str] = None
 
 
 class AtivoAjustePrintOut(BaseModel):

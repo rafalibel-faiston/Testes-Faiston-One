@@ -8,9 +8,15 @@ tela, e a tela inteira (abas, painéis, cabeçalho) é gerada a partir dela via
 Pra acrescentar um módulo novo basta uma entrada em `MODULOS` — sem tela nova,
 sem migração, sem tocar no JS.
 
-`processo: True` marca o módulo cujo processo ainda não está desenhado: a aba ganha,
-acima da lista de pendências, o editor de diagramas (os mesmos dos fluxos do
-Dispatcher, guardados com `fluxo` = a `key` do módulo).
+Campos opcionais:
+- `processo: True` — o processo ainda não está desenhado: a aba ganha, acima da lista
+  de pendências, o editor de diagramas (os mesmos dos fluxos do Dispatcher, guardados
+  com `fluxo` = a `key` do módulo).
+- `dispatcher_fluxo` — o módulo não tem aba própria na barra: ele mora dentro do
+  Dispatcher, na visão "Pendências" da aba de fluxo indicada ("A", "projetos"...).
+
+`ALIASES` guarda as chaves de módulos que já existiram e foram incorporados a outro:
+quem ainda manda a chave antiga (conector, script) cai no módulo novo.
 """
 from typing import Optional
 
@@ -27,10 +33,11 @@ MODULOS = [
     },
     {
         "key": "plataforma",
-        "label": "Plataforma",
-        "titulo": "Plataforma — pendências",
+        "label": "Geral",
+        "titulo": "Geral — pendências",
         "descricao": "Pendências da LPD que valem pra ferramenta toda: SLA, perfis e permissões "
-                     "do Dispatcher e publicação do app nas lojas.",
+                     "do Dispatcher, Dashboard, relatórios com exportação e publicação do app "
+                     "nas lojas.",
         "versao_padrao": "v1",
     },
     {
@@ -48,17 +55,10 @@ MODULOS = [
         "label": "Projetos",
         "titulo": "Fluxo de Projetos — pendências",
         "descricao": "Acompanhamento da entrega do Fluxo de Projetos do Dispatcher pela LPD. "
-                     "O processo ainda não está desenhado: o desenho fica no editor de diagramas "
-                     "e as dúvidas e decisões em aberto na lista de pendências.",
+                     "O processo ainda não está desenhado: o desenho fica na visão Fluxos "
+                     "e as dúvidas e decisões em aberto aqui, nas pendências.",
         "versao_padrao": "v1",
-        "processo": True,
-    },
-    {
-        "key": "dashboard",
-        "label": "Dashboard e Relatórios",
-        "titulo": "Dashboard e Relatórios — pendências",
-        "descricao": "Finalização do Dashboard e dos relatórios com exportação do Dispatcher.",
-        "versao_padrao": "v1",
+        "dispatcher_fluxo": "projetos",
     },
     {
         "key": "fluxo-a",
@@ -66,22 +66,29 @@ MODULOS = [
         "titulo": "Fluxo A — finalização",
         "descricao": "O que falta pra fechar o Fluxo A: ajustes estéticos e de funcionamento.",
         "versao_padrao": "v1",
+        "dispatcher_fluxo": "A",
     },
 ]
 
 for _m in MODULOS:
     _m.setdefault("processo", False)
+    _m.setdefault("dispatcher_fluxo", None)
 
 _POR_KEY = {m["key"]: m for m in MODULOS}
+
+# módulos que deixaram de existir por terem sido incorporados a outro
+ALIASES = {"dashboard": "plataforma"}
 
 
 def norm_modulo(valor: Optional[str]) -> str:
     """Devolve a chave de um módulo do catálogo. Nunca levanta: vazio, None ou
-    valor desconhecido caem em `ativos` (o módulo original do backlog)."""
+    valor desconhecido caem em `ativos` (o módulo original do backlog). Chave de um
+    módulo incorporado a outro (`ALIASES`) vai pro módulo que o absorveu."""
     try:
         chave = str(valor or "").strip().lower()
     except Exception:  # noqa: BLE001 — qualquer lixo vira o padrão
         return MODULO_PADRAO
+    chave = ALIASES.get(chave, chave)
     return chave if chave in _POR_KEY else MODULO_PADRAO
 
 
@@ -96,3 +103,8 @@ def label(modulo: Optional[str]) -> str:
 def e_modulo(chave: Optional[str]) -> bool:
     """A chave é de um módulo do catálogo (e não, por exemplo, um fluxo A/B/C)?"""
     return isinstance(chave, str) and chave.strip().lower() in _POR_KEY
+
+
+def desenha_processo(chave: Optional[str]) -> bool:
+    """O módulo é daqueles cujo processo ainda se desenha na própria aba?"""
+    return bool(isinstance(chave, str) and _POR_KEY.get(chave.strip().lower(), {}).get("processo"))

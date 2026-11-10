@@ -1311,15 +1311,15 @@ PENDENCIAS_LPD = [
         "atual": "Pendência do Dispatcher que engloba todos os fluxos. " + _ESCOPO_NAO_DETALHADO,
         "esperado": "Fluxo de Projetos entregue. " + _A_DETALHAR,
     },
-    # --- Dashboard e relatórios ---
+    # --- Dashboard e relatórios (módulo incorporado ao Geral) ---
     {
-        "modulo": "dashboard", "titulo": "Finalização do Dashboard",
+        "modulo": "plataforma", "titulo": "Finalização do Dashboard",
         "tipo": "Melhoria", "area": "Dispatcher — Geral", "prioridade": "Alta",
         "atual": "O Dashboard do Dispatcher ainda não foi finalizado.",
         "esperado": "Dashboard finalizado.",
     },
     {
-        "modulo": "dashboard", "titulo": "Relatórios da ferramenta com exportação",
+        "modulo": "plataforma", "titulo": "Relatórios da ferramenta com exportação",
         "tipo": "Melhoria", "area": "Dispatcher — Geral", "prioridade": "Média",
         "atual": "Os relatórios da ferramenta, com exportação, estão pendentes.",
         "esperado": "Relatórios da ferramenta disponíveis com exportação.",
@@ -1369,6 +1369,39 @@ PENDENCIAS_LPD = [
         "esperado": "Chamado finalizado não volta para aceite.",
     },
 ]
+
+
+def migrar_modulos_aposentados(db):
+    """Leva pro módulo que os absorveu os ajustes de um módulo que deixou de existir
+    (`modulos.ALIASES`, ex.: dashboard -> plataforma/Geral). Cada item vai pro fim da
+    mesma versão no destino, sem repetir número. Idempotente: sem item no módulo
+    antigo, não faz nada. Roda antes do seed das pendências, que grava no módulo novo."""
+    from sqlalchemy import func
+
+    from .models import AtivoAjuste
+    from .modulos import ALIASES
+
+    movidos = 0
+    for antigo, novo in ALIASES.items():
+        itens = (
+            db.query(AtivoAjuste)
+            .filter(AtivoAjuste.modulo == antigo)
+            .order_by(AtivoAjuste.versao, AtivoAjuste.numero, AtivoAjuste.id)
+            .all()
+        )
+        for a in itens:
+            maior = (
+                db.query(func.max(AtivoAjuste.numero))
+                .filter(AtivoAjuste.modulo == novo, AtivoAjuste.versao == a.versao)
+                .scalar()
+            )
+            a.modulo = novo
+            a.numero = (maior or 0) + 1
+            db.flush()   # o próximo item da mesma versão enxerga este número
+            movidos += 1
+    if movidos:
+        db.commit()
+    return movidos
 
 
 def seed_pendencias_lpd(db):

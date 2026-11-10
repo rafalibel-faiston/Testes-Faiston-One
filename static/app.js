@@ -556,7 +556,7 @@
     const emptyEl = $("#flow-empty");
     if (!flowCases.length) {
       $("#cases").innerHTML = "";
-      $("#flow-empty-badge").textContent = "Fluxo " + currentFlow;
+      $("#flow-empty-badge").textContent = flowLabel(currentFlow);
       emptyEl.hidden = false;
       buildFilters(flowCases);
       updateStats();
@@ -849,6 +849,9 @@
   // marcador de fluxo (campo `fluxo`) e caem na aba certa; por ora tudo cai em C.
   let currentFlow = "C";
   function caseFlow(c) { return c.fluxo || "C"; }
+  // "Projetos" também é uma aba de fluxo do Dispatcher (sem testes nem situações: só o
+  // desenho do processo e as pendências); os outros são "Fluxo A/B/C"
+  const flowLabel = (flow) => (flow === "projetos" ? "Projetos" : "Fluxo " + flow);
 
   function setFlow(flow) {
     currentFlow = flow;
@@ -864,6 +867,7 @@
     loadActivities();
     if (typeof onFlowChangedForDiagrams === "function") onFlowChangedForDiagrams();
     if (typeof onFlowChangedForSituacoes === "function") onFlowChangedForSituacoes();
+    ajustaVisoesDoFluxo();
   }
   $$(".flow-tab").forEach((t) => t.addEventListener("click", () => setFlow(t.dataset.flow)));
 
@@ -973,7 +977,7 @@
   $("#btn-present").addEventListener("click", () => {
     const slides = flowShots(currentFlow);
     if (!slides.length) { toast("Nenhum print anexado ainda neste fluxo."); return; }
-    openCarousel(slides, 0, `Evidências — Fluxo ${currentFlow}`);
+    openCarousel(slides, 0, `Evidências — ${flowLabel(currentFlow)}`);
   });
 
   function updatePresentCount() {
@@ -1005,7 +1009,7 @@
     document.body.appendChild(a);
     a.click();
     a.remove();
-    toast(`Exportando Fluxo ${currentFlow}...`);
+    toast(`Exportando ${flowLabel(currentFlow)}...`);
   });
 
   // ---------------- modal: criar / editar / excluir caso ----------------
@@ -1311,13 +1315,34 @@
     $("#view-testes").hidden = view !== "testes";
     $("#view-fluxos").hidden = view !== "fluxos";
     $("#view-situacoes").hidden = view !== "situacoes";
+    $("#view-pendencias").hidden = view !== "pendencias";
     if (view === "fluxos") loadDiagrams();
     if (view === "situacoes") loadSituacoes();
+    if (view === "pendencias" && currentModule === "dispatcher") abrirPendenciasDoFluxo();
+    loadActivities();   // o "fluxo" das Novidades muda quando a visão é a de pendências
+  }
+
+  // Quais visões cada aba de fluxo tem: o Projetos só desenha processo e acompanha
+  // pendências; o Fluxo A ganha as pendências da finalização; B e C ficam como eram.
+  function visoesDoFluxo(flow) {
+    const base = flow === "projetos" ? ["fluxos"] : ["testes", "fluxos", "situacoes"];
+    return moduloDoFluxo(flow) ? [...base, "pendencias"] : base;
+  }
+  function mostraAbasDeVisao() {
+    const validas = visoesDoFluxo(currentFlow);
+    $$(".view-tab").forEach((t) => { t.hidden = !validas.includes(t.dataset.view); });
+    return validas;
+  }
+  function ajustaVisoesDoFluxo() {
+    const validas = mostraAbasDeVisao();
+    if (validas.includes(currentView)) switchView(currentView);   // refaz a visão pro fluxo novo
+    else switchView(currentFlow === "projetos" ? "pendencias" : "situacoes");
+    atualizaContadorAba();
   }
 
   function onFlowChangedForDiagrams() {
-    $("#diagrams-title").textContent = "Fluxos do Fluxo " + currentFlow;
-    $("#diagrams-empty-badge").textContent = "Fluxo " + currentFlow;
+    $("#diagrams-title").textContent = currentFlow === "projetos" ? "Fluxos do Projetos" : "Fluxos do Fluxo " + currentFlow;
+    $("#diagrams-empty-badge").textContent = flowLabel(currentFlow);
     if (currentView === "fluxos") renderDiagrams();
   }
 
@@ -1410,7 +1435,8 @@
   // e a aba de um módulo com processo a desenhar (Financeiro, Projetos), onde o "fluxo" do
   // diagrama é a chave do módulo. Esta função diz em qual dos dois a tela está agora.
   function diagramaModulo() {
-    return ehModuloAjuste(currentModule) && moduloMeta(currentModule).processo ? currentModule : null;
+    const m = moduloEmTela();
+    return m && moduloMeta(m).processo ? m : null;
   }
   const diagramaFluxo = () => diagramaModulo() || currentFlow;
 
@@ -1837,7 +1863,7 @@
   function openDiagramModal(mode, id) {
     editingDiagramId = mode === "edit" ? Number(id) : null;
     $("#diagram-modal-title").textContent = mode === "edit" ? "Editar diagrama" : "Novo diagrama";
-    $("#diagram-flow-label").textContent = diagramaModulo() ? moduloMeta(currentModule).label : "Fluxo " + currentFlow;
+    $("#diagram-flow-label").textContent = diagramaModulo() ? moduloMeta(diagramaModulo()).label : flowLabel(currentFlow);
     let state;
     if (mode === "edit") {
       const d = DIAGRAMS.find((x) => x.id === editingDiagramId);
@@ -2956,7 +2982,7 @@
     const emptyEl = $("#situacoes-empty");
     if (!flowSits.length) {
       $("#situacoes").innerHTML = "";
-      $("#situacoes-empty-badge").textContent = "Fluxo " + currentFlow;
+      $("#situacoes-empty-badge").textContent = flowLabel(currentFlow);
       emptyEl.hidden = false;
       buildSituacaoFilters(flowSits);
       updateSituacaoStats(flowSits);
@@ -3271,7 +3297,7 @@
 
   function onFlowChangedForSituacoes() {
     $("#situacoes-title").textContent = "Situações do Fluxo " + currentFlow;
-    $("#situacoes-empty-badge").textContent = "Fluxo " + currentFlow;
+    $("#situacoes-empty-badge").textContent = flowLabel(currentFlow);
     if (currentView === "situacoes") renderSituacoes();
   }
 
@@ -3792,7 +3818,7 @@
   // A Gestão de Ativos não tem Fluxo A/B/C — reaproveita a mesma trilha de
   // Novidades (activity_log/team_views) com essa chave fixa como "fluxo".
   const FLUXO_ATIVOS = "ATIVOS";
-  function activityFluxo() { return ehModuloAjuste(currentModule) ? FLUXO_ATIVOS : currentFlow; }
+  function activityFluxo() { return moduloEmTela() ? FLUXO_ATIVOS : currentFlow; }
 
   async function loadActivities() {
     const badges = ["#activity-count", "#activity-count-ativos"];
@@ -3830,7 +3856,7 @@
 
   function renderActivityList(boundary) {
     const el = $("#activity-list");
-    const vazio = ehModuloAjuste(currentModule)
+    const vazio = moduloEmTela()
       ? "Nenhuma atividade registrada ainda nos ajustes."
       : "Nenhuma atividade registrada ainda neste fluxo.";
     if (!ACTIVITIES.length) {
@@ -3923,8 +3949,9 @@
     const a = AJUSTES.find((x) => String(x.id) === String(id));
     if (!a) { toast("Esse ajuste não está mais na lista (pode ter sido excluído)."); return; }
     const modulo = moduloDoAjuste(a);
-    // troca pra aba do módulo do ajuste (a lista já está carregada, não busca de novo)
-    if (currentModule !== modulo) switchModule(modulo, { recarregar: false });
+    // vai pro lugar do módulo do ajuste — aba própria ou Pendências do Dispatcher (a lista já
+    // está carregada, não busca de novo)
+    if (moduloEmTela() !== modulo) irParaModulo(modulo, { recarregar: false });
     ajusteVersao = a.versao;
     resetAjusteFiltros();
     renderAjustes();
@@ -3952,8 +3979,8 @@
   }
 
   function openActivityModal() {
-    const emAtivos = ehModuloAjuste(currentModule);
-    $("#activity-flow-label").textContent = (emAtivos ? "Ajustes · " + moduloMeta(currentModule).label : "Fluxo " + currentFlow)
+    const emAtivos = !!moduloEmTela();
+    $("#activity-flow-label").textContent = (emAtivos ? "Ajustes · " + moduloMeta(moduloEmTela()).label : flowLabel(currentFlow))
       + " · " + (PERFIL_LABEL[PERFIL] || "");
     $("#activity-hint").innerHTML = emAtivos
       ? 'Tudo que mudou nos ajustes de todos os módulos (Gestão de Ativos e pendências da LPD) — criação, mudança de situação e edição — do mais recente pro mais antigo. O que você ainda não tinha visto aparece marcado como <b>novo</b>.'
@@ -4008,13 +4035,64 @@
   const ehModuloAjuste = (key) => MODULOS_AJUSTE.some((m) => m.key === key);
   const moduloMeta = (key) => MODULOS_AJUSTE.find((m) => m.key === key) || MODULOS_AJUSTE[0];
   const moduloDoAjuste = (a) => (ehModuloAjuste(a.modulo) ? a.modulo : "ativos");
+  // módulos que moram dentro do Dispatcher (sem aba própria na barra): a visão "Pendências"
+  // da aba de fluxo indicada no catálogo (`dispatcher_fluxo`)
+  const moduloDoFluxo = (flow) => (MODULOS_AJUSTE.find((m) => m.dispatcher_fluxo === flow) || {}).key || null;
+
+  // o módulo de ajustes que está na tela agora: a aba de um módulo, ou a visão Pendências
+  // do fluxo aberto no Dispatcher. null quando a tela não é de ajustes.
+  function moduloEmTela() {
+    if (currentModule === "dispatcher") return currentView === "pendencias" ? moduloDoFluxo(currentFlow) : null;
+    const m = MODULOS_AJUSTE.find((x) => x.key === currentModule);
+    return m && !m.dispatcher_fluxo ? m.key : null;
+  }
+
+  // O painel de ajustes é um só (ids únicos). Na visão Pendências do Dispatcher ele é montado
+  // dentro de #view-pendencias; nas abas de módulo, volta pro topo da página.
+  const painelAjustes = $("#module-ativos");
+  const painelNoTopo = painelAjustes.parentNode;
+  const painelMarco = $("#module-agenda");
+  function montarPainelAjustes(noDispatcher) {
+    const slot = $("#view-pendencias");
+    if (noDispatcher) { if (painelAjustes.parentNode !== slot) slot.appendChild(painelAjustes); }
+    else if (painelAjustes.parentNode !== painelNoTopo) painelNoTopo.insertBefore(painelAjustes, painelMarco);
+  }
+
+  // levar a tela até um módulo, onde quer que ele more: aba própria ou visão Pendências do Dispatcher
+  let pularRecargaAjustes = false;   // irParaModulo(..., {recarregar:false}): a lista já está na mão
+  function irParaModulo(key, opts) {
+    const fluxo = moduloMeta(key).dispatcher_fluxo;
+    if (!fluxo) { switchModule(key, opts); return; }
+    pularRecargaAjustes = !!opts && opts.recarregar === false;
+    try {
+      entrarNoModuloDeAjustes(key);
+      if (currentModule !== "dispatcher") switchModule("dispatcher", { semAjustes: true });
+      if (currentFlow !== fluxo) setFlow(fluxo);
+      switchView("pendencias");
+    } finally { pularRecargaAjustes = false; }
+  }
+  function entrarNoModuloDeAjustes(key) {
+    if (key === ajusteModulo) return;
+    // cada módulo tem as próprias levas: ao trocar, abre a mais nova dele
+    ajusteModulo = key;
+    ajusteVersao = "";
+    resetAjusteFiltros();
+  }
+  function abrirPendenciasDoFluxo() {
+    const key = moduloDoFluxo(currentFlow);
+    if (!key) return;
+    entrarNoModuloDeAjustes(key);
+    montarPainelAjustes(true);
+    painelAjustes.hidden = false;
+    if (pularRecargaAjustes) renderAjustes(); else loadAjustes();
+  }
 
   // as abas dos módulos novos entram logo depois da Gestão de Ativos; visíveis
   // pros dois perfis (a LP também acompanha as pendências dela)
   function renderModuloTabs() {
     $$(".module-tab[data-gerada]").forEach((t) => t.remove());
     let ancora = $("#module-tab-ativos");
-    MODULOS_AJUSTE.filter((m) => m.key !== "ativos").forEach((m) => {
+    MODULOS_AJUSTE.filter((m) => m.key !== "ativos" && !m.dispatcher_fluxo).forEach((m) => {
       const t = document.createElement("button");
       t.type = "button";
       t.className = "module-tab";
@@ -4041,6 +4119,8 @@
     }
     renderModuloTabs();
     atualizaContadorAba();
+    // se a tela já estava numa visão que depende do catálogo (ex.: Pendências), refaz
+    mostraAbasDeVisao();
   }
 
   function applyModuleVisibility() {
@@ -4050,12 +4130,8 @@
 
   function switchModule(mod, opts) {
     opts = opts || {};
-    if (ehModuloAjuste(mod) && mod !== ajusteModulo) {
-      // cada módulo tem as próprias levas: ao trocar de aba, abre a mais nova dele
-      ajusteModulo = mod;
-      ajusteVersao = "";
-      resetAjusteFiltros();
-    }
+    const abaDeAjustes = ehModuloAjuste(mod) && !moduloMeta(mod).dispatcher_fluxo;
+    if (abaDeAjustes) entrarNoModuloDeAjustes(mod);
     currentModule = mod;
     $$(".module-tab").forEach((t) => {
       const on = t.dataset.module === mod;
@@ -4063,12 +4139,15 @@
       t.setAttribute("aria-selected", on ? "true" : "false");
     });
     $("#module-dispatcher").hidden = mod !== "dispatcher";
-    // um painel só serve a todos os módulos de ajustes; o módulo corrente decide o conteúdo
-    $("#module-ativos").hidden = !ehModuloAjuste(mod);
+    // um painel só serve a todos os módulos de ajustes; o módulo corrente decide o conteúdo.
+    // No Dispatcher ele só aparece (dentro de #view-pendencias) quando a visão é a de pendências.
+    montarPainelAjustes(mod === "dispatcher" && currentView === "pendencias");
+    painelAjustes.hidden = !(abaDeAjustes || (mod === "dispatcher" && currentView === "pendencias"));
     $("#module-agenda").hidden = mod !== "agenda";
     $("#module-todo").hidden = mod !== "todo";
     $("#module-tecnicos").hidden = mod !== "tecnicos";
-    if (ehModuloAjuste(mod)) {
+    if (mod === "dispatcher" && currentView === "pendencias" && !opts.semAjustes) abrirPendenciasDoFluxo();
+    if (abaDeAjustes) {
       if (opts.recarregar === false) renderAjustes(); else loadAjustes();
       if (moduloMeta(mod).processo) {
         // o desenho do processo mora na própria aba; enquanto carrega, não deixa os cards do módulo anterior
@@ -4876,6 +4955,14 @@
       badge.textContent = abertos;
       badge.hidden = !abertos;
     });
+    // a visão "Pendências" do Dispatcher conta as do módulo do fluxo aberto
+    const doFluxo = moduloDoFluxo(currentFlow);
+    const vb = $("#view-tab-pendencias-count");
+    if (vb) {
+      const n = doFluxo ? AJUSTES.filter((a) => moduloDoAjuste(a) === doFluxo && ajusteAberto(a)).length : 0;
+      vb.textContent = n;
+      vb.hidden = !n;
+    }
   }
 
   function substituiAjusteLocal(atualizado) {
@@ -5067,7 +5154,7 @@
       closeAjusteModal();
       // o item pode ter nascido (ou ido parar) em outro módulo/leva: a tela acompanha ele
       const moduloSalvo = moduloDoAjuste(salvo);
-      if (moduloSalvo !== ajusteModulo) switchModule(moduloSalvo, { recarregar: false });
+      if (moduloSalvo !== moduloEmTela()) irParaModulo(moduloSalvo, { recarregar: false });
       ajusteVersao = salvo.versao;
       await loadAjustes();
       toast(moduloSalvo !== modulo || (original && moduloSalvo !== moduloDoAjuste(original))

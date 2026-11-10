@@ -436,18 +436,33 @@ e finalização do projeto). Em vez de uma tela por módulo, o ajuste ganhou o c
 prints Ctrl+V, observações com trilha) é a mesma pra todos. As abas da barra de
 módulos são **geradas a partir do catálogo** (`GET /api/ativos/modulos`), visíveis
 aos dois perfis (Faiston e LP), cada uma com o próprio badge de itens em aberto.
+Dois módulos **moram dentro do Dispatcher** e não têm aba na barra (ver abaixo).
 
-| `modulo` | Aba | Versão padrão | O que acompanha |
+| `modulo` | Onde aparece | Versão padrão | O que acompanha |
 |---|---|---|---|
-| `ativos` | Gestão de Ativos | v2 | o backlog original (inclusive os relatos dos técnicos) |
-| `plataforma` | Plataforma | v1 | SLA, perfis e permissões do Dispatcher, publicação nas lojas (Google Play e App Store) |
-| `financeiro` | Financeiro | v1 | Módulo Financeiro |
-| `projetos` | Projetos | v1 | Fluxo de Projetos |
-| `dashboard` | Dashboard e Relatórios | v1 | Dashboard e relatórios com exportação |
-| `fluxo-a` | Fluxo A — Finalização | v1 | ajustes estéticos e de funcionamento que faltam pra fechar o Fluxo A |
+| `ativos` | aba Gestão de Ativos | v2 | o backlog original (inclusive os relatos dos técnicos) |
+| `plataforma` | aba **Geral** | v1 | SLA, perfis e permissões do Dispatcher, Dashboard, relatórios com exportação, publicação nas lojas (Google Play e App Store) |
+| `financeiro` | aba Financeiro | v1 | Módulo Financeiro |
+| `projetos` | Dispatcher → aba de fluxo **Projetos** → Pendências | v1 | Fluxo de Projetos |
+| `fluxo-a` | Dispatcher → **Fluxo A** → Pendências | v1 | ajustes estéticos e de funcionamento que faltam pra fechar o Fluxo A |
+
+A chave `plataforma` só mudou de nome na tela (**Geral**). O antigo módulo
+`dashboard` foi incorporado a ela: `migrar_modulos_aposentados` (`app/seed_data.py`,
+roda no boot antes do seed) leva os itens que já existiam pro Geral, no fim da mesma
+versão e sem repetir número, e quem ainda manda `modulo="dashboard"` (conector,
+script) cai no Geral (`ALIASES` em `app/modulos.py`).
+
+**Dentro do Dispatcher.** O catálogo marca esses módulos com `dispatcher_fluxo`.
+No **Fluxo A** a barra de visões ganha **Pendências** (com o badge de itens em
+aberto), ao lado de Testes/Fluxos/Situações; o **Projetos** é uma 4ª aba de fluxo,
+ao lado de A/B/C, só com as visões **Fluxos** (desenho do processo, o mesmo editor de
+diagramas, guardado com `fluxo = "projetos"`) e **Pendências** — sem Testes nem
+Situações, que não se aplicam a ele. Fluxos B e C não mudam. A visão Pendências é o
+mesmo painel de ajustes (um só, montado ali por dentro), e "Avisar operação" e
+"Novidades" são os da barra do Dispatcher.
 
 - **Numeração por módulo + versão:** cada módulo conta do 1 por conta própria
-  (`Financeiro v1 #01`, `Plataforma v1 #01`…). Mover um item de módulo ou de versão
+  (`Financeiro v1 #01`, `Geral v1 #01`…). Mover um item de módulo ou de versão
   renumera ele pro fim do destino, sem pular lugar.
 - **`modulo` desconhecido** (ou vazio) cai em `ativos` — a normalização
   (`norm_modulo`) nunca levanta erro, então um conector antigo que não manda o
@@ -464,20 +479,22 @@ aos dois perfis (Faiston e LP), cada uma com o próprio badge de itens em aberto
   DEFAULT 'ativos'`) em bancos que já existiam; os itens antigos viram `ativos`.
   Funciona em SQLite e Postgres e é idempotente.
 
-**Módulos com processo a desenhar (`processo: true`).** Financeiro e Projetos ainda
-não têm processo desenhado — não há "como está hoje" pra comparar —, então a aba
-deles ganha, acima da lista de pendências, o **editor de diagramas** dos fluxos do
-Dispatcher (Mermaid, com "Editar aqui" e o editor completo). Os diagramas são os
-mesmos de `/api/diagramas`, guardados com `fluxo` = a chave do módulo (`financeiro`,
-`projetos`); nascem como "Como deveria funcionar". Ficam separados dos fluxos A/B/C
-(não aparecem na visão *Fluxos* do Dispatcher nem no tutorial), e as Novidades deles
-entram na trilha dos módulos de ajustes, com o nome do módulo. As dúvidas e decisões
-em aberto continuam na lista de pendências logo abaixo. Nada de etapa ou regra vem
-semeado: o desenho começa vazio, a LPD ainda não detalhou o escopo.
+**Módulos com processo a desenhar (`processo: true`).** O Financeiro ainda não tem
+processo desenhado — não há "como está hoje" pra comparar —, então a aba dele ganha,
+acima da lista de pendências, o **editor de diagramas** dos fluxos do Dispatcher
+(Mermaid, com "Editar aqui" e o editor completo). Os diagramas são os mesmos de
+`/api/diagramas`, guardados com `fluxo` = a chave do módulo (`financeiro`); nascem
+como "Como deveria funcionar". Ficam separados dos fluxos do Dispatcher (não
+aparecem na visão *Fluxos* nem no tutorial), e as Novidades deles entram na trilha
+dos módulos de ajustes, com o nome do módulo. (O Projetos desenha o processo na
+visão *Fluxos* da própria aba de fluxo, e as Novidades dele ficam na trilha do
+fluxo `projetos`.) As dúvidas e decisões em aberto continuam na lista de
+pendências. Nada de etapa ou regra vem semeado além do que a LPD descreveu.
 
 **Como acrescentar um módulo:** uma entrada na lista `MODULOS` de
-`app/modulos.py` (`key`, `label`, `titulo`, `descricao`, `versao_padrao` e, se o
-processo ainda precisa ser desenhado, `processo: True`). A ordem
+`app/modulos.py` (`key`, `label`, `titulo`, `descricao`, `versao_padrao` e, opcionais, `processo:
+True` se o processo ainda precisa ser desenhado na aba, ou `dispatcher_fluxo` se o
+módulo mora numa aba de fluxo do Dispatcher em vez de ter aba própria). A ordem
 da lista é a ordem das abas. Não precisa de migração, tela nem rota nova — a aba,
 o select do modal, a pauta (`/relatorio`), o export e o MCP já enxergam o módulo.
 
