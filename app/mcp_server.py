@@ -621,7 +621,7 @@ def listar_ajustes_ativos(
 ) -> list[dict]:
     """Lista os ajustes do backlog do Faiston One (Gestão de Ativos e os módulos de
     pendências da LPD). modulo opcional: ativos, plataforma (Geral), financeiro,
-    projetos ou fluxo-a (sem ele, lista todos; "dashboard" ainda vale e é o Geral); versao opcional (ex.: "v2", "v3");
+    ou projetos (sem ele, lista todos; "dashboard" ainda vale e é o Geral); versao opcional (ex.: "v2", "v3");
     tipo opcional: "Bug" ou "Melhoria"."""
     db = SessionLocal()
     try:
@@ -680,7 +680,7 @@ def criar_ajuste_ativos(
 ) -> dict:
     """Cadastra um ajuste no backlog do Faiston One: `atual` é como está hoje e
     `esperado` é como deve ser. tipo: "Bug" (está quebrado) ou "Melhoria".
-    modulo: ativos (padrão), plataforma (Geral), financeiro, projetos ou fluxo-a
+    modulo: ativos (padrão), plataforma (Geral), financeiro ou projetos
     ("dashboard" ainda vale e é o Geral).
     versao agrupa a leva de ajustes — sem ela vale a versão padrão do módulo
     (v2 em Gestão de Ativos, v1 nos demais); usar uma versão nova (v3, v4...) abre

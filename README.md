@@ -436,7 +436,7 @@ e finalização do projeto). Em vez de uma tela por módulo, o ajuste ganhou o c
 prints Ctrl+V, observações com trilha) é a mesma pra todos. As abas da barra de
 módulos são **geradas a partir do catálogo** (`GET /api/ativos/modulos`), visíveis
 aos dois perfis (Faiston e LP), cada uma com o próprio badge de itens em aberto.
-Dois módulos **moram dentro do Dispatcher** e não têm aba na barra (ver abaixo).
+O Projetos **mora dentro do Dispatcher** e não tem aba na barra (ver abaixo).
 
 | `modulo` | Onde aparece | Versão padrão | O que acompanha |
 |---|---|---|---|
@@ -444,7 +444,6 @@ Dois módulos **moram dentro do Dispatcher** e não têm aba na barra (ver abaix
 | `plataforma` | aba **Geral** | v1 | SLA, perfis e permissões do Dispatcher, Dashboard, relatórios com exportação, publicação nas lojas (Google Play e App Store) |
 | `financeiro` | aba Financeiro | v1 | Módulo Financeiro |
 | `projetos` | Dispatcher → aba de fluxo **Projetos** → Pendências | v1 | Fluxo de Projetos |
-| `fluxo-a` | Dispatcher → **Fluxo A** → Pendências | v1 | ajustes estéticos e de funcionamento que faltam pra fechar o Fluxo A |
 
 A chave `plataforma` só mudou de nome na tela (**Geral**). O antigo módulo
 `dashboard` foi incorporado a ela: `migrar_modulos_aposentados` (`app/seed_data.py`,
@@ -452,14 +451,25 @@ roda no boot antes do seed) leva os itens que já existiam pro Geral, no fim da 
 versão e sem repetir número, e quem ainda manda `modulo="dashboard"` (conector,
 script) cai no Geral (`ALIASES` em `app/modulos.py`).
 
-**Dentro do Dispatcher.** O catálogo marca esses módulos com `dispatcher_fluxo`.
-No **Fluxo A** a barra de visões ganha **Pendências** (com o badge de itens em
-aberto), ao lado de Testes/Fluxos/Situações; o **Projetos** é uma 4ª aba de fluxo,
-ao lado de A/B/C, só com as visões **Fluxos** (desenho do processo, o mesmo editor de
-diagramas, guardado com `fluxo = "projetos"`) e **Pendências** — sem Testes nem
-Situações, que não se aplicam a ele. Fluxos B e C não mudam. A visão Pendências é o
-mesmo painel de ajustes (um só, montado ali por dentro), e "Avisar operação" e
-"Novidades" são os da barra do Dispatcher.
+**Dentro do Dispatcher.** O catálogo marca o módulo com `dispatcher_fluxo`. O
+**Projetos** é uma 4ª aba de fluxo, ao lado de A/B/C, só com as visões **Fluxos**
+(desenho do processo, o mesmo editor de diagramas, guardado com `fluxo = "projetos"`)
+e **Pendências** — sem Testes nem Situações, que não se aplicam a ele. A visão
+Pendências é o mesmo painel de ajustes (um só, montado ali por dentro), e "Avisar
+operação" e "Novidades" são os da barra do Dispatcher.
+
+**Finalização do Fluxo A = Situações do Fluxo A.** O Fluxo A não tem módulo de
+pendências nem visão "Pendências": o que a LPD pediu pra finalizá-lo (busca de
+chamados, migração das telas de Calendário Técnico, Self-Storage e Cadastro de
+Técnico, vinculação dos chamados logísticos às bases técnicas, troca de informações
+na 2ª e 3ª oferta e o bug do chamado que reaparece pra aceite) vive na visão
+**Situações** do Fluxo A, uma situação de um estágio por item (`FLUXO_A_FINALIZACAO`
+em `app/seed_data.py`). `migrar_fluxo_a_para_situacoes` roda no boot, é idempotente e
+**não repete o que já existe**: compara o título (sem acento nem caixa) com as
+situações do Fluxo A, inclusive as excluídas, que não ressuscitam. Os ajustes que
+já estavam no antigo módulo `fluxo-a` viram situação levando junto as validações
+(técnica e operação), as notas com a trilha de edições, os prints, o retorno do time
+e o prazo, e saem do backlog.
 
 - **Numeração por módulo + versão:** cada módulo conta do 1 por conta própria
   (`Financeiro v1 #01`, `Geral v1 #01`…). Mover um item de módulo ou de versão
@@ -470,7 +480,7 @@ mesmo painel de ajustes (um só, montado ali por dentro), e "Avisar operação" 
 - **Relatos dos técnicos** (Track One) continuam virando ajuste de `ativos`, na
   leva ativa de `ativos` — as levas dos outros módulos não entram na conta.
 - **Pendências da LPD semeadas:** `seed_pendencias_lpd` (`app/seed_data.py`, chamado
-  em `app/main.py`) cria os 15 itens da v1 — `responsavel="LPD"`,
+  em `app/main.py`) cria os 8 itens da v1 — `responsavel="LPD"`,
   `autor="Pendências LPD"`, situação *Levantado*, idempotente por
   (módulo, versão, título). Onde a lista da LPD só nomeia a entrega (SLA,
   Financeiro, Projetos) o "como está hoje" diz que o escopo ainda não foi
