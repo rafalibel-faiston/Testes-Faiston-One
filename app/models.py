@@ -287,8 +287,11 @@ class AtivoAjuste(Base):
     __tablename__ = "ativo_ajustes"
 
     id = Column(Integer, primary_key=True)
+    # módulo do catálogo (app/modulos.py) a que o item pertence: "ativos" é o
+    # backlog original; os outros acompanham as pendências da LPD.
+    modulo = Column(String, nullable=False, default="ativos", server_default="ativos", index=True)
     versao = Column(String, nullable=False, default="v2", server_default="v2")
-    # número do item dentro da versão (1, 2, 3...) — é o "#" da lista que o time usa
+    # número do item dentro do módulo+versão (1, 2, 3...) — é o "#" da lista que o time usa
     # pra se referir ao ajuste em reunião; também define a ordem na tela.
     numero = Column(Integer, nullable=False, default=0, server_default="0")
     titulo = Column(String, nullable=False)
@@ -511,10 +514,16 @@ class TecnicoObservacao(Base):
 
     @property
     def ajuste_ref(self):
-        """Como o ajuste gerado aparece no card: "v2 #07"."""
+        """Como o ajuste gerado aparece no card: "v2 #07" — com o módulo na
+        frente quando não é a Gestão de Ativos ("Financeiro v1 #01")."""
         if not self.ajuste:
             return None
-        return f"{self.ajuste.versao} #{self.ajuste.numero:02d}"
+        ref = f"{self.ajuste.versao} #{self.ajuste.numero:02d}"
+        modulo = self.ajuste.modulo or "ativos"
+        if modulo != "ativos":
+            from .modulos import label as modulo_label
+            ref = f"{modulo_label(modulo)} {ref}"
+        return ref
 
 
 class Observation(Base):

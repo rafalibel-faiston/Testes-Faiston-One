@@ -374,6 +374,11 @@ def migrate_schema(engine):
 
     if "ativo_ajustes" in existing_tables:
         aj_cols = {c["name"] for c in insp.get_columns("ativo_ajustes")}
+        if "modulo" not in aj_cols:
+            stmts.append("ALTER TABLE ativo_ajustes ADD COLUMN modulo VARCHAR NOT NULL DEFAULT 'ativos'")
+        # o índice que o models.py declara (index=True); o loop de fk_indexes mais
+        # abaixo só enxerga colunas que já existiam antes deste ALTER
+        stmts.append("CREATE INDEX IF NOT EXISTS ix_ativo_ajustes_modulo ON ativo_ajustes (modulo)")
         if "retorno" not in aj_cols:
             stmts.append("ALTER TABLE ativo_ajustes ADD COLUMN retorno TEXT")
         if "prazo" not in aj_cols:
@@ -1145,12 +1150,14 @@ def seed_ativos_ajustes(db):
     for item in AJUSTES_GESTAO_ATIVOS_V2:
         exists = (
             db.query(AtivoAjuste)
-            .filter(AtivoAjuste.versao == "v2", AtivoAjuste.titulo == item["titulo"])
+            .filter(AtivoAjuste.modulo == "ativos", AtivoAjuste.versao == "v2",
+                    AtivoAjuste.titulo == item["titulo"])
             .first()
         )
         if exists:
             continue
         db.add(AtivoAjuste(
+            modulo="ativos",
             versao="v2",
             numero=item["numero"],
             titulo=item["titulo"],
@@ -1163,6 +1170,162 @@ def seed_ativos_ajustes(db):
             status="levantado",
             autor="Levantamento Faiston",
         ))
+        added += 1
+    if added:
+        db.commit()
+    return added
+
+
+# Pendências que a LPD mandou (Dispatcher e Projeto). São 15 itens na v1 dos
+# módulos de pendências, um por entrega que a lista nomeia. Nada aqui vai além do
+# que a LPD escreveu: onde ela só deu o nome da entrega (SLA, Financeiro,
+# Projetos), o "como está hoje" diz que o escopo não foi detalhado — o
+# detalhamento entra pela tela, quando a LPD passar.
+_ESCOPO_NAO_DETALHADO = "A LPD listou a entrega, mas o escopo ainda não foi detalhado."
+_A_DETALHAR = "Entrega conforme o escopo que a LPD ainda vai detalhar."
+
+PENDENCIAS_LPD = [
+    # --- Dispatcher: Geral (engloba todos os fluxos) -> plataforma ---
+    {
+        "modulo": "plataforma", "titulo": "Cálculo do SLA dentro do sistema",
+        "tipo": "Melhoria", "area": "Dispatcher — Geral", "prioridade": "Alta",
+        "atual": "O cálculo do SLA é uma pendência do Dispatcher que engloba todos os fluxos. "
+                 + _ESCOPO_NAO_DETALHADO,
+        "esperado": "O SLA calculado dentro do sistema. " + _A_DETALHAR,
+    },
+    {
+        "modulo": "plataforma", "titulo": "Detalhamento de perfis e permissões do Dispatcher",
+        "tipo": "Melhoria", "area": "Dispatcher — Geral", "prioridade": "Alta",
+        "atual": "Pendência do Dispatcher que engloba todos os fluxos: os perfis e as permissões "
+                 "ainda precisam ser detalhados.",
+        "esperado": "Perfis e permissões do Dispatcher detalhados.",
+    },
+    {
+        "modulo": "plataforma", "titulo": "Publicação do app na Google Play Store (Android)",
+        "tipo": "Melhoria", "area": "Finalização do Projeto", "prioridade": "Alta",
+        "atual": "Pendência da finalização do projeto: o app ainda não está disponível na Google Play Store.",
+        "esperado": "App disponibilizado na Google Play Store (Android).",
+    },
+    {
+        "modulo": "plataforma", "titulo": "Publicação do app na Apple App Store (iOS)",
+        "tipo": "Melhoria", "area": "Finalização do Projeto", "prioridade": "Alta",
+        "atual": "Pendência da finalização do projeto: o app ainda não está disponível na Apple App Store.",
+        "esperado": "App disponibilizado na Apple App Store (iOS).",
+    },
+    # --- Financeiro / Projetos (Dispatcher: Geral) ---
+    {
+        "modulo": "financeiro", "titulo": "Módulo Financeiro",
+        "tipo": "Melhoria", "area": "Dispatcher — Geral", "prioridade": "Alta",
+        "atual": "Pendência do Dispatcher que engloba todos os fluxos. " + _ESCOPO_NAO_DETALHADO,
+        "esperado": "Módulo Financeiro entregue. " + _A_DETALHAR,
+    },
+    {
+        "modulo": "projetos", "titulo": "Fluxo de Projetos",
+        "tipo": "Melhoria", "area": "Dispatcher — Geral", "prioridade": "Alta",
+        "atual": "Pendência do Dispatcher que engloba todos os fluxos. " + _ESCOPO_NAO_DETALHADO,
+        "esperado": "Fluxo de Projetos entregue. " + _A_DETALHAR,
+    },
+    # --- Dashboard e relatórios ---
+    {
+        "modulo": "dashboard", "titulo": "Finalização do Dashboard",
+        "tipo": "Melhoria", "area": "Dispatcher — Geral", "prioridade": "Alta",
+        "atual": "O Dashboard do Dispatcher ainda não foi finalizado.",
+        "esperado": "Dashboard finalizado.",
+    },
+    {
+        "modulo": "dashboard", "titulo": "Relatórios da ferramenta com exportação",
+        "tipo": "Melhoria", "area": "Dispatcher — Geral", "prioridade": "Média",
+        "atual": "Os relatórios da ferramenta, com exportação, estão pendentes.",
+        "esperado": "Relatórios da ferramenta disponíveis com exportação.",
+    },
+    # --- Finalização do Fluxo A: ajustes estéticos ---
+    {
+        "modulo": "fluxo-a", "titulo": "Busca de chamados",
+        "tipo": "Melhoria", "area": "Fluxo A — estético", "prioridade": "Média",
+        "atual": "Ajuste estético pendente na busca de chamados.",
+        "esperado": "Busca de chamados com o ajuste estético aplicado.",
+    },
+    {
+        "modulo": "fluxo-a", "titulo": "Migração da tela de Calendário Técnico",
+        "tipo": "Melhoria", "area": "Fluxo A — estético", "prioridade": "Média",
+        "atual": "A tela de Calendário Técnico ainda não foi migrada para a nova versão.",
+        "esperado": "Tela de Calendário Técnico migrada.",
+    },
+    {
+        "modulo": "fluxo-a", "titulo": "Migração da tela de Self-Storage",
+        "tipo": "Melhoria", "area": "Fluxo A — estético", "prioridade": "Média",
+        "atual": "A tela de Self-Storage ainda não foi migrada para a nova versão.",
+        "esperado": "Tela de Self-Storage migrada.",
+    },
+    {
+        "modulo": "fluxo-a", "titulo": "Migração da tela de Cadastro de Técnico",
+        "tipo": "Melhoria", "area": "Fluxo A — estético", "prioridade": "Média",
+        "atual": "A tela de Cadastro de Técnico ainda não foi migrada para a nova versão.",
+        "esperado": "Tela de Cadastro de Técnico migrada.",
+    },
+    # --- Finalização do Fluxo A: funcionamento ---
+    {
+        "modulo": "fluxo-a", "titulo": "Vinculação dos chamados logísticos às bases técnicas",
+        "tipo": "Melhoria", "area": "Fluxo A — funcionamento", "prioridade": "Alta",
+        "atual": "Os chamados logísticos ainda não estão vinculados às bases técnicas.",
+        "esperado": "Chamados logísticos vinculados às bases técnicas.",
+    },
+    {
+        "modulo": "fluxo-a", "titulo": "Troca de informações para retirada em base na 2ª e 3ª oferta",
+        "tipo": "Melhoria", "area": "Fluxo A — funcionamento", "prioridade": "Alta",
+        "atual": "A troca de informações para retirada em base na 2ª e na 3ª oferta está pendente.",
+        "esperado": "Troca de informações para retirada em base funcionando na 2ª e na 3ª oferta.",
+    },
+    {
+        "modulo": "fluxo-a", "titulo": "BUG: chamado reaparece para aceite após a finalização",
+        "tipo": "Bug", "area": "Fluxo A — funcionamento", "prioridade": "Alta",
+        "atual": "Depois de finalizado, o chamado aparece novamente para aceite.",
+        "esperado": "Chamado finalizado não volta para aceite.",
+    },
+]
+
+
+def seed_pendencias_lpd(db):
+    """Semeia as pendências da LPD na v1 dos módulos novos. Idempotente por
+    (modulo, versao, titulo): redeploy não duplica nem sobrescreve o que o time
+    editou, moveu de status ou renumerou na tela. O número é o próximo livre do
+    módulo+versão, então não colide com itens criados à mão."""
+    from sqlalchemy import func
+
+    from .models import AtivoAjuste
+
+    added = 0
+    for item in PENDENCIAS_LPD:
+        modulo, versao = item["modulo"], "v1"
+        exists = (
+            db.query(AtivoAjuste.id)
+            .filter(AtivoAjuste.modulo == modulo, AtivoAjuste.versao == versao,
+                    AtivoAjuste.titulo == item["titulo"])
+            .first()
+        )
+        if exists:
+            continue
+        maior = (
+            db.query(func.max(AtivoAjuste.numero))
+            .filter(AtivoAjuste.modulo == modulo, AtivoAjuste.versao == versao)
+            .scalar()
+        )
+        db.add(AtivoAjuste(
+            modulo=modulo,
+            versao=versao,
+            numero=(maior or 0) + 1,
+            titulo=item["titulo"],
+            tipo=item["tipo"],
+            area=item.get("area"),
+            prioridade=item["prioridade"],
+            atual=item["atual"],
+            esperado=item["esperado"],
+            observacao="",
+            status="levantado",
+            responsavel="LPD",
+            autor="Pendências LPD",
+        ))
+        db.flush()   # o próximo item do mesmo módulo enxerga este número
         added += 1
     if added:
         db.commit()

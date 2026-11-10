@@ -585,6 +585,15 @@ class FormularioResposta(BaseModel):
     chamado: Optional[str] = ""           # atendimento em que ele usou o app
 
 
+class AjusteModuloOut(BaseModel):
+    """Uma entrada do catálogo de módulos (app/modulos.py)."""
+    key: str
+    label: str
+    titulo: str
+    descricao: str
+    versao_padrao: str
+
+
 class AtivoAjustePrintOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -624,6 +633,7 @@ class AtivoAjusteOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    modulo: str = "ativos"
     versao: str = "v2"
     numero: int = 0
     titulo: str
@@ -646,8 +656,9 @@ class AtivoAjusteOut(BaseModel):
 
 
 class AtivoAjusteCreate(BaseModel):
-    versao: Optional[str] = "v2"
-    numero: Optional[int] = None      # None = próximo número livre da versão
+    modulo: Optional[str] = None      # None/desconhecido = "ativos"
+    versao: Optional[str] = None      # None = versão padrão do módulo
+    numero: Optional[int] = None      # None = próximo número livre do módulo+versão
     titulo: str
     tipo: Optional[str] = "Melhoria"
     area: Optional[str] = None
@@ -661,6 +672,7 @@ class AtivoAjusteCreate(BaseModel):
 
 
 class AtivoAjusteUpdate(BaseModel):
+    modulo: Optional[str] = None
     versao: Optional[str] = None
     numero: Optional[int] = None
     titulo: Optional[str] = None
