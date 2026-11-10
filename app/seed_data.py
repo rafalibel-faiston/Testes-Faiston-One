@@ -638,6 +638,39 @@ FLOW_C_ATUAL = """flowchart TD
 
 # Diagramas iniciais por fluxo. O time pode editar/adicionar depois; o seed só
 # cria estes quando ainda NAO existe nenhum diagrama daquele fluxo (idempotente).
+# Financeiro — como o valor da atividade é definido, nos 3 cenários descritos pelo
+# time (e as respostas dele às dúvidas do desenho). Só o que foi dito: nada de etapa,
+# aprovação ou prazo inventado. Rótulos sem aspas/parênteses/chaves, que o
+# "Editar aqui" da tela interpreta de volta.
+FLUXO_FINANCEIRO_CENARIOS = """flowchart TD
+    n1["Como o valor da atividade é definido"] --> n2{"Qual o cenário?"}
+    n2 -->|Contratual N1, M1 e S1| n3["Atividades têm valor previamente estabelecido em contrato"]
+    n3 --> n4["Técnico recebe o acionamento já sabendo o valor previsto"]
+    n4 --> n5{"Dúvida sobre a remuneração?"}
+    n5 -->|Sim| n6["Técnico é direcionado à equipe de Rede Credenciada para esclarecer os valores acordados"]
+    n5 -->|Não| n7{"Técnico aceita o chamado?"}
+    n6 --> n7
+    n7 -->|Sim| n8["Atendimento realizado normalmente"]
+    n7 -->|Não| n9["Técnico recusa, pois não é obrigado a aceitar todos os chamados"]
+    n8 --> n10["O valor contratual acordado do chamado fica atrelado ao financeiro do técnico"]
+    n10 --> n11["Na finalização o técnico informa as despesas adicionais, se houver, como pedágio, estacionamento ou materiais, com os comprovantes"]
+    n11 --> n12["As despesas passam por aprovação na hora do próprio chamado"]
+    n12 --> n13["As despesas aprovadas vão juntas com o chamado para o financeiro, ao final dele"]
+    n2 -->|Projetos D1| n14["Cada novo projeto tem um orçamento da equipe de Projetos para a execução das atividades"]
+    n14 --> n15["Valores não são padronizados e variam conforme o projeto, suas características e o orçamento disponível"]
+    n15 --> n16["Chamados identificados pela sigla D1"]
+    n16 --> n17["Operação cria a campanha de valores e dispara para os técnicos pais, tanto os que têm filhos quanto os que atuam sozinhos"]
+    n17 --> n18{"Técnico pai está de acordo com o valor?"}
+    n18 -->|Sim| n19["O técnico pai entra na lista de chamados da campanha"]
+    n19 --> n20["Quando houver chamados dessa campanha, eles caem para os técnicos pais que aceitaram e para os filhos deles"]
+    n20 --> n21["O valor nunca é mostrado ao técnico filho"]
+    n18 -->|Não| n22["Os chamados da campanha não vão para esse técnico pai nem para os filhos dele"]
+    n2 -->|Atendimento CLT| n23["Operação precisa direcionar um profissional CLT para uma atividade"]
+    n23 --> n24["Na abertura do chamado é criada a sigla CLT dentro do Tiflux"]
+    n24 --> n25["Valores já previamente conhecidos"]
+    n25 --> n26["Sem negociação financeira no acionamento, pois as condições já estão estabelecidas"]
+"""
+
 SEED_DIAGRAMS = [
     dict(
         fluxo="C", kind="ideal", ordem=0,
@@ -655,6 +688,14 @@ SEED_DIAGRAMS = [
                   "OPERADOR (clicando em 'Acompanhamento Concluido'), nao o tecnico. "
                   "Edite este diagrama conforme forem aparecendo mais situacoes reais.",
         mermaid=FLOW_C_ATUAL,
+    ),
+    dict(
+        fluxo="financeiro", kind="ideal", ordem=0,
+        titulo="Valores do serviço — os 3 cenários",
+        descricao="Como o valor da atividade chega ao técnico em cada cenário: contratual "
+                  "(N1, M1 e S1), projetos (D1) e atendimento CLT. Desenho inicial a partir "
+                  "da descrição dos cenários — ajuste conforme o processo for detalhado.",
+        mermaid=FLUXO_FINANCEIRO_CENARIOS,
     ),
 ]
 
