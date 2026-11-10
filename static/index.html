@@ -365,6 +365,33 @@
       </div>
     </section>
 
+    <!-- só nos módulos com processo a desenhar (catálogo: processo=true): o mesmo editor
+         de diagramas dos fluxos do Dispatcher, guardado com fluxo = a chave do módulo -->
+    <section class="ajustes-processo" id="ajustes-processo" hidden>
+      <div class="ajustes-processo-head">
+        <div>
+          <h3 id="ajustes-processo-titulo">Processo</h3>
+          <p>O processo ainda não está desenhado. Desenhe aqui como ele deve funcionar — dá pra mexer
+          direto no desenho (<b>Editar aqui</b>) ou pelo <b>editor completo</b>. O que ficar em dúvida
+          ou depender de decisão entra na lista de pendências logo abaixo.</p>
+        </div>
+        <button type="button" class="add-btn" id="btn-add-diagram-modulo">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Novo diagrama
+        </button>
+      </div>
+      <div class="flow-empty" id="ajustes-diagramas-vazio" hidden>
+        <div class="flow-empty-badge" id="ajustes-diagramas-badge"></div>
+        <h2>Nenhum diagrama ainda</h2>
+        <p>Crie o primeiro pra começar a desenhar o processo.</p>
+        <button type="button" class="add-btn" id="ajustes-diagramas-add">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Criar primeiro diagrama
+        </button>
+      </div>
+      <div id="ajustes-diagramas"></div>
+    </section>
+
     <nav class="ajustes-versoes" id="ajustes-versoes" aria-label="Selecionar versão dos ajustes"></nav>
 
     <div class="ajustes-stats" id="ajustes-stats"></div>

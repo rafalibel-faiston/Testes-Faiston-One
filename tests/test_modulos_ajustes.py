@@ -340,3 +340,59 @@ def test_export_completo_traz_a_coluna_modulo(client):
     cab_obs = [c.value for c in wb["Observações (ajustes)"][1]]
     texto = cab_obs.index("Texto")
     assert any(l[0] == "Financeiro v1 #01" and "alinhar escopo" in l[texto] for l in obs)
+
+
+# ------------------------------------------- processo a desenhar (diagramas)
+
+def test_catalogo_marca_financeiro_e_projetos_como_processo_a_desenhar(client):
+    cat = {m["key"]: m for m in client.get("/api/ativos/modulos").json()}
+    assert {k for k, m in cat.items() if m["processo"]} == {"financeiro", "projetos"}
+    assert "ainda não está desenhado" in cat["financeiro"]["descricao"]
+
+
+def _diagrama(client, fluxo, titulo="Fluxo de aprovação", **extra):
+    resp = client.post("/api/diagramas", json={
+        "fluxo": fluxo, "kind": "ideal", "titulo": titulo,
+        "mermaid": "flowchart TD\n  n1[Início] --> n2[Fim]", **extra})
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def test_diagrama_de_modulo_fica_separado_dos_fluxos_do_dispatcher(client):
+    fin = _diagrama(client, "financeiro")
+    proj = _diagrama(client, "projetos", titulo="Fluxo de projetos")
+    try:
+        assert [d["id"] for d in client.get("/api/diagramas", params={"fluxo": "financeiro"}).json()] == [fin["id"]]
+        assert [d["id"] for d in client.get("/api/diagramas", params={"fluxo": "projetos"}).json()] == [proj["id"]]
+        # os fluxos A/B/C não enxergam os desenhos dos módulos
+        for fluxo in ("A", "B", "C"):
+            ids = {d["id"] for d in client.get("/api/diagramas", params={"fluxo": fluxo}).json()}
+            assert not ids & {fin["id"], proj["id"]}
+    finally:
+        for d in (fin, proj):
+            client.delete(f"/api/diagramas/{d['id']}")
+
+
+def test_novidades_do_diagrama_de_modulo_vao_pra_trilha_dos_ajustes(client):
+    d = _diagrama(client, "financeiro", titulo="Aprovação de pagamento")
+    try:
+        client.patch(f"/api/diagramas/{d['id']}", json={"descricao": "primeira versão"})
+        ajustes = [a["texto"] for a in client.get("/api/atividades", params={"fluxo": "ATIVOS"}).json()]
+        assert any('"Aprovação de pagamento" (Financeiro) criado' in t for t in ajustes)
+        # e não poluem as Novidades do Fluxo C do Dispatcher
+        fluxo_c = [a["texto"] for a in client.get("/api/atividades", params={"fluxo": "C"}).json()]
+        assert not any("Aprovação de pagamento" in t for t in fluxo_c)
+        client.delete(f"/api/diagramas/{d['id']}")
+        ajustes = [a["texto"] for a in client.get("/api/atividades", params={"fluxo": "ATIVOS"}).json()]
+        assert any('"Aprovação de pagamento" (Financeiro) excluído' in t for t in ajustes)
+    finally:
+        client.delete(f"/api/diagramas/{d['id']}")
+
+
+def test_diagrama_de_fluxo_do_dispatcher_continua_na_trilha_do_fluxo(client):
+    d = _diagrama(client, "B", titulo="Desenho do Fluxo B de teste")
+    try:
+        fluxo_b = [a["texto"] for a in client.get("/api/atividades", params={"fluxo": "B"}).json()]
+        assert any("Desenho do Fluxo B de teste" in t and "(" not in t for t in fluxo_b)
+    finally:
+        client.delete(f"/api/diagramas/{d['id']}")

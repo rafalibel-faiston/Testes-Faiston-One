@@ -464,8 +464,20 @@ aos dois perfis (Faiston e LP), cada uma com o próprio badge de itens em aberto
   DEFAULT 'ativos'`) em bancos que já existiam; os itens antigos viram `ativos`.
   Funciona em SQLite e Postgres e é idempotente.
 
+**Módulos com processo a desenhar (`processo: true`).** Financeiro e Projetos ainda
+não têm processo desenhado — não há "como está hoje" pra comparar —, então a aba
+deles ganha, acima da lista de pendências, o **editor de diagramas** dos fluxos do
+Dispatcher (Mermaid, com "Editar aqui" e o editor completo). Os diagramas são os
+mesmos de `/api/diagramas`, guardados com `fluxo` = a chave do módulo (`financeiro`,
+`projetos`); nascem como "Como deveria funcionar". Ficam separados dos fluxos A/B/C
+(não aparecem na visão *Fluxos* do Dispatcher nem no tutorial), e as Novidades deles
+entram na trilha dos módulos de ajustes, com o nome do módulo. As dúvidas e decisões
+em aberto continuam na lista de pendências logo abaixo. Nada de etapa ou regra vem
+semeado: o desenho começa vazio, a LPD ainda não detalhou o escopo.
+
 **Como acrescentar um módulo:** uma entrada na lista `MODULOS` de
-`app/modulos.py` (`key`, `label`, `titulo`, `descricao`, `versao_padrao`). A ordem
+`app/modulos.py` (`key`, `label`, `titulo`, `descricao`, `versao_padrao` e, se o
+processo ainda precisa ser desenhado, `processo: True`). A ordem
 da lista é a ordem das abas. Não precisa de migração, tela nem rota nova — a aba,
 o select do modal, a pauta (`/relatorio`), o export e o MCP já enxergam o módulo.
 
