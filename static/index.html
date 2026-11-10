@@ -118,6 +118,10 @@
       <span class="flow-tab-name">Fluxo C</span>
       <span class="flow-tab-sub">Despacho NEXO · finalizado em testes</span>
     </button>
+    <button type="button" class="flow-tab" data-flow="projetos" aria-selected="false">
+      <span class="flow-tab-name">Projetos</span>
+      <span class="flow-tab-sub">processo a desenhar</span>
+    </button>
   </nav>
 
   <div class="view-switch-row">
@@ -129,6 +133,11 @@
       <button type="button" class="view-tab active" data-view="situacoes" role="tab" aria-selected="true">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5a2 2 0 0 1 2-2h8.5L20 7.5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M14 3v5h5"/><path d="M8 13h8M8 17h5"/></svg>
         Situações
+      </button>
+      <!-- só nos fluxos que têm um módulo de pendências da LPD no catálogo (Fluxo A, Projetos) -->
+      <button type="button" class="view-tab" data-view="pendencias" role="tab" aria-selected="false" hidden>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        Pendências <span class="module-tab-count" id="view-tab-pendencias-count" hidden>0</span>
       </button>
     </div>
     <div class="global-actions">
@@ -335,6 +344,10 @@
     </div>
     <div id="situacoes"></div>
   </div><!-- /view-situacoes -->
+
+  <!-- Pendências do fluxo aberto: o painel de ajustes (#module-ativos) é montado aqui por
+       dentro quando a visão está ativa, e volta pro topo quando se abre uma aba de módulo -->
+  <div id="view-pendencias" hidden></div>
 
   </div><!-- /module-dispatcher -->
 

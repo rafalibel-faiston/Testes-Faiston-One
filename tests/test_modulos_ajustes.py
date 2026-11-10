@@ -11,7 +11,7 @@ from app import modulos, models, seed_data
 from app.database import Base, SessionLocal
 from app.routers import ativos
 
-NOVOS = ["plataforma", "financeiro", "projetos", "dashboard", "fluxo-a"]
+NOVOS = ["plataforma", "financeiro", "projetos", "fluxo-a"]
 
 
 def _ajustes(client, **filtros):
@@ -27,12 +27,12 @@ def _novo(client, **campos):
 
 # ----------------------------------------------------------------- catálogo
 
-def test_catalogo_tem_os_seis_modulos_na_ordem_das_abas(client):
+def test_catalogo_tem_os_cinco_modulos_na_ordem_das_abas(client):
     cat = client.get("/api/ativos/modulos").json()
     assert [m["key"] for m in cat] == ["ativos", *NOVOS]
     assert {m["key"]: m["versao_padrao"] for m in cat} == {
         "ativos": "v2", "plataforma": "v1", "financeiro": "v1",
-        "projetos": "v1", "dashboard": "v1", "fluxo-a": "v1",
+        "projetos": "v1", "fluxo-a": "v1",
     }
     assert all(m["label"] and m["titulo"] and m["descricao"] for m in cat)
 
@@ -44,7 +44,11 @@ def test_norm_modulo_nunca_levanta_e_cai_em_ativos():
     assert modulos.norm_modulo("FLUXO-A") == "fluxo-a"
     assert modulos.versao_padrao("nao-existe") == "v2"
     assert modulos.versao_padrao("projetos") == "v1"
-    assert modulos.label("dashboard") == "Dashboard e Relatórios"
+    assert modulos.label("plataforma") == "Geral"
+    # o módulo Dashboard foi incorporado ao Geral: a chave antiga cai lá, não em "ativos"
+    assert modulos.norm_modulo("dashboard") == "plataforma"
+    assert modulos.norm_modulo(" Dashboard ") == "plataforma"
+    assert modulos.label("dashboard") == "Geral"
     assert modulos.label(None) == "Gestão de Ativos"
 
 
@@ -95,7 +99,7 @@ def test_seed_das_pendencias_lpd_em_banco_limpo_e_idempotente():
         for a in itens:
             por_modulo.setdefault(a.modulo, []).append(a)
         assert {k: len(v) for k, v in por_modulo.items()} == {
-            "plataforma": 4, "financeiro": 1, "projetos": 1, "dashboard": 2, "fluxo-a": 7}
+            "plataforma": 6, "financeiro": 1, "projetos": 1, "fluxo-a": 7}
         for a in itens:
             assert (a.versao, a.status, a.responsavel, a.autor) == ("v1", "levantado", "LPD", "Pendências LPD")
         # numeração começa em 1 em cada módulo, sem buraco
@@ -188,7 +192,9 @@ def test_filtro_por_modulo(client):
         itens = _ajustes(client, modulo=modulo)
         assert itens and {a["modulo"] for a in itens} == {modulo}
     assert len(_ajustes(client, modulo="fluxo-a")) == 7
-    assert len(_ajustes(client, modulo="plataforma")) == 4
+    assert len(_ajustes(client, modulo="plataforma")) == 6
+    # a chave antiga do Dashboard filtra o Geral
+    assert {a["id"] for a in _ajustes(client, modulo="dashboard")} == {a["id"] for a in _ajustes(client, modulo="plataforma")}
     assert {a["modulo"] for a in _ajustes(client)} >= {"ativos", *NOVOS}      # sem filtro: todos
     assert _ajustes(client, modulo="fluxo-a", tipo="Bug")[0]["titulo"].startswith("BUG:")
 
@@ -229,8 +235,8 @@ def test_mover_de_versao_dentro_do_modulo_ignora_o_proprio_item(client):
 def test_mover_com_modulo_e_versao_explicitos(client):
     item = _novo(client, modulo="ativos")
     movido = client.patch(f"/api/ativos/ajustes/{item['id']}",
-                          json={"modulo": "dashboard", "versao": "v4"}).json()
-    assert (movido["modulo"], movido["versao"], movido["numero"]) == ("dashboard", "v4", 1)
+                          json={"modulo": "plataforma", "versao": "v4"}).json()
+    assert (movido["modulo"], movido["versao"], movido["numero"]) == ("plataforma", "v4", 1)
 
 
 # ------------------------------------------------- técnico, Novidades, MCP
@@ -252,7 +258,7 @@ def test_relato_do_tecnico_vira_ajuste_em_ativos_mesmo_com_outros_modulos_mais_n
     ajuste = next(a for a in _ajustes(client) if a["id"] == virada["ajuste_id"])
     assert ajuste["modulo"] == "ativos"
     assert ajuste["versao"] == "v2"                       # a leva ativa de "ativos"
-    assert not virada["ajuste_ref"].startswith(("Financeiro", "Plataforma"))
+    assert not virada["ajuste_ref"].startswith(("Financeiro", "Geral"))
     assert virada["ajuste_ref"] == f"v2 #{ajuste['numero']:02d}"   # em ativos a ref não leva o módulo
 
 
@@ -269,8 +275,8 @@ def test_novidades_citam_o_modulo(client):
     item = _novo(client, titulo="Aviso de SLA estourado", modulo="plataforma")
     client.patch(f"/api/ativos/ajustes/{item['id']}", json={"status": "analise"})
     textos = [a["texto"] for a in client.get("/api/atividades", params={"fluxo": "ATIVOS"}).json()]
-    assert any("criado em Plataforma v1" in t for t in textos)
-    assert any("Plataforma v1" in t and "Em análise" in t for t in textos)
+    assert any("criado em Geral v1" in t for t in textos)
+    assert any("Geral v1" in t and "Em análise" in t for t in textos)
 
 
 def test_mcp_lista_e_cria_com_modulo(client):
@@ -295,13 +301,13 @@ def test_mcp_lista_e_cria_com_modulo(client):
 
 def test_pauta_agrupa_por_modulo_e_mostra_o_nome(client):
     pauta = client.get("/relatorio").text
-    for rotulo in ("Plataforma · Leva v1", "Financeiro · Leva v1", "Projetos · Leva v1",
-                   "Dashboard e Relatórios · Leva v1", "Fluxo A — Finalização · Leva v1",
+    for rotulo in ("Geral · Leva v1", "Financeiro · Leva v1", "Projetos · Leva v1",
+                   "Fluxo A — Finalização · Leva v1",
                    "Gestão de Ativos · Leva v2"):
         assert rotulo in pauta
     assert "Módulo Financeiro" in pauta and "Publicação do app na Apple App Store" in pauta
     # módulos na ordem do catálogo: ativos antes de plataforma, fluxo-a por último
-    assert pauta.index("Gestão de Ativos · Leva v2") < pauta.index("Plataforma · Leva v1") \
+    assert pauta.index("Gestão de Ativos · Leva v2") < pauta.index("Geral · Leva v1") \
         < pauta.index("Financeiro · Leva v1") < pauta.index("Fluxo A — Finalização · Leva v1")
 
 
@@ -332,8 +338,9 @@ def test_export_completo_traz_a_coluna_modulo(client):
     assert cabecalho[:3] == ["Módulo", "Versão", "Nº"]
     linhas = [[c.value for c in l] for l in aba.iter_rows(min_row=2)]
     modulos_na_planilha = {l[0] for l in linhas}
-    assert modulos_na_planilha >= {"Gestão de Ativos", "Plataforma", "Financeiro", "Projetos",
-                                   "Dashboard e Relatórios", "Fluxo A — Finalização"}
+    assert modulos_na_planilha >= {"Gestão de Ativos", "Geral", "Financeiro", "Projetos",
+                                   "Fluxo A — Finalização"}
+    assert "Dashboard e Relatórios" not in modulos_na_planilha
     assert any(l[0] == "Financeiro" and l[3] == "Módulo Financeiro" for l in linhas)
 
     obs = [[c.value for c in l] for l in wb["Observações (ajustes)"].iter_rows(min_row=2)]
@@ -344,9 +351,10 @@ def test_export_completo_traz_a_coluna_modulo(client):
 
 # ------------------------------------------- processo a desenhar (diagramas)
 
-def test_catalogo_marca_financeiro_e_projetos_como_processo_a_desenhar(client):
+def test_catalogo_marca_financeiro_como_processo_a_desenhar(client):
     cat = {m["key"]: m for m in client.get("/api/ativos/modulos").json()}
-    assert {k for k, m in cat.items() if m["processo"]} == {"financeiro", "projetos"}
+    # o Projetos desenha o processo na visão Fluxos do Dispatcher, não na aba de módulo
+    assert {k for k, m in cat.items() if m["processo"]} == {"financeiro"}
     assert "ainda não está desenhado" in cat["financeiro"]["descricao"]
 
 
@@ -395,6 +403,79 @@ def test_diagrama_de_fluxo_do_dispatcher_continua_na_trilha_do_fluxo(client):
     try:
         fluxo_b = [a["texto"] for a in client.get("/api/atividades", params={"fluxo": "B"}).json()]
         assert any("Desenho do Fluxo B de teste" in t and "(" not in t for t in fluxo_b)
+    finally:
+        client.delete(f"/api/diagramas/{d['id']}")
+
+
+# -------------------------------------------- Dispatcher, Geral e módulo incorporado
+
+def test_catalogo_diz_quais_modulos_moram_no_dispatcher(client):
+    cat = {m["key"]: m for m in client.get("/api/ativos/modulos").json()}
+    assert cat["fluxo-a"]["dispatcher_fluxo"] == "A"
+    assert cat["projetos"]["dispatcher_fluxo"] == "projetos"
+    assert all(cat[k]["dispatcher_fluxo"] is None for k in ("ativos", "plataforma", "financeiro"))
+    assert cat["plataforma"]["label"] == "Geral" and "Dashboard" in cat["plataforma"]["descricao"]
+    assert "dashboard" not in cat
+
+
+def test_dashboard_e_relatorios_estao_no_geral(client):
+    geral = {a["titulo"]: a for a in _ajustes(client, modulo="plataforma")}
+    assert {"Finalização do Dashboard", "Relatórios da ferramenta com exportação"} <= set(geral)
+    assert sorted(a["numero"] for a in geral.values()) == [1, 2, 3, 4, 5, 6]
+    # a chave antiga ainda funciona na criação (conector/script que não foi atualizado)
+    criado = _novo(client, modulo="dashboard")
+    assert (criado["modulo"], criado["versao"]) == ("plataforma", "v1")
+
+
+def test_migracao_leva_o_dashboard_pro_geral_sem_repetir_numero():
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(bind=engine)
+    db = sessionmaker(bind=engine)()
+    try:
+        def novo(modulo, versao, numero, titulo):
+            db.add(models.AtivoAjuste(modulo=modulo, versao=versao, numero=numero, titulo=titulo,
+                                      atual="a", esperado="b"))
+        novo("plataforma", "v1", 1, "SLA")
+        novo("plataforma", "v1", 2, "Perfis")
+        novo("dashboard", "v1", 1, "Dashboard")
+        novo("dashboard", "v1", 2, "Relatórios")
+        novo("dashboard", "v2", 1, "Dashboard v2")        # leva que o Geral ainda não tem
+        novo("financeiro", "v1", 1, "Financeiro")          # outro módulo não é tocado
+        db.commit()
+
+        assert seed_data.migrar_modulos_aposentados(db) == 3
+        assert seed_data.migrar_modulos_aposentados(db) == 0      # idempotente
+        db.expire_all()
+        geral = db.query(models.AtivoAjuste).filter_by(modulo="plataforma").order_by(
+            models.AtivoAjuste.versao, models.AtivoAjuste.numero).all()
+        assert [(a.versao, a.numero, a.titulo) for a in geral] == [
+            ("v1", 1, "SLA"), ("v1", 2, "Perfis"), ("v1", 3, "Dashboard"), ("v1", 4, "Relatórios"),
+            ("v2", 1, "Dashboard v2")]
+        assert db.query(models.AtivoAjuste).filter_by(modulo="dashboard").count() == 0
+        assert db.query(models.AtivoAjuste).filter_by(modulo="financeiro").one().numero == 1
+
+        # o seed das pendências depois da migração reconhece os itens (título igual) e não duplica
+        # os que a LPD já tinha no módulo antigo
+        db.add(models.AtivoAjuste(modulo="dashboard", versao="v1", numero=1,
+                                  titulo="Finalização do Dashboard", atual="a", esperado="b"))
+        db.commit()
+        seed_data.migrar_modulos_aposentados(db)
+        seed_data.seed_pendencias_lpd(db)
+        titulos = [a.titulo for a in db.query(models.AtivoAjuste).filter_by(modulo="plataforma", versao="v1")]
+        assert titulos.count("Finalização do Dashboard") == 1
+    finally:
+        db.close()
+
+
+def test_diagrama_do_projetos_fica_na_trilha_do_proprio_fluxo(client):
+    """O Projetos é uma aba de fluxo do Dispatcher: o desenho dele aparece nas Novidades
+    do fluxo "projetos", não nas dos ajustes (que é o caso do Financeiro)."""
+    d = _diagrama(client, "projetos", titulo="Desenho do Projetos de teste")
+    try:
+        proj = [a["texto"] for a in client.get("/api/atividades", params={"fluxo": "projetos"}).json()]
+        assert any("Desenho do Projetos de teste" in t for t in proj)
+        ajustes = [a["texto"] for a in client.get("/api/atividades", params={"fluxo": "ATIVOS"}).json()]
+        assert not any("Desenho do Projetos de teste" in t for t in ajustes)
     finally:
         client.delete(f"/api/diagramas/{d['id']}")
 

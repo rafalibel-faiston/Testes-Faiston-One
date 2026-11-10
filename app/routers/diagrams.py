@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..activity import log as log_activity
 from ..database import get_db
-from ..modulos import e_modulo, label as modulo_label
+from ..modulos import desenha_processo, label as modulo_label
 from .ativos import FLUXO_ATIVOS
 
 router = APIRouter(tags=["diagrams"])
@@ -15,14 +15,15 @@ KINDS = {"atual", "ideal"}
 
 
 def _trilha(fluxo: str) -> str:
-    """O "fluxo" da trilha de Novidades. Os diagramas dos fluxos A/B/C aparecem nas
-    Novidades do fluxo; os de um módulo (Financeiro, Projetos) aparecem nas
-    Novidades dos módulos de ajustes, que é onde a aba deles lê."""
-    return FLUXO_ATIVOS if e_modulo(fluxo) else fluxo
+    """O "fluxo" da trilha de Novidades. Os diagramas dos fluxos do Dispatcher (A/B/C e
+    Projetos, que é uma aba de fluxo) aparecem nas Novidades do fluxo; os de um módulo
+    com aba própria (Financeiro) aparecem nas Novidades dos módulos de ajustes, que é
+    onde a aba dele lê."""
+    return FLUXO_ATIVOS if desenha_processo(fluxo) else fluxo
 
 
 def _onde(fluxo: str) -> str:
-    return f" ({modulo_label(fluxo)})" if e_modulo(fluxo) else ""
+    return f" ({modulo_label(fluxo)})" if desenha_processo(fluxo) else ""
 
 
 @router.get("/diagramas", response_model=List[schemas.FlowDiagramOut])
