@@ -1,6 +1,7 @@
 """Módulos do backlog de ajustes: catálogo, migração, seed das pendências da LPD,
 numeração por módulo, e a presença do módulo na pauta e no export."""
 import io
+import re
 
 import pytest
 from openpyxl import load_workbook
@@ -478,45 +479,79 @@ def test_diagrama_do_projetos_fica_na_trilha_do_proprio_fluxo(client):
         client.delete(f"/api/diagramas/{d['id']}")
 
 
-def test_financeiro_nasce_com_o_diagrama_dos_tres_cenarios(client):
+TITULOS_FINANCEIRO = [
+    "Valores do serviço — os 3 cenários", "Cenário 1 — Contratual (N1, M1 e S1)",
+    "Cenário 2 — Projetos (D1)", "Cenário 3 — Atendimento CLT",
+]
+
+
+def _diagramas_financeiro(client):
+    return {d["titulo"]: d for d in client.get("/api/diagramas", params={"fluxo": "financeiro"}).json()}
+
+
+def test_financeiro_nasce_com_a_visao_geral_e_um_diagrama_por_cenario(client):
     from app import seed_data
 
-    diagramas = client.get("/api/diagramas", params={"fluxo": "financeiro"}).json()
-    cenarios = [d for d in diagramas if d["titulo"] == "Valores do serviço — os 3 cenários"]
-    assert len(cenarios) == 1 and cenarios[0]["kind"] == "ideal"
-    mermaid = cenarios[0]["mermaid"]
-    for trecho in ("N1, M1 e S1", "Rede Credenciada", "pedágio, estacionamento", "comprovantes",
-                   "sigla D1", "orçamento", "CLT", "Sem negociação financeira",
-                   # respostas do time às dúvidas do desenho
-                   "não é obrigado a aceitar todos os chamados",
-                   "aprovação na hora do próprio chamado",
-                   "atrelado ao financeiro do técnico", "juntas com o chamado para o financeiro, ao final dele",
-                   "campanha", "técnicos pais", "atuam sozinhos", "lista de chamados da campanha",
-                   "caem para os técnicos pais que aceitaram e para os filhos deles",
-                   "nunca é mostrado ao técnico filho",
-                   "sigla CLT dentro do Tiflux"):
-        assert trecho in mermaid
-    # toda caixa citada numa seta foi definida (senão o Mermaid desenha uma caixa com o id cru)
-    import re
-    definidos = set(re.findall(r'\b(n\d+)\s*[\[{]', mermaid))
-    citados = set(re.findall(r'\bn\d+\b', mermaid))
-    assert citados == definidos
+    diagramas = _diagramas_financeiro(client)
+    assert [t for t in TITULOS_FINANCEIRO if t in diagramas] == TITULOS_FINANCEIRO
+    assert all(diagramas[t]["kind"] == "ideal" for t in TITULOS_FINANCEIRO)
+    # a visão geral vem primeiro, depois os cenários, na ordem
+    ordem = [d["titulo"] for d in client.get("/api/diagramas", params={"fluxo": "financeiro"}).json()
+             if d["titulo"] in TITULOS_FINANCEIRO]
+    assert ordem == TITULOS_FINANCEIRO
+
+    conteudo = {
+        TITULOS_FINANCEIRO[0]: ("Tiflux", "define a sigla", "N1, M1 ou S1", "valor vem da campanha",
+                                "valores já conhecidos", "guarda o valor contratual de cada sigla"),
+        TITULOS_FINANCEIRO[1]: ("N1, M1 ou S1", "Valor da sigla vem do cadastro do técnico", "Rede Credenciada",
+                                "sem obrigação de aceitar todos", "valor contratual atrelado ao técnico",
+                                "pedágio, estacionamento ou materiais", "Despesa aprovada?",
+                                "despesa entra junto, no fim do chamado"),
+        TITULOS_FINANCEIRO[2]: ("sigla D1", "orçamento", "campanha", "técnico: campanha enviada aos pais, com ou sem filhos",
+                                "lista de chamados da campanha", "chamado cai para o pai e para os filhos",
+                                "Filho nunca vê o valor"),
+        TITULOS_FINANCEIRO[3]: ("sigla CLT na abertura do chamado", "Operação", "Valores já conhecidos",
+                                "Sem negociação financeira"),
+    }
+    for titulo, trechos in conteudo.items():
+        mermaid = diagramas[titulo]["mermaid"]
+        for trecho in trechos:
+            assert trecho in mermaid, (titulo, trecho)
+        # toda caixa citada foi definida (senão o Mermaid desenha uma caixa com o id cru)
+        definidos = set(re.findall(r'\b(n\d+)\s*[\[{(]', mermaid))
+        citados = set(re.findall(r'\bn\d+\b', mermaid))
+        assert citados == definidos, titulo
+        # texto curto pra ler: nenhuma caixa vira parágrafo
+        rotulos = re.findall(r'"([^"]+)"', mermaid)
+        assert rotulos and max(len(r) for r in rotulos) <= 80, titulo
+        # as cores dos tipos de card usados estão definidas (senão o botão/notificação fica sem cor)
+        for classe in re.findall(r'^\s*class [\w,]+ (\w+);', mermaid, re.M):
+            assert f"classDef {classe} " in mermaid, (titulo, classe)
+
+    # usa os outros tipos de card do editor, não só caixas: decisão, botão e notificação
+    todos = "\n".join(diagramas[t]["mermaid"] for t in TITULOS_FINANCEIRO)
+    assert re.search(r'\bn\d+\{"', todos)                    # decisão
+    assert re.search(r'\bn\d+\("', todos)                    # botão (ação de sistema)
+    assert re.search(r'\bn\d+\(\["🔔 Notifica o técnico: ', todos)   # notificação ao técnico
+
     # idempotente: outra rodada do seed não duplica nem sobrescreve o que o time editar
-    client.patch(f"/api/diagramas/{cenarios[0]['id']}", json={"descricao": "editado pelo time"})
+    alvo = diagramas[TITULOS_FINANCEIRO[1]]
+    client.patch(f"/api/diagramas/{alvo['id']}", json={"descricao": "editado pelo time"})
     db = SessionLocal()
     try:
         assert seed_data.seed_diagrams(db) == 0
     finally:
         db.close()
-    de_novo = client.get("/api/diagramas", params={"fluxo": "financeiro"}).json()
-    assert [d["descricao"] for d in de_novo if d["id"] == cenarios[0]["id"]] == ["editado pelo time"]
-    # o Projetos segue vazio: nada foi inventado pra ele
+    de_novo = _diagramas_financeiro(client)
+    assert len([t for t in TITULOS_FINANCEIRO if t in de_novo]) == 4
+    assert de_novo[TITULOS_FINANCEIRO[1]]["descricao"] == "editado pelo time"
+    # o Projetos (aba de fluxo do Dispatcher) segue sem desenho: nada foi inventado pra ele
     assert client.get("/api/diagramas", params={"fluxo": "projetos"}).json() == []
 
 
-def test_diagrama_dos_cenarios_entra_mesmo_com_outro_desenho_no_financeiro():
+def test_diagramas_dos_cenarios_entram_mesmo_com_outro_desenho_no_financeiro():
     """Se alguém já criou um diagrama na aba (o tipo padrão ali é "como deveria funcionar"),
-    o seed não pode deixar de trazer o dos 3 cenários — mas também não mexe no que existe."""
+    o seed não pode deixar de trazer os dos cenários — mas também não mexe no que existe."""
     engine = create_engine("sqlite://")
     Base.metadata.create_all(bind=engine)
     db = sessionmaker(bind=engine)()
@@ -526,17 +561,17 @@ def test_diagrama_dos_cenarios_entra_mesmo_com_outro_desenho_no_financeiro():
         db.commit()
         seed_data.seed_diagrams(db)
         titulos = sorted(d.titulo for d in db.query(models.FlowDiagram).filter_by(fluxo="financeiro"))
-        assert titulos == ["Rascunho do time", "Valores do serviço — os 3 cenários"]
+        assert titulos == sorted(["Rascunho do time", *TITULOS_FINANCEIRO])
         # nada do que o time tinha é alterado
         rascunho = db.query(models.FlowDiagram).filter_by(titulo="Rascunho do time").one()
         assert (rascunho.descricao, rascunho.seeded) == ("meu texto", False)
         # idempotente: nem duplica o semeado, nem desfaz edição dele
-        semeado = db.query(models.FlowDiagram).filter_by(titulo="Valores do serviço — os 3 cenários").one()
-        semeado.descricao = "editado"
+        semeado = db.query(models.FlowDiagram).filter_by(titulo=TITULOS_FINANCEIRO[0]).one()
+        semeado.descricao, semeado.seeded = "editado", False    # editar pela tela zera o seeded
         db.commit()
         assert seed_data.seed_diagrams(db) == 0
-        assert db.query(models.FlowDiagram).filter_by(fluxo="financeiro").count() == 2
-        assert db.query(models.FlowDiagram).filter_by(titulo="Valores do serviço — os 3 cenários").one().descricao == "editado"
+        assert db.query(models.FlowDiagram).filter_by(fluxo="financeiro").count() == 5
+        assert db.query(models.FlowDiagram).filter_by(titulo=TITULOS_FINANCEIRO[0]).one().descricao == "editado"
     finally:
         db.close()
 
@@ -660,5 +695,30 @@ def test_migracao_leva_os_ajustes_do_fluxo_a_pra_situacoes_sem_perder_nada():
         # não duplicou: uma situação só pra esse título, e as 7 da lista existem uma vez cada
         assert db.query(Situacao).filter_by(fluxo="A").count() == 8     # 7 da lista + "Item descartado"
         assert db.query(Situacao).filter_by(fluxo="A", titulo="Item descartado").one().active is False
+    finally:
+        db.close()
+
+
+def test_modelo_inicial_nao_editado_acompanha_o_seed_e_o_editado_fica():
+    """Quem já subiu a versão antiga do diagrama (e não mexeu) recebe a nova; quem editou, não."""
+    db = _banco()
+    try:
+        seed_data.seed_diagrams(db)
+        d = db.query(models.FlowDiagram).filter_by(titulo=TITULOS_FINANCEIRO[0]).one()
+        atual = d.mermaid
+        d.mermaid, d.descricao = "flowchart TD\n    n1[Versão antiga] --> n2[x]", "descrição antiga"
+        assert d.seeded is True
+        db.commit()
+
+        seed_data.seed_diagrams(db)                      # ninguém editou: volta pra versão do seed
+        db.refresh(d)
+        assert d.mermaid == atual and d.seeded is True
+        assert db.query(models.FlowDiagram).filter_by(fluxo="financeiro").count() == 4
+
+        d.mermaid, d.seeded = "flowchart TD\n    n1[Do time] --> n2[x]", False       # o time editou
+        db.commit()
+        seed_data.seed_diagrams(db)
+        db.refresh(d)
+        assert "Do time" in d.mermaid
     finally:
         db.close()
