@@ -411,7 +411,10 @@ def test_financeiro_nasce_com_o_diagrama_dos_tres_cenarios(client):
                    # respostas do time às dúvidas do desenho
                    "não é obrigado a aceitar todos os chamados",
                    "aprovação na hora do próprio chamado",
-                   "campanha", "técnicos pais", "filhos", "nunca é mostrado ao técnico filho",
+                   "atrelado ao financeiro do técnico", "juntas com o chamado para o financeiro, ao final dele",
+                   "campanha", "técnicos pais", "atuam sozinhos", "lista de chamados da campanha",
+                   "caem para os técnicos pais que aceitaram e para os filhos deles",
+                   "nunca é mostrado ao técnico filho",
                    "sigla CLT dentro do Tiflux"):
         assert trecho in mermaid
     # toda caixa citada numa seta foi definida (senão o Mermaid desenha uma caixa com o id cru)

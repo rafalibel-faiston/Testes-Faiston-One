@@ -652,20 +652,23 @@ FLUXO_FINANCEIRO_CENARIOS = """flowchart TD
     n6 --> n7
     n7 -->|Sim| n8["Atendimento realizado normalmente"]
     n7 -->|Não| n9["Técnico recusa, pois não é obrigado a aceitar todos os chamados"]
-    n8 --> n10["Na finalização o técnico informa despesas adicionais, como pedágio, estacionamento ou materiais, com os comprovantes"]
-    n10 --> n11["As despesas adicionais passam por aprovação na hora do próprio chamado"]
-    n2 -->|Projetos D1| n12["Cada novo projeto tem um orçamento da equipe de Projetos para a execução das atividades"]
-    n12 --> n13["Valores não são padronizados e variam conforme o projeto, suas características e o orçamento disponível"]
-    n13 --> n14["Chamados identificados pela sigla D1"]
-    n14 --> n15["Operação cria uma campanha e envia aos técnicos pais"]
-    n15 --> n16{"Técnico pai aceita o valor?"}
-    n16 -->|Sim| n17["No acionamento, os chamados vão só para os filhos dos técnicos pais que aceitaram"]
-    n17 --> n18["O valor nunca é mostrado ao técnico filho"]
-    n16 -->|Não| n19["Os chamados não vão para os filhos desse técnico pai"]
-    n2 -->|Atendimento CLT| n20["Operação precisa direcionar um profissional CLT para uma atividade"]
-    n20 --> n21["Na abertura do chamado é criada a sigla CLT dentro do Tiflux"]
-    n21 --> n22["Valores já previamente conhecidos"]
-    n22 --> n23["Sem negociação financeira no acionamento, pois as condições já estão estabelecidas"]
+    n8 --> n10["O valor contratual acordado do chamado fica atrelado ao financeiro do técnico"]
+    n10 --> n11["Na finalização o técnico informa as despesas adicionais, se houver, como pedágio, estacionamento ou materiais, com os comprovantes"]
+    n11 --> n12["As despesas passam por aprovação na hora do próprio chamado"]
+    n12 --> n13["As despesas aprovadas vão juntas com o chamado para o financeiro, ao final dele"]
+    n2 -->|Projetos D1| n14["Cada novo projeto tem um orçamento da equipe de Projetos para a execução das atividades"]
+    n14 --> n15["Valores não são padronizados e variam conforme o projeto, suas características e o orçamento disponível"]
+    n15 --> n16["Chamados identificados pela sigla D1"]
+    n16 --> n17["Operação cria a campanha de valores e dispara para os técnicos pais, tanto os que têm filhos quanto os que atuam sozinhos"]
+    n17 --> n18{"Técnico pai está de acordo com o valor?"}
+    n18 -->|Sim| n19["O técnico pai entra na lista de chamados da campanha"]
+    n19 --> n20["Quando houver chamados dessa campanha, eles caem para os técnicos pais que aceitaram e para os filhos deles"]
+    n20 --> n21["O valor nunca é mostrado ao técnico filho"]
+    n18 -->|Não| n22["Os chamados da campanha não vão para esse técnico pai nem para os filhos dele"]
+    n2 -->|Atendimento CLT| n23["Operação precisa direcionar um profissional CLT para uma atividade"]
+    n23 --> n24["Na abertura do chamado é criada a sigla CLT dentro do Tiflux"]
+    n24 --> n25["Valores já previamente conhecidos"]
+    n25 --> n26["Sem negociação financeira no acionamento, pois as condições já estão estabelecidas"]
 """
 
 SEED_DIAGRAMS = [
