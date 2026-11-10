@@ -638,6 +638,27 @@ FLOW_C_ATUAL = """flowchart TD
 
 # Diagramas iniciais por fluxo. O time pode editar/adicionar depois; o seed só
 # cria estes quando ainda NAO existe nenhum diagrama daquele fluxo (idempotente).
+# Financeiro — como o valor da atividade é definido, nos 3 cenários descritos pelo
+# time. Só o que foi descrito: nada de etapa, aprovação ou prazo inventado. Rótulos
+# sem aspas/parênteses/chaves, que o "Editar aqui" da tela interpreta de volta.
+FLUXO_FINANCEIRO_CENARIOS = """flowchart TD
+    n1["Como o valor da atividade é definido"] --> n2{"Qual o cenário?"}
+    n2 -->|Contratual N1, M1 e S1| n3["Atividades têm valor previamente estabelecido em contrato"]
+    n3 --> n4["Técnico recebe o acionamento já sabendo o valor previsto"]
+    n4 --> n5{"Dúvida sobre a remuneração?"}
+    n5 -->|Sim| n6["Técnico é direcionado à equipe de Rede Credenciada para esclarecer os valores acordados"]
+    n5 -->|Não| n7["Aceite do chamado"]
+    n6 --> n7
+    n7 --> n8["Atendimento realizado normalmente"]
+    n8 --> n9["Na finalização o técnico informa despesas adicionais, como pedágio, estacionamento ou materiais, com os comprovantes"]
+    n2 -->|Projetos D1| n10["Cada novo projeto tem um orçamento da equipe de Projetos para a execução das atividades"]
+    n10 --> n11["Valores não são padronizados e variam conforme o projeto, suas características e o orçamento disponível"]
+    n11 --> n12["Chamados identificados pela sigla D1"]
+    n2 -->|Atendimento CLT| n13["Operação precisa direcionar um profissional CLT para uma atividade"]
+    n13 --> n14["Valores já previamente conhecidos"]
+    n14 --> n15["Sem negociação financeira no acionamento, pois as condições já estão estabelecidas"]
+"""
+
 SEED_DIAGRAMS = [
     dict(
         fluxo="C", kind="ideal", ordem=0,
@@ -655,6 +676,14 @@ SEED_DIAGRAMS = [
                   "OPERADOR (clicando em 'Acompanhamento Concluido'), nao o tecnico. "
                   "Edite este diagrama conforme forem aparecendo mais situacoes reais.",
         mermaid=FLOW_C_ATUAL,
+    ),
+    dict(
+        fluxo="financeiro", kind="ideal", ordem=0,
+        titulo="Valores do serviço — os 3 cenários",
+        descricao="Como o valor da atividade chega ao técnico em cada cenário: contratual "
+                  "(N1, M1 e S1), projetos (D1) e atendimento CLT. Desenho inicial a partir "
+                  "da descrição dos cenários — ajuste conforme o processo for detalhado.",
+        mermaid=FLUXO_FINANCEIRO_CENARIOS,
     ),
 ]
 

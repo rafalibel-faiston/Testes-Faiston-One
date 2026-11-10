@@ -362,7 +362,8 @@ def test_diagrama_de_modulo_fica_separado_dos_fluxos_do_dispatcher(client):
     fin = _diagrama(client, "financeiro")
     proj = _diagrama(client, "projetos", titulo="Fluxo de projetos")
     try:
-        assert [d["id"] for d in client.get("/api/diagramas", params={"fluxo": "financeiro"}).json()] == [fin["id"]]
+        ids_fin = [d["id"] for d in client.get("/api/diagramas", params={"fluxo": "financeiro"}).json()]
+        assert fin["id"] in ids_fin and proj["id"] not in ids_fin
         assert [d["id"] for d in client.get("/api/diagramas", params={"fluxo": "projetos"}).json()] == [proj["id"]]
         # os fluxos A/B/C não enxergam os desenhos dos módulos
         for fluxo in ("A", "B", "C"):
@@ -396,3 +397,31 @@ def test_diagrama_de_fluxo_do_dispatcher_continua_na_trilha_do_fluxo(client):
         assert any("Desenho do Fluxo B de teste" in t and "(" not in t for t in fluxo_b)
     finally:
         client.delete(f"/api/diagramas/{d['id']}")
+
+
+def test_financeiro_nasce_com_o_diagrama_dos_tres_cenarios(client):
+    from app import seed_data
+
+    diagramas = client.get("/api/diagramas", params={"fluxo": "financeiro"}).json()
+    cenarios = [d for d in diagramas if d["titulo"] == "Valores do serviço — os 3 cenários"]
+    assert len(cenarios) == 1 and cenarios[0]["kind"] == "ideal"
+    mermaid = cenarios[0]["mermaid"]
+    for trecho in ("N1, M1 e S1", "Rede Credenciada", "pedágio, estacionamento", "comprovantes",
+                   "sigla D1", "orçamento", "CLT", "Sem negociação financeira"):
+        assert trecho in mermaid
+    # toda caixa citada numa seta foi definida (senão o Mermaid desenha uma caixa com o id cru)
+    import re
+    definidos = set(re.findall(r'\b(n\d+)\s*[\[{]', mermaid))
+    citados = set(re.findall(r'\bn\d+\b', mermaid))
+    assert citados == definidos
+    # idempotente: outra rodada do seed não duplica nem sobrescreve o que o time editar
+    client.patch(f"/api/diagramas/{cenarios[0]['id']}", json={"descricao": "editado pelo time"})
+    db = SessionLocal()
+    try:
+        assert seed_data.seed_diagrams(db) == 0
+    finally:
+        db.close()
+    de_novo = client.get("/api/diagramas", params={"fluxo": "financeiro"}).json()
+    assert [d["descricao"] for d in de_novo if d["id"] == cenarios[0]["id"]] == ["editado pelo time"]
+    # o Projetos segue vazio: nada foi inventado pra ele
+    assert client.get("/api/diagramas", params={"fluxo": "projetos"}).json() == []
