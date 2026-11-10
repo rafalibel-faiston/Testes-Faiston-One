@@ -701,20 +701,24 @@ SEED_DIAGRAMS = [
 
 
 def seed_diagrams(db):
-    """Cria os diagramas iniciais de fluxo na primeira subida. Idempotente:
-    para cada (fluxo, kind) do SEED_DIAGRAMS, só insere se ainda não houver
-    NENHUM diagrama daquele fluxo+kind no banco — assim nunca sobrescreve o que
-    o time editou ou os diagramas extras que criaram."""
+    """Cria os diagramas iniciais de fluxo. Idempotente, e nunca sobrescreve o que o
+    time editou nem os diagramas extras que criaram:
+    - fluxos do Dispatcher (A/B/C): só insere se ainda não houver NENHUM diagrama
+      daquele fluxo+tipo (o time é dono do desenho do fluxo);
+    - módulos (Financeiro...): insere se ainda não houver um diagrama com aquele
+      TÍTULO no módulo. O desenho semeado é conteúdo novo e não pode deixar de
+      aparecer só porque alguém já rabiscou outro diagrama na aba."""
     from .models import FlowDiagram
+    from .modulos import e_modulo
 
     added = 0
     for d in SEED_DIAGRAMS:
-        exists = (
-            db.query(FlowDiagram)
-            .filter(FlowDiagram.fluxo == d["fluxo"], FlowDiagram.kind == d["kind"])
-            .first()
-        )
-        if exists:
+        q = db.query(FlowDiagram).filter(FlowDiagram.fluxo == d["fluxo"])
+        if e_modulo(d["fluxo"]):
+            q = q.filter(FlowDiagram.titulo == d["titulo"])
+        else:
+            q = q.filter(FlowDiagram.kind == d["kind"])
+        if q.first():
             continue
         db.add(FlowDiagram(seeded=True, **d))
         added += 1

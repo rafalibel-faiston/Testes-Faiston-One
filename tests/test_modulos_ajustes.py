@@ -514,3 +514,45 @@ def test_financeiro_nasce_com_o_diagrama_dos_tres_cenarios(client):
     assert [d["descricao"] for d in de_novo if d["id"] == cenarios[0]["id"]] == ["editado pelo time"]
     # o Projetos segue vazio: nada foi inventado pra ele
     assert client.get("/api/diagramas", params={"fluxo": "projetos"}).json() == []
+
+
+def test_diagrama_dos_cenarios_entra_mesmo_com_outro_desenho_no_financeiro():
+    """Se alguém já criou um diagrama na aba (o tipo padrão ali é "como deveria funcionar"),
+    o seed não pode deixar de trazer o dos 3 cenários — mas também não mexe no que existe."""
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(bind=engine)
+    db = sessionmaker(bind=engine)()
+    try:
+        db.add(models.FlowDiagram(fluxo="financeiro", kind="ideal", titulo="Rascunho do time",
+                                  mermaid="flowchart TD\n n1[a] --> n2[b]", descricao="meu texto"))
+        db.commit()
+        seed_data.seed_diagrams(db)
+        titulos = sorted(d.titulo for d in db.query(models.FlowDiagram).filter_by(fluxo="financeiro"))
+        assert titulos == ["Rascunho do time", "Valores do serviço — os 3 cenários"]
+        # nada do que o time tinha é alterado
+        rascunho = db.query(models.FlowDiagram).filter_by(titulo="Rascunho do time").one()
+        assert (rascunho.descricao, rascunho.seeded) == ("meu texto", False)
+        # idempotente: nem duplica o semeado, nem desfaz edição dele
+        semeado = db.query(models.FlowDiagram).filter_by(titulo="Valores do serviço — os 3 cenários").one()
+        semeado.descricao = "editado"
+        db.commit()
+        assert seed_data.seed_diagrams(db) == 0
+        assert db.query(models.FlowDiagram).filter_by(fluxo="financeiro").count() == 2
+        assert db.query(models.FlowDiagram).filter_by(titulo="Valores do serviço — os 3 cenários").one().descricao == "editado"
+    finally:
+        db.close()
+
+
+def test_diagrama_de_fluxo_do_dispatcher_segue_so_quando_nao_ha_nenhum():
+    """A regra antiga continua valendo pros fluxos A/B/C: se o time já tem um diagrama do
+    fluxo+tipo, o modelo inicial não entra."""
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(bind=engine)
+    db = sessionmaker(bind=engine)()
+    try:
+        db.add(models.FlowDiagram(fluxo="C", kind="ideal", titulo="Meu Fluxo C", mermaid="flowchart TD\n n1[a] --> n2[b]"))
+        db.commit()
+        seed_data.seed_diagrams(db)
+        assert [d.titulo for d in db.query(models.FlowDiagram).filter_by(fluxo="C", kind="ideal")] == ["Meu Fluxo C"]
+    finally:
+        db.close()
