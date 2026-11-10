@@ -6,10 +6,23 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..activity import log as log_activity
 from ..database import get_db
+from ..modulos import e_modulo, label as modulo_label
+from .ativos import FLUXO_ATIVOS
 
 router = APIRouter(tags=["diagrams"])
 
 KINDS = {"atual", "ideal"}
+
+
+def _trilha(fluxo: str) -> str:
+    """O "fluxo" da trilha de Novidades. Os diagramas dos fluxos A/B/C aparecem nas
+    Novidades do fluxo; os de um módulo (Financeiro, Projetos) aparecem nas
+    Novidades dos módulos de ajustes, que é onde a aba deles lê."""
+    return FLUXO_ATIVOS if e_modulo(fluxo) else fluxo
+
+
+def _onde(fluxo: str) -> str:
+    return f" ({modulo_label(fluxo)})" if e_modulo(fluxo) else ""
 
 
 @router.get("/diagramas", response_model=List[schemas.FlowDiagramOut])
@@ -45,7 +58,8 @@ def create_diagram(payload: schemas.FlowDiagramCreate, db: Session = Depends(get
         seeded=False,
     )
     db.add(diagram)
-    log_activity(db, diagram.fluxo, "diagrama", f'Diagrama "{titulo}" criado', autor=payload.atualizado_por)
+    log_activity(db, _trilha(diagram.fluxo), "diagrama", f'Diagrama "{titulo}"{_onde(diagram.fluxo)} criado',
+                 autor=payload.atualizado_por)
     db.commit()
     db.refresh(diagram)
     return diagram
@@ -100,7 +114,8 @@ def update_diagram(diagram_id: int, payload: schemas.FlowDiagramUpdate, db: Sess
         except Exception:
             skip = False
     if not skip:
-        log_activity(db, diagram.fluxo, "diagrama", f'Diagrama "{diagram.titulo}" atualizado',
+        log_activity(db, _trilha(diagram.fluxo), "diagrama",
+                     f'Diagrama "{diagram.titulo}"{_onde(diagram.fluxo)} atualizado',
                      autor=diagram.atualizado_por, case_code=ref)
 
     db.commit()
@@ -113,7 +128,8 @@ def delete_diagram(diagram_id: int, db: Session = Depends(get_db)):
     diagram = db.query(models.FlowDiagram).filter(models.FlowDiagram.id == diagram_id).first()
     if not diagram:
         raise HTTPException(status_code=404, detail="Diagrama não encontrado")
-    log_activity(db, diagram.fluxo, "diagrama", f'Diagrama "{diagram.titulo}" excluído')
+    log_activity(db, _trilha(diagram.fluxo), "diagrama",
+                 f'Diagrama "{diagram.titulo}"{_onde(diagram.fluxo)} excluído')
     db.delete(diagram)
     db.commit()
     return {"deleted": diagram_id}

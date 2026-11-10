@@ -1846,6 +1846,12 @@ body.inline-connecting * { cursor:crosshair !important; }
 .module-tab-count[hidden] { display:none; }
 
 .ajustes-ajuda { margin-top:6px; }
+.ajustes-processo { margin:18px 0 6px; }
+.ajustes-processo[hidden] { display:none; }
+.ajustes-processo-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:12px; }
+.ajustes-processo-head h3 { font-family:'Roboto Slab',serif; font-size:16px; color:var(--text); margin:0 0 4px; }
+.ajustes-processo-head p { font-size:13px; color:var(--text-2); line-height:1.6; max-width:640px; margin:0; }
+@media (max-width: 720px) { .ajustes-processo-head { flex-direction:column; } }
 .ajustes-versoes { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 14px; }
 .ajuste-versao {
   display:flex; flex-direction:column; gap:2px; align-items:flex-start; cursor:pointer;

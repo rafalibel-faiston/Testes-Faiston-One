@@ -1328,6 +1328,7 @@
       diagramsLoaded = true;
     } catch (e) {
       $("#diagrams-loading").textContent = "Erro ao carregar diagramas: " + e.message;
+      if (diagramaModulo()) toast("Erro ao carregar diagramas: " + e.message, true);
       return;
     }
     $("#diagrams-loading").hidden = true;
@@ -1405,14 +1406,23 @@
     }
   }
 
+  // Os mesmos diagramas servem a dois lugares: a visão "Fluxos" do Dispatcher (fluxo A/B/C)
+  // e a aba de um módulo com processo a desenhar (Financeiro, Projetos), onde o "fluxo" do
+  // diagrama é a chave do módulo. Esta função diz em qual dos dois a tela está agora.
+  function diagramaModulo() {
+    return ehModuloAjuste(currentModule) && moduloMeta(currentModule).processo ? currentModule : null;
+  }
+  const diagramaFluxo = () => diagramaModulo() || currentFlow;
+
   function renderDiagrams() {
-    const list = DIAGRAMS.filter((d) => (d.fluxo || "C") === currentFlow)
+    const modulo = diagramaModulo();
+    const list = DIAGRAMS.filter((d) => (d.fluxo || "C") === diagramaFluxo())
       .sort((a, b) => (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : (a.ordem || 0) - (b.ordem || 0)));
     // cancela edições inline pendentes antes de recriar os cards
     inlineState.forEach((st) => { if (st.saveTimer) clearTimeout(st.saveTimer); });
     inlineState.clear();
-    const emptyEl = $("#diagrams-empty");
-    const wrap = $("#diagrams");
+    const emptyEl = modulo ? $("#ajustes-diagramas-vazio") : $("#diagrams-empty");
+    const wrap = modulo ? $("#ajustes-diagramas") : $("#diagrams");
     if (!list.length) {
       wrap.innerHTML = "";
       emptyEl.hidden = false;
@@ -1827,7 +1837,7 @@
   function openDiagramModal(mode, id) {
     editingDiagramId = mode === "edit" ? Number(id) : null;
     $("#diagram-modal-title").textContent = mode === "edit" ? "Editar diagrama" : "Novo diagrama";
-    $("#diagram-flow-label").textContent = "Fluxo " + currentFlow;
+    $("#diagram-flow-label").textContent = diagramaModulo() ? moduloMeta(currentModule).label : "Fluxo " + currentFlow;
     let state;
     if (mode === "edit") {
       const d = DIAGRAMS.find((x) => x.id === editingDiagramId);
@@ -1839,7 +1849,8 @@
       if (!state.nodes.length) { state = starterState(); diagramSource.value = d.mermaid || ""; }
     } else {
       diagramForm.reset();
-      diagramForm.kind.value = "atual";
+      // processo ainda não desenhado: o que se desenha é como ele deve funcionar
+      diagramForm.kind.value = diagramaModulo() ? "ideal" : "atual";
       state = starterState();
     }
     const adv = $(".builder-advanced"); if (adv) adv.open = false;
@@ -1907,7 +1918,7 @@
   async function submitDiagramForm(e) {
     e.preventDefault();
     const payload = {
-      fluxo: currentFlow,
+      fluxo: diagramaFluxo(),
       kind: diagramForm.kind.value,
       titulo: diagramForm.titulo.value.trim(),
       descricao: diagramForm.descricao.value.trim(),
@@ -2700,6 +2711,8 @@
   $$(".view-tab").forEach((t) => t.addEventListener("click", () => switchView(t.dataset.view)));
   $("#btn-add-diagram").addEventListener("click", () => openDiagramModal("create"));
   $("#diagrams-empty-add").addEventListener("click", () => openDiagramModal("create"));
+  $("#btn-add-diagram-modulo").addEventListener("click", () => openDiagramModal("create"));
+  $("#ajustes-diagramas-add").addEventListener("click", () => openDiagramModal("create"));
   diagramForm.addEventListener("submit", submitDiagramForm);
   // builder: adicionar etapa / ligação
   $("#add-node").addEventListener("click", () => {
@@ -3648,7 +3661,8 @@
     const lista = $("#guia-diagramas");
     if (!guiaDiagramas) {
       try {
-        guiaDiagramas = await api("/api/diagramas");
+        // só os fluxos do Dispatcher (A/B/C): os desenhos de processo dos módulos não são do tutorial
+        guiaDiagramas = (await api("/api/diagramas")).filter((d) => ["A", "B", "C"].includes(d.fluxo || "C"));
       } catch (e) {
         lista.innerHTML = `<span class="guia-nota">Não consegui carregar os fluxogramas agora (${esc(e.message)}). Eles ficam na visão <b>Fluxos (diagramas)</b>.</span>`;
         return;
@@ -4054,7 +4068,15 @@
     $("#module-agenda").hidden = mod !== "agenda";
     $("#module-todo").hidden = mod !== "todo";
     $("#module-tecnicos").hidden = mod !== "tecnicos";
-    if (ehModuloAjuste(mod)) { if (opts.recarregar === false) renderAjustes(); else loadAjustes(); }
+    if (ehModuloAjuste(mod)) {
+      if (opts.recarregar === false) renderAjustes(); else loadAjustes();
+      if (moduloMeta(mod).processo) {
+        // o desenho do processo mora na própria aba; enquanto carrega, não deixa os cards do módulo anterior
+        if (diagramsLoaded) renderDiagrams();
+        else { $("#ajustes-diagramas").innerHTML = ""; $("#ajustes-diagramas-vazio").hidden = true; }
+        loadDiagrams();
+      }
+    }
     if (mod === "agenda") loadAgenda();
     if (mod === "todo") loadTodo();
     if (mod === "tecnicos") { loadTecnicos(); loadApkInfo(); }
@@ -4577,6 +4599,12 @@
     const m = moduloMeta(ajusteModulo);
     $("#ajustes-titulo").textContent = m.titulo || m.label;
     $("#ajustes-descricao").textContent = m.descricao || "";
+    const comProcesso = !!m.processo;
+    $("#ajustes-processo").hidden = !comProcesso;
+    if (comProcesso) {
+      $("#ajustes-processo-titulo").textContent = "Processo — " + m.label;
+      $("#ajustes-diagramas-badge").textContent = m.label;
+    }
   }
 
   function renderAjustes() {

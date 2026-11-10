@@ -707,6 +707,8 @@ class AjusteModuloOut(BaseModel):
     titulo: str
     descricao: str
     versao_padrao: str
+    # o processo do módulo ainda não está desenhado: a aba ganha o editor de diagramas
+    processo: bool = False
 
 
 class AtivoAjustePrintOut(BaseModel):
