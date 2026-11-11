@@ -1316,6 +1316,7 @@
     try {
       const { svg } = await mermaid.render(id, src);
       container.innerHTML = svg;
+      applyView(container);   // mantém zoom/posição da tela cheia depois de redesenhar
     } catch (err) {
       const msg = (err && err.message ? err.message : String(err)).split("\n").slice(0, 6).join("\n");
       container.innerHTML = `<div class="diagram-error">⚠ Erro no diagrama:\n${esc(msg)}</div>`;
@@ -1434,7 +1435,10 @@
           <span class="inline-save-state" aria-live="polite"></span>
           <button type="button" class="inline-done">Concluir</button>
         </div>
-        <div class="diagram-canvas" data-canvas="${d.id}"><div class="diagram-preview-empty">Renderizando…</div></div>
+        <div class="diagram-stage">
+          <div class="diagram-canvas" data-canvas="${d.id}"><div class="diagram-preview-empty">Renderizando…</div></div>
+          ${ZOOM_CTRL}
+        </div>
         <div class="diagram-meta-foot">${d.atualizado_por ? `Atualizado por <span class="who">${esc(d.atualizado_por)}</span> · ` : ""}${fmtWhen(d.updated_at)}${d.seeded ? " · <span class=\"who\">modelo inicial</span>" : ""}</div>
       </div>
     </article>`;
@@ -1468,12 +1472,160 @@
       }
     }
     el.querySelectorAll(".diagram-fs, .guia-fs").forEach((b) => b.setAttribute("aria-pressed", on ? "true" : "false"));
+    const cv = fsCanvas(el);
+    if (cv) { views.delete(cv); updateZoomLabel(el); if (on) setupPanZoom(el, cv); }
     // o tamanho do desenho mudou: refaz o desenho (e as alças, se estiver em edição inline)
     if (el.classList.contains("diagram")) refreshDiagramAfterFs(el);
     else if (el.id === "guia-diagrama-wrap") desenharDiagramaDoGuia();
   }
 
   function toggleFs(el) { setFs(el, !el.classList.contains("fs")); }
+
+  // ---- zoom + "mãozinha" (arrastar pra navegar) na tela cheia ----
+  // O estado (escala k e deslocamento x,y) fica por canvas e é reaplicado como CSS transform
+  // no <svg> a cada redesenho. k = 1 é "ajustado à tela". Só vale dentro da tela cheia.
+  const ZOOM_CTRL = `
+    <div class="fs-zoom" role="group" aria-label="Zoom do fluxograma">
+      <button type="button" data-z="out" title="Diminuir (−)" aria-label="Diminuir zoom">−</button>
+      <span class="fs-zoom-pct" aria-live="polite">100%</span>
+      <button type="button" data-z="in" title="Aumentar (+)" aria-label="Aumentar zoom">+</button>
+      <button type="button" data-z="fit" class="fs-zoom-fit" title="Ajustar à tela (0)">Ajustar</button>
+    </div>
+    <div class="fs-pan-hint">Arraste pra mover · role pra dar zoom</div>`;
+  const views = new WeakMap();   // canvas -> { k, x, y }
+  const ZOOM_MIN = 0.3, ZOOM_MAX = 8;
+
+  function fsCanvas(el) { return el.querySelector(".diagram-canvas, .guia-diagrama-canvas"); }
+
+  function applyView(canvas) {
+    const svg = canvas.querySelector(":scope > svg");
+    if (!svg) return;
+    const v = views.get(canvas);
+    if (!v) { svg.style.transform = ""; svg.style.transformOrigin = ""; return; }
+    svg.style.transformOrigin = "0 0";
+    svg.style.transform = `translate(${v.x}px, ${v.y}px) scale(${v.k})`;
+  }
+
+  function updateZoomLabel(el) {
+    const cv = fsCanvas(el);
+    const v = cv && views.get(cv);
+    const lbl = el.querySelector(".fs-zoom-pct");
+    if (lbl) lbl.textContent = Math.round((v ? v.k : 1) * 100) + "%";
+  }
+
+  // Zoom mantendo fixo o ponto (cx, cy) em coordenadas da tela.
+  function zoomAt(canvas, cx, cy, factor) {
+    const svg = canvas.querySelector(":scope > svg");
+    if (!svg) return;
+    const v = views.get(canvas) || { k: 1, x: 0, y: 0 };
+    const k2 = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, v.k * factor));
+    if (k2 === v.k) return;
+    const r = svg.getBoundingClientRect();
+    const ox = r.left - v.x, oy = r.top - v.y;      // onde o svg estaria sem o transform
+    const ratio = k2 / v.k;
+    v.x = (cx - ox) - ((cx - ox) - v.x) * ratio;
+    v.y = (cy - oy) - ((cy - oy) - v.y) * ratio;
+    v.k = k2;
+    views.set(canvas, v);
+    applyView(canvas);
+  }
+
+  function zoomCentered(canvas, factor) {
+    const r = canvas.getBoundingClientRect();
+    zoomAt(canvas, r.left + r.width / 2, r.top + r.height / 2, factor);
+  }
+
+  // Com a edição inline ligada as alças são posicionadas em coordenadas da tela: depois do gesto,
+  // redesenha pra elas acompanharem. Durante o gesto, esconde-as.
+  const settleTimers = new WeakMap();
+  function viewChanged(el, canvas) {
+    updateZoomLabel(el);
+    const st = el.classList.contains("diagram") ? inlineState.get(Number(el.dataset.id)) : null;
+    if (!st) return;
+    const fx = canvas.querySelector(".inline-fx");
+    if (fx) fx.style.visibility = "hidden";
+    clearTimeout(settleTimers.get(canvas));
+    settleTimers.set(canvas, setTimeout(() => renderInlineCanvas(el, st), 180));
+  }
+
+  // Roda do mouse = zoom no ponto do cursor. O listener é um só, no document: um listener
+  // no próprio canvas não é entregue de forma confiável quando o SVG vira camada composta.
+  document.addEventListener("wheel", (ev) => {
+    if (!fsEl) return;
+    const cv = fsCanvas(fsEl);
+    if (!cv || !cv.contains(ev.target)) return;
+    ev.preventDefault();
+    const px = ev.deltaMode === 1 ? ev.deltaY * 16 : ev.deltaY;
+    zoomAt(cv, ev.clientX, ev.clientY, Math.exp(-px * 0.0015));
+    viewChanged(fsEl, cv);
+  }, { passive: false });
+
+  function setupPanZoom(el, canvas) {
+    if (canvas.dataset.panzoom) return;
+    canvas.dataset.panzoom = "1";
+    const ptrs = new Map();          // pointerId -> {x, y}
+    let pinch = null;                // { dist }
+    let panning = false;
+
+    const emEdicao = () => el.classList.contains("editing");
+    // na edição, caixas/setas/alças continuam clicáveis: a mão só pega o fundo
+    const ehInterativo = (t) => emEdicao() && t.closest && t.closest("g.node, .inline-edge, .inline-edge-hit, .edgeLabel, .inline-fx *, .inline-rename, input, textarea, button");
+
+    canvas.addEventListener("pointerdown", (ev) => {
+      if (!el.classList.contains("fs")) return;
+      if (ev.pointerType === "mouse" && ev.button !== 0 && ev.button !== 1) return;
+      if (ev.button !== 1 && ehInterativo(ev.target)) return;
+      ptrs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      try { canvas.setPointerCapture(ev.pointerId); } catch (_) { /* sem captura: segue assim mesmo */ }
+      if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y) }; }
+      panning = true;
+      canvas.classList.add("panning");
+      ev.preventDefault();
+    });
+
+    canvas.addEventListener("pointermove", (ev) => {
+      const p = ptrs.get(ev.pointerId);
+      if (!panning || !p) return;
+      if (ptrs.size === 2 && pinch) {
+        ptrs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+        const [a, b] = [...ptrs.values()];
+        const dist = Math.hypot(a.x - b.x, a.y - b.y);
+        if (pinch.dist > 0) zoomAt(canvas, (a.x + b.x) / 2, (a.y + b.y) / 2, dist / pinch.dist);
+        pinch.dist = dist;
+        viewChanged(el, canvas);
+        return;
+      }
+      const dx = ev.clientX - p.x, dy = ev.clientY - p.y;
+      p.x = ev.clientX; p.y = ev.clientY;
+      const v = views.get(canvas) || { k: 1, x: 0, y: 0 };
+      v.x += dx; v.y += dy;
+      views.set(canvas, v);
+      applyView(canvas);
+      viewChanged(el, canvas);
+    });
+
+    const solta = (ev) => {
+      if (!ptrs.delete(ev.pointerId)) return;
+      try { canvas.releasePointerCapture(ev.pointerId); } catch (_) { /* já solto */ }
+      if (ptrs.size < 2) pinch = null;
+      if (!ptrs.size) { panning = false; canvas.classList.remove("panning"); }
+    };
+    canvas.addEventListener("pointerup", solta);
+    canvas.addEventListener("pointercancel", solta);
+
+    // duplo clique no fundo = ajustar à tela
+    canvas.addEventListener("dblclick", (ev) => {
+      if (!el.classList.contains("fs") || ehInterativo(ev.target)) return;
+      views.delete(canvas); applyView(canvas); viewChanged(el, canvas);
+    });
+
+    el.querySelectorAll(".fs-zoom [data-z]").forEach((b) => b.addEventListener("click", () => {
+      const z = b.dataset.z;
+      if (z === "fit") { views.delete(canvas); applyView(canvas); }
+      else zoomCentered(canvas, z === "in" ? 1.25 : 1 / 1.25);
+      viewChanged(el, canvas);
+    }));
+  }
 
   function refreshDiagramAfterFs(art) {
     const id = Number(art.dataset.id);
@@ -1497,10 +1649,29 @@
   document.addEventListener("webkitfullscreenchange", onFullscreenChange);
   // No overlay em CSS (sem Fullscreen API) o Esc precisa ser tratado aqui.
   document.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape" || !fsEl || fullscreenAtual()) return;
+    if (!fsEl) return;
     if (e.target && e.target.closest && e.target.closest("input, textarea")) return;   // renomeando uma caixa
+    // atalhos de zoom: + / − / 0
+    const z = e.key === "+" || e.key === "=" ? "in" : e.key === "-" || e.key === "_" ? "out" : e.key === "0" ? "fit" : null;
+    if (z && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const btn = fsEl.querySelector(`.fs-zoom [data-z="${z}"]`);
+      if (btn) { e.preventDefault(); btn.click(); }
+      return;
+    }
+    if (e.key !== "Escape" || fullscreenAtual()) return;
+    e.preventDefault();   // sinaliza "tratado": o guia não deve fechar junto com a tela cheia
     setFs(fsEl, false);
   });
+
+  // Se o elemento em tela cheia sair do DOM (guia fechado, lista redesenhada), não deixa o
+  // body travado em overflow:hidden.
+  function fsLimpaSeSumiu() {
+    if (fsEl && !fsEl.isConnected) {
+      fsEl = null;
+      document.body.classList.remove("fs-open");
+      if (fullscreenAtual()) { try { document.exitFullscreen && document.exitFullscreen(); } catch (_) { /* ok */ } }
+    }
+  }
 
   // renderiza o Mermaid de um card só quando ele está aberto (lazy)
   function renderDiagramCanvas(d, wrap) {
@@ -1530,12 +1701,13 @@
     const emptyEl = modulo ? $("#ajustes-diagramas-vazio") : $("#diagrams-empty");
     const wrap = modulo ? $("#ajustes-diagramas") : $("#diagrams");
     if (!list.length) {
-      wrap.innerHTML = "";
+      wrap.innerHTML = ""; fsLimpaSeSumiu();
       emptyEl.hidden = false;
       return;
     }
     emptyEl.hidden = true;
     wrap.innerHTML = list.map(diagramCard).join("");
+    fsLimpaSeSumiu();
     // só desenha os que estão abertos
     list.forEach((d) => { if (expandedDiagrams.has(d.id)) renderDiagramCanvas(d, wrap); });
     // abrir/recolher pelo cabeçalho (menos os botões de ação)
@@ -3732,6 +3904,7 @@
         <div class="guia-diagrama-wrap" id="guia-diagrama-wrap">
           <button type="button" class="case-icon-btn guia-fs" title="Tela cheia (Esc pra sair)" aria-label="Tela cheia" aria-pressed="false">${FS_ICONS}</button>
           <div class="guia-diagrama-canvas" id="guia-diagrama-canvas"></div>
+          ${ZOOM_CTRL}
         </div>
         <button type="button" class="btn-ghost guia-abrir-fluxos" id="guia-abrir-fluxos">
           Abrir este fluxograma em tamanho grande
@@ -3889,6 +4062,7 @@
   function closeGuia() {
     guiaModal.hidden = true;
     guiaBody.innerHTML = "";
+    fsLimpaSeSumiu();
     localStorage.setItem(GUIA_KEY, "1");
     if (!PERFIL) openPerfilGate(false);
   }
@@ -3902,7 +4076,7 @@
     else irParaPassoGuia(guiaPasso + 1);
   });
   guiaModal.addEventListener("click", (e) => { if (e.target.id === "guia-modal") closeGuia(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !guiaModal.hidden) closeGuia(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !e.defaultPrevented && !guiaModal.hidden) closeGuia(); });
   $("#perfil-abrir-guia").addEventListener("click", () => {
     closePerfilGate();
     openGuia(0);
