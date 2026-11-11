@@ -1345,6 +1345,171 @@
     return m ? ATOR_POR_PALAVRA[m[1]] : null;
   }
 
+  // ---- apresentação passo a passo ----
+  // O fluxo vai aparecendo na ordem real: a cada passo entra um "nível" (as caixas à mesma distância
+  // do início — os ramos de uma decisão aparecem juntos) e as setas que ficam completas, desenhadas
+  // do início ao fim. Setas de retorno (loops) aparecem quando as duas pontas já estão na tela.
+  const PLAY_VEL = [0.5, 1, 2];
+  const PLAY_BASE_MS = 1400;
+
+  function planoApresentacao(fx) {
+    if (fx.plano) return fx.plano;
+    const ids = [...fx.nodes.keys()];
+    const recebe = new Set(fx.arestas.filter((a) => a.de !== a.para).map((a) => a.para));
+    let fontes = ids.filter((i) => !recebe.has(i));
+    if (!fontes.length) fontes = ids.slice(0, 1);
+    const dist = new Map(fontes.map((f) => [f, 0]));
+    const fila = [...fontes];
+    while (fila.length) {
+      const u = fila.shift();
+      fx.arestas.forEach((a) => { if (a.de === u && !dist.has(a.para)) { dist.set(a.para, dist.get(u) + 1); fila.push(a.para); } });
+    }
+    const max = Math.max(0, ...dist.values());
+    ids.forEach((i) => { if (!dist.has(i)) dist.set(i, max + 1); });   // o que o início não alcança entra por último
+    const niveis = Math.max(...dist.values()) + 1;
+    // uma seta fica completa quando as duas pontas estão na tela
+    const passoDaSeta = (a) => Math.max(dist.get(a.de), dist.get(a.para));
+    fx.plano = { dist, niveis, passoDaSeta };
+    return fx.plano;
+  }
+
+  function aplicaPasso(canvas, passo, anima, enquadrar) {
+    if (enquadrar === undefined) enquadrar = anima;
+    const svg = canvas.querySelector(":scope > svg");
+    const st = canvas.__play;
+    if (!svg || !svg.__fx || !st) return;
+    const fx = svg.__fx, plano = planoApresentacao(fx);
+    st.step = Math.max(-1, Math.min(plano.niveis - 1, passo));
+    svg.classList.add("fx-play");
+    fx.nodes.forEach((g, id) => {
+      const d = plano.dist.get(id);
+      g.classList.toggle("fx-shown", d <= st.step);
+      g.classList.toggle("fx-current", d === st.step);
+    });
+    fx.arestas.forEach((a) => {
+      const ps = plano.passoDaSeta(a);
+      const mostra = ps <= st.step;
+      const nova = anima && ps === st.step;
+      a.path.classList.toggle("fx-shown", mostra);
+      if (a.rotulo) a.rotulo.classList.toggle("fx-shown", mostra);
+      a.path.classList.remove("fx-draw");
+      a.path.style.removeProperty("marker-end");
+      if (nova) {
+        // a ponta da seta só aparece quando a linha termina de ser desenhada
+        a.path.setAttribute("pathLength", "1");
+        a.path.style.setProperty("marker-end", "none");
+        void a.path.getBoundingClientRect();   // reinicia a animação
+        a.path.classList.add("fx-draw");
+        setTimeout(() => {   // terminou de desenhar: devolve a ponta da seta e o estilo normal (tracejado, "correr")
+          if (!a.path.classList.contains("fx-draw")) return;
+          a.path.style.removeProperty("marker-end");
+          a.path.classList.remove("fx-draw");
+        }, 520);
+      }
+    });
+    atualizaBarra(canvas);
+    if (enquadrar && st.step >= 0) enquadraPasso(canvas, svg);
+  }
+
+  // Câmera da apresentação: enquadra só o que já apareceu (caixas + setas), com zoom limitado pra o
+  // texto continuar legível. Conforme o fluxo cresce a câmera se afasta, até mostrar tudo acima da barra.
+  const CAM_ZOOM_MAX = 2.4, CAM_ZOOM_MIN = 0.5, CAM_MARGEM = 48, CAM_RESERVA_BAIXO = 70;   // reserva = altura da barra de controles
+  function enquadraPasso(canvas, svg) {
+    const fx = svg.__fx;
+    const vis = [...fx.nodes.values()].filter((g) => g.classList.contains("fx-shown"))
+      .concat(fx.arestas.map((a) => a.path).filter((pa) => pa.classList.contains("fx-shown")));
+    if (!vis.length) return;
+    const rs = vis.map((e) => e.getBoundingClientRect());
+    const L = Math.min(...rs.map((r) => r.left)), R = Math.max(...rs.map((r) => r.right));
+    const T = Math.min(...rs.map((r) => r.top)), B = Math.max(...rs.map((r) => r.bottom));
+    const bw = Math.max(1, R - L), bh = Math.max(1, B - T);
+    const c = canvas.getBoundingClientRect();
+    const v = views.get(canvas) || { k: 1, x: 0, y: 0 };
+    const sr = svg.getBoundingClientRect();
+    const ox = sr.left - v.x, oy = sr.top - v.y;               // onde o svg ficaria sem o transform
+    const util = c.height - 2 * CAM_MARGEM - CAM_RESERVA_BAIXO;   // altura livre acima da barra de controles
+    const f = Math.min((c.width - 2 * CAM_MARGEM) / bw, util / bh);
+    const k2 = Math.min(CAM_ZOOM_MAX, Math.max(CAM_ZOOM_MIN, v.k * f));
+    // ponto do desenho (coordenadas locais) que está no centro do que apareceu
+    const lx = ((L + R) / 2 - ox - v.x) / v.k, ly = ((T + B) / 2 - oy - v.y) / v.k;
+    const alvoX = c.left + c.width / 2, alvoY = c.top + CAM_MARGEM + util / 2;
+    views.set(canvas, { k: k2, x: alvoX - ox - lx * k2, y: alvoY - oy - ly * k2 });
+    svg.style.transition = "transform .75s cubic-bezier(.4,0,.2,1)";
+    applyView(canvas);
+    clearTimeout(svg.__camT);
+    svg.__camT = setTimeout(() => { svg.style.transition = ""; }, 800);
+    updateZoomLabel(canvas.closest(".diagram, .guia-diagrama-wrap") || canvas);
+  }
+
+  function atualizaBarra(canvas) {
+    const el = canvas.closest(".diagram, .guia-diagrama-wrap");
+    const st = canvas.__play;
+    const svg = canvas.querySelector(":scope > svg");
+    if (!el || !st || !svg || !svg.__fx) return;
+    const total = planoApresentacao(svg.__fx).niveis;
+    const cnt = el.querySelector(".fs-play-count");
+    if (cnt) cnt.textContent = st.step < 0 ? `— / ${total}` : `${st.step + 1} / ${total}`;
+    const main = el.querySelector(".fs-play-main");
+    if (main) main.textContent = st.playing ? "⏸" : "▶";
+    const sp = el.querySelector(".fs-play-speed");
+    if (sp) sp.textContent = PLAY_VEL[st.vel] + "×";
+    el.querySelector('[data-p="prev"]')?.toggleAttribute("disabled", st.step < 0);
+    el.querySelector('[data-p="next"]')?.toggleAttribute("disabled", st.step >= total - 1);
+  }
+
+  function pausaApresentacao(canvas) {
+    const st = canvas.__play;
+    if (!st) return;
+    clearTimeout(st.timer);
+    st.playing = false;
+    atualizaBarra(canvas);
+  }
+
+  function tocaApresentacao(canvas) {
+    const st = canvas.__play;
+    const svg = canvas.querySelector(":scope > svg");
+    if (!st || !svg || !svg.__fx) return;
+    const total = planoApresentacao(svg.__fx).niveis;
+    if (st.step >= total - 1) { views.delete(canvas); applyView(canvas); aplicaPasso(canvas, -1, false); st.manual = false; }   // já terminou: recomeça do zero
+    st.playing = true;
+    const proximo = () => {
+      if (!st.playing) return;
+      if (st.step >= total - 1) { pausaApresentacao(canvas); return; }
+      aplicaPasso(canvas, st.step + 1, true, !st.manual);
+      if (st.step >= total - 1) { pausaApresentacao(canvas); return; }
+      st.timer = setTimeout(proximo, PLAY_BASE_MS / PLAY_VEL[st.vel]);
+    };
+    clearTimeout(st.timer);
+    proximo();
+  }
+
+  function ligaApresentacao(el, canvas) {
+    if (el.classList.contains("editing")) { toast("Conclua a edição pra apresentar o fluxo.", true); return false; }
+    const st = canvas.__play || (canvas.__play = { step: -1, playing: false, vel: 1, timer: null, aberto: false, manual: false });
+    st.aberto = true; st.manual = false;
+    views.delete(canvas);
+    el.classList.add("fx-presenting");
+    const b = el.querySelector(".fs-play-btn");
+    if (b) { b.setAttribute("aria-pressed", "true"); b.textContent = "✕ Sair da apresentação"; }
+    aplicaPasso(canvas, -1, false);
+    tocaApresentacao(canvas);
+    return true;
+  }
+
+  function desligaApresentacao(el, canvas) {
+    const st = canvas && canvas.__play;
+    if (st) { clearTimeout(st.timer); st.playing = false; st.aberto = false; st.step = -1; }
+    el.classList.remove("fx-presenting");
+    const b = el.querySelector(".fs-play-btn");
+    if (b) { b.setAttribute("aria-pressed", "false"); b.textContent = "🎬 Apresentar"; }
+    const svg = canvas && canvas.querySelector(":scope > svg");
+    if (svg) {
+      svg.classList.remove("fx-play");
+      svg.querySelectorAll(".fx-shown, .fx-current, .fx-draw").forEach((e) => e.classList.remove("fx-shown", "fx-current", "fx-draw"));
+      svg.querySelectorAll(".edgePaths path").forEach((p) => p.style.removeProperty("marker-end"));
+    }
+  }
+
   // ---- destaque ao passar o mouse ----
   // Caixa sob o mouse + quem entra e quem sai dela (e as setas entre elas); o resto esmaece.
   // Só nas telas de leitura: com a edição inline ligada o hover é do editor.
@@ -1375,7 +1540,7 @@
     container.addEventListener("mouseover", (ev) => {
       const svg = container.querySelector(":scope > svg");
       if (!svg) return;
-      if (emEdicao()) { limpaDestaque(svg); return; }
+      if (emEdicao() || svg.classList.contains("fx-play")) { limpaDestaque(svg); return; }
       const g = ev.target.closest && ev.target.closest("g.node");
       const id = g && inlineNodeId(g);
       if (id) destacaVizinhos(svg, id); else limpaDestaque(svg);
@@ -1414,6 +1579,8 @@
     });
     svg.__fx = { nodes, arestas };
     ligaDestaque(container);
+    // redesenhou no meio da apresentação (zoom na edição, tamanho da tela…): reaplica o passo atual
+    if (container.__play && container.__play.aberto) aplicaPasso(container, container.__play.step, false);
 
     const gradId = svg.id + "-fx";
     let temGradiente = false;
@@ -1627,6 +1794,7 @@
     const cv = fsCanvas(el);
     if (cv) { views.delete(cv); updateZoomLabel(el); if (on) setupPanZoom(el, cv); }
     if (!on) {   // a animação é um recurso de apresentação: sai junto com a tela cheia
+      if (cv) desligaApresentacao(el, cv);
       el.classList.remove("fx-anim");
       const ab = el.querySelector(".fs-anim-btn");
       if (ab) { ab.setAttribute("aria-pressed", "false"); ab.textContent = "▶ Animar"; }
@@ -1648,6 +1816,15 @@
       <button type="button" data-z="in" title="Aumentar (+)" aria-label="Aumentar zoom">+</button>
       <button type="button" data-z="fit" class="fs-zoom-fit" title="Ajustar à tela (0)">Ajustar</button>
       <button type="button" data-z="anim" class="fs-zoom-fit fs-anim-btn" aria-pressed="false" title="Animar o sentido do fluxo (A)">▶ Animar</button>
+      <button type="button" data-z="play" class="fs-zoom-fit fs-play-btn" aria-pressed="false" title="Apresentar passo a passo (P)">🎬 Apresentar</button>
+    </div>
+    <div class="fs-play" role="group" aria-label="Apresentação passo a passo">
+      <button type="button" data-p="restart" title="Recomeçar (R)" aria-label="Recomeçar">⏮</button>
+      <button type="button" data-p="prev" title="Passo anterior (←)" aria-label="Passo anterior">◀</button>
+      <button type="button" data-p="toggle" class="fs-play-main" title="Reproduzir / pausar (Espaço)" aria-label="Reproduzir ou pausar">▶</button>
+      <button type="button" data-p="next" title="Próximo passo (→)" aria-label="Próximo passo">▶|</button>
+      <span class="fs-play-count" aria-live="polite">—</span>
+      <button type="button" data-p="speed" class="fs-play-speed" title="Velocidade">1×</button>
     </div>
     <div class="fs-pan-hint">Arraste pra mover · role pra dar zoom</div>`;
   const views = new WeakMap();   // canvas -> { k, x, y }
@@ -1698,6 +1875,7 @@
   const settleTimers = new WeakMap();
   function viewChanged(el, canvas) {
     updateZoomLabel(el);
+    if (canvas.__play && canvas.__play.aberto) canvas.__play.manual = true;   // câmera da apresentação respeita a mão do usuário
     const st = el.classList.contains("diagram") ? inlineState.get(Number(el.dataset.id)) : null;
     if (!st) return;
     const fx = canvas.querySelector(".inline-fx");
@@ -1777,8 +1955,24 @@
       views.delete(canvas); applyView(canvas); viewChanged(el, canvas);
     });
 
+    el.querySelectorAll(".fs-play [data-p]").forEach((b) => b.addEventListener("click", () => {
+      const st = canvas.__play;
+      if (!st) return;
+      const a = b.dataset.p;
+      if (a === "toggle") { if (st.playing) pausaApresentacao(canvas); else tocaApresentacao(canvas); return; }
+      if (a === "speed") { st.vel = (st.vel + 1) % PLAY_VEL.length; atualizaBarra(canvas); return; }
+      pausaApresentacao(canvas);
+      st.manual = false;   // passo pedido pelo usuário: a câmera volta a acompanhar
+      if (a === "restart") { views.delete(canvas); applyView(canvas); aplicaPasso(canvas, -1, false); tocaApresentacao(canvas); }
+      else if (a === "next") aplicaPasso(canvas, st.step + 1, true);
+      else if (a === "prev") aplicaPasso(canvas, st.step - 1, false, true);
+    }));
     el.querySelectorAll(".fs-zoom [data-z]").forEach((b) => b.addEventListener("click", () => {
       const z = b.dataset.z;
+      if (z === "play") {
+        if (el.classList.contains("fx-presenting")) desligaApresentacao(el, canvas); else ligaApresentacao(el, canvas);
+        return;
+      }
       if (z === "anim") {
         const on = !el.classList.contains("fx-anim");
         el.classList.toggle("fx-anim", on);
@@ -1817,8 +2011,14 @@
     if (!fsEl) return;
     if (e.target && e.target.closest && e.target.closest("input, textarea")) return;   // renomeando uma caixa
     // atalhos de zoom: + / − / 0
+    // apresentação em andamento: Espaço/←/→/R conduzem os passos
+    if (fsEl.classList.contains("fx-presenting") && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const pb = (a) => fsEl.querySelector(`.fs-play [data-p="${a}"]`);
+      const mapa = { " ": "toggle", ArrowRight: "next", ArrowLeft: "prev", r: "restart", R: "restart" };
+      if (mapa[e.key] && pb(mapa[e.key])) { e.preventDefault(); pb(mapa[e.key]).click(); return; }
+    }
     const z = e.key === "+" || e.key === "=" ? "in" : e.key === "-" || e.key === "_" ? "out" : e.key === "0" ? "fit"
-      : e.key === "a" || e.key === "A" ? "anim" : null;
+      : e.key === "a" || e.key === "A" ? "anim" : e.key === "p" || e.key === "P" ? "play" : null;
     if (z && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const btn = fsEl.querySelector(`.fs-zoom [data-z="${z}"]`);
       if (btn) { e.preventDefault(); btn.click(); }

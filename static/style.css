@@ -2749,3 +2749,39 @@ body.fs-open { overflow:hidden; }
 .fx-anim svg .flowchart-link.edge-pattern-solid { stroke-dasharray:8 5 !important; animation:fxDash 1.1s linear infinite; }
 .fs-anim-btn[aria-pressed="true"] { background:rgba(0,84,236,.12); color:var(--f-blue); }
 @media (prefers-reduced-motion: reduce) { .fx-anim svg .flowchart-link.edge-pattern-solid { animation:none; stroke-dasharray:none !important; } }
+
+/* apresentação passo a passo: tudo escondido; cada passo revela caixas e desenha as setas */
+.fs-play { display:none; }
+.diagram.fx-presenting .fs-play, .guia-diagrama-wrap.fx-presenting .fs-play {
+  display:flex; align-items:center; gap:4px; position:absolute; left:50%; transform:translateX(-50%); bottom:16px; z-index:7;
+  background:var(--surface); border:1px solid var(--line-2); border-radius:999px; padding:5px 8px; box-shadow:var(--shadow-2);
+}
+.fs-play button {
+  min-width:32px; height:32px; padding:0 8px; border:0; border-radius:999px; background:transparent; cursor:pointer;
+  font:700 13px/1 'Roboto',sans-serif; color:var(--text-2);
+}
+.fs-play button:hover:not(:disabled) { background:var(--surface-3); color:var(--f-blue); }
+.fs-play button:disabled { opacity:.35; cursor:default; }
+.fs-play .fs-play-main { background:var(--grad-primary); color:#fff; min-width:40px; font-size:14px; }
+.fs-play .fs-play-main:hover:not(:disabled) { background:var(--grad-primary); color:#fff; filter:brightness(1.1); }
+.fs-play-count { min-width:62px; text-align:center; font:600 12px 'Roboto Mono',monospace; color:var(--text-2); }
+.fs-play .fs-play-speed { font:600 12px 'Roboto Mono',monospace; }
+.fs-play-btn[aria-pressed="true"] { background:rgba(0,84,236,.12); color:var(--f-blue); }
+/* em apresentação o hint de arrastar sai do caminho da barra */
+.diagram.fx-presenting .fs-pan-hint, .guia-diagrama-wrap.fx-presenting .fs-pan-hint { display:none; }
+
+:is(.diagram-canvas, .guia-diagrama-canvas) svg.fx-play g.node:not(.fx-shown),
+:is(.diagram-canvas, .guia-diagrama-canvas) svg.fx-play .edgePaths path:not(.fx-shown),
+:is(.diagram-canvas, .guia-diagrama-canvas) svg.fx-play g.edgeLabel:not(.fx-shown) { opacity:0; pointer-events:none; }
+:is(.diagram-canvas, .guia-diagrama-canvas) svg.fx-play g.node.fx-current { animation:fxEntra .6s var(--ease) both, fxPulsa 1.5s .6s ease-in-out infinite alternate; }
+:is(.diagram-canvas, .guia-diagrama-canvas) svg.fx-play g.edgeLabel.fx-shown { animation:fxFade .5s .25s ease-out both; }
+:is(.diagram-canvas, .guia-diagrama-canvas) svg.fx-play .edgePaths path.fx-draw { animation:fxDesenha .5s ease-out backwards; }
+@keyframes fxEntra  { from { opacity:0; filter:blur(6px) drop-shadow(0 0 0 rgba(0,84,236,0)); } to { opacity:1; filter:blur(0) drop-shadow(0 0 8px rgba(0,84,236,.45)); } }
+@keyframes fxPulsa  { from { filter:drop-shadow(0 0 4px rgba(0,84,236,.30)); } to { filter:drop-shadow(0 0 11px rgba(0,84,236,.65)); } }
+@keyframes fxFade   { from { opacity:0; } to { opacity:1; } }
+@keyframes fxDesenha { from { stroke-dasharray:1; stroke-dashoffset:1; } to { stroke-dasharray:1; stroke-dashoffset:0; } }
+@media (prefers-reduced-motion: reduce) {
+  :is(.diagram-canvas, .guia-diagrama-canvas) svg.fx-play g.node.fx-current,
+  :is(.diagram-canvas, .guia-diagrama-canvas) svg.fx-play g.edgeLabel.fx-shown,
+  :is(.diagram-canvas, .guia-diagrama-canvas) svg.fx-play .edgePaths path.fx-draw { animation:none; }
+}
