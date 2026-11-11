@@ -2691,3 +2691,44 @@ body.fs-open { overflow:hidden; }
   font-size:11.5px; color:var(--text-3); background:var(--surface); border:1px solid var(--line);
   border-radius:999px; padding:5px 12px; opacity:.9;
 }
+
+/* ---------- acabamento dos fluxogramas ----------
+   Vale pros cards, pro guia e pra prévia do editor. As classes .fx-* vêm de estilizaDiagrama(). */
+:is(.diagram-canvas, .guia-diagrama-canvas, #diagram-preview) svg g.node { filter:drop-shadow(0 2px 5px rgba(23,26,46,.13)); }
+:is(.diagram-canvas, .guia-diagrama-canvas, #diagram-preview) svg g.node.fx-step rect.label-container { rx:9px; ry:9px; }
+:is(.diagram-canvas, .guia-diagrama-canvas, #diagram-preview) svg g.node.botao rect.label-container { rx:12px; ry:12px; }
+/* setas mais firmes */
+:is(.diagram-canvas, .guia-diagrama-canvas, #diagram-preview) svg .flowchart-link { stroke-width:1.7px; stroke-linecap:round; }
+/* rótulos das setas (Sim/Não…) como pílulas */
+:is(.diagram-canvas, .guia-diagrama-canvas, #diagram-preview) svg .edgeLabel .labelBkg {
+  background:var(--surface); border:1px solid var(--line-2); border-radius:999px;
+  padding:1px 9px; box-shadow:0 1px 3px rgba(23,26,46,.08);
+}
+:is(.diagram-canvas, .guia-diagrama-canvas, #diagram-preview) svg .edgeLabel p { font-size:12px; font-weight:600; color:var(--text-2) !important; margin:0; }
+/* etapa sem ator: neutra (branca, borda cinza) — assim a cor dos atores se destaca.
+   Vem antes das regras de ator, de início/fim e do editor inline, que têm prioridade sobre ela. */
+.fx-step rect.label-container { fill:#fff !important; stroke:#9aa1c2 !important; }
+/* cor por ator */
+.fx-ator rect.label-container { stroke-width:1.8px !important; }
+.fx-ator-tec rect.label-container { fill:#e8f0ff !important; stroke:#0054ec !important; }
+.fx-ator-opr rect.label-container { fill:#f3e8ff !important; stroke:#9333ea !important; }
+.fx-ator-cli rect.label-container { fill:#e7f8ef !important; stroke:#0d9d6c !important; }
+.fx-ator-fin rect.label-container { fill:#ffe8f1 !important; stroke:#d6286f !important; }
+.fx-ator-tec .nodeLabel, .fx-ator-tec .nodeLabel p { color:#0b2e75 !important; }
+.fx-ator-opr .nodeLabel, .fx-ator-opr .nodeLabel p { color:#5b1699 !important; }
+.fx-ator-cli .nodeLabel, .fx-ator-cli .nodeLabel p { color:#075e40 !important; }
+.fx-ator-fin .nodeLabel, .fx-ator-fin .nodeLabel p { color:#8a1347 !important; }
+/* início / fim em pílula (o preenchimento em degradê é aplicado pelo JS) */
+.fx-start .nodeLabel, .fx-start .nodeLabel p, .fx-end .nodeLabel, .fx-end .nodeLabel p { color:#fff !important; font-weight:600; }
+.fx-start { filter:drop-shadow(0 3px 7px rgba(0,84,236,.35)) !important; }
+/* legenda */
+.fx-legend { display:flex; flex-wrap:wrap; gap:6px 14px; justify-content:flex-start; margin:0 0 12px; text-align:left; }
+.fx-leg-item { display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600; color:var(--text-2); }
+.fx-leg-dot { width:14px; height:14px; border-radius:5px; border:2px solid transparent; display:inline-block; }
+.fx-leg-start, .fx-leg-end { width:20px; border-radius:999px; border:0; }
+.fx-leg-start { background:linear-gradient(135deg,#1a3fd1,#12b5d6); }
+.fx-leg-end { background:linear-gradient(135deg,#2b2f55,#4a4f7a); }
+.diagram.fs .fx-legend, .guia-diagrama-wrap.fs .fx-legend {
+  position:absolute; top:12px; left:14px; z-index:5; margin:0; padding:6px 12px; pointer-events:none;
+  background:var(--surface); border:1px solid var(--line); border-radius:999px;
+}

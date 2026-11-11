@@ -1316,11 +1316,116 @@
     try {
       const { svg } = await mermaid.render(id, src);
       container.innerHTML = svg;
+      estilizaDiagrama(container);   // ator, início/fim e legenda
       applyView(container);   // mantém zoom/posição da tela cheia depois de redesenhar
     } catch (err) {
       const msg = (err && err.message ? err.message : String(err)).split("\n").slice(0, 6).join("\n");
       container.innerHTML = `<div class="diagram-error">⚠ Erro no diagrama:\n${esc(msg)}</div>`;
     }
+  }
+
+  // ---- acabamento visual dos fluxogramas ----
+  // Roda depois de cada render. Não muda o código Mermaid guardado nem o editor: só marca
+  // as caixas com classes (.fx-*) que o CSS usa, e injeta o degradê das pílulas de início/fim.
+  //  · ator: o rótulo começa por "Técnico ·", "Tec.", "Operador", "Cliente" ou "Financeiro"
+  //    (ignora um número de etapa na frente, tipo "03 · Tec. Aceitou") → cor do ator
+  //  · início: caixa sem seta entrando; fim: caixa sem seta saindo → pílula
+  const ATORES = {
+    tec: { nome: "Técnico",    cor: "#0054ec", fundo: "#e8f0ff", texto: "#0b2e75" },
+    opr: { nome: "Operador",   cor: "#9333ea", fundo: "#f3e8ff", texto: "#5b1699" },
+    cli: { nome: "Cliente",    cor: "#0d9d6c", fundo: "#e7f8ef", texto: "#075e40" },
+    fin: { nome: "Financeiro", cor: "#d6286f", fundo: "#ffe8f1", texto: "#8a1347" },
+  };
+  const ATOR_POR_PALAVRA = { tecnico: "tec", tec: "tec", operador: "opr", cliente: "cli", financeiro: "fin" };
+
+  function atorDoRotulo(txt) {
+    const t = (txt || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
+      .replace(/^\d+\s*[·.\-:)]\s*/, "");
+    const m = /^(tecnico|tec|operador|cliente|financeiro)\b/.exec(t);
+    return m ? ATOR_POR_PALAVRA[m[1]] : null;
+  }
+
+  function estilizaDiagrama(container) {
+    const svg = container.querySelector(":scope > svg");
+    if (!svg) return;
+    const nodes = new Map();   // id do Mermaid -> <g>
+    svg.querySelectorAll("g.node").forEach((g) => {
+      const id = inlineNodeId(g);
+      if (id) nodes.set(id, g);
+    });
+    if (!nodes.size) return;
+
+    // graus de entrada/saída pelas setas visíveis (id do tipo "L_origem_destino_0")
+    const entra = new Set(), sai = new Set();
+    svg.querySelectorAll(".edgePaths path[data-id]").forEach((path) => {
+      if (/invisible/.test(path.getAttribute("class") || "")) return;   // elo "~~~" do lado a lado
+      const m = /^L_(.+)_\d+$/.exec(path.dataset.id || "");
+      if (!m) return;
+      const partes = m[1].split("_");
+      for (let i = 1; i < partes.length; i++) {      // ids podem ter "_": acha o corte em que os dois lados existem
+        const de = partes.slice(0, i).join("_"), para = partes.slice(i).join("_");
+        if (nodes.has(de) && nodes.has(para)) { sai.add(de); entra.add(para); break; }
+      }
+    });
+
+    const gradId = svg.id + "-fx";
+    let temGradiente = false;
+    const usados = new Set();
+    nodes.forEach((g, id) => {
+      const rect = g.querySelector(":scope > rect.basic.label-container, :scope > rect.label-container");
+      const cls = g.classList;
+      const comum = rect && cls.contains("default") && !cls.contains("botao")
+        && ![...cls].some((c) => /^notif/.test(c));
+      if (!comum) return;
+      cls.add("fx-step");
+      const h = parseFloat(rect.getAttribute("height")) || 0;
+      const ator = atorDoRotulo(g.querySelector(".nodeLabel")?.textContent);
+      if (!entra.has(id) && sai.has(id)) {
+        cls.add("fx-start");
+      } else if (entra.has(id) && !sai.has(id)) {
+        cls.add("fx-end");
+      } else if (ator) {
+        cls.add("fx-ator", "fx-ator-" + ator);
+        usados.add(ator);
+      }
+      if (cls.contains("fx-start") || cls.contains("fx-end")) {
+        // pílula: raio = meia altura, com teto pra não espremer o texto de caixas altas
+        const r = Math.min(h / 2, 18);
+        rect.style.setProperty("rx", r + "px"); rect.style.setProperty("ry", r + "px");
+        rect.style.setProperty("fill", `url(#${gradId}-${cls.contains("fx-start") ? "s" : "e"})`, "important");
+        rect.style.setProperty("stroke", "none", "important");
+        temGradiente = true;
+      }
+    });
+
+    if (temGradiente) {
+      const NS = "http://www.w3.org/2000/svg";
+      let defs = svg.querySelector("defs");
+      if (!defs) { defs = document.createElementNS(NS, "defs"); svg.insertBefore(defs, svg.firstChild); }
+      const grad = (suf, a, b) => {
+        const g = document.createElementNS(NS, "linearGradient");
+        g.id = `${gradId}-${suf}`;
+        g.setAttribute("x1", "0"); g.setAttribute("y1", "0"); g.setAttribute("x2", "1"); g.setAttribute("y2", "1");
+        [[0, a], [1, b]].forEach(([o, c]) => {
+          const st = document.createElementNS(NS, "stop");
+          st.setAttribute("offset", o); st.setAttribute("stop-color", c); g.appendChild(st);
+        });
+        defs.appendChild(g);
+      };
+      grad("s", "#1a3fd1", "#12b5d6");   // início: degradê da marca
+      grad("e", "#2b2f55", "#4a4f7a");   // fim: índigo escuro, neutro (fim nem sempre é "sucesso")
+    }
+
+    // legenda: só o que aparece no desenho, e só nas telas de leitura (não na prévia do editor)
+    if (!container.matches(".diagram-canvas, .guia-diagrama-canvas")) return;
+    const itens = [];
+    if (svg.querySelector(".fx-start")) itens.push(`<span class="fx-leg-item"><i class="fx-leg-dot fx-leg-start"></i>Início</span>`);
+    Object.keys(ATORES).filter((k) => usados.has(k)).forEach((k) => {
+      const a = ATORES[k];
+      itens.push(`<span class="fx-leg-item"><i class="fx-leg-dot" style="background:${a.fundo};border-color:${a.cor}"></i>${a.nome}</span>`);
+    });
+    if (svg.querySelector(".fx-end")) itens.push(`<span class="fx-leg-item"><i class="fx-leg-dot fx-leg-end"></i>Fim</span>`);
+    if (itens.length >= 2) container.insertAdjacentHTML("afterbegin", `<div class="fx-legend" aria-label="Legenda">${itens.join("")}</div>`);
   }
 
   function switchView(view) {
