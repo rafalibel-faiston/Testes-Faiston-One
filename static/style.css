@@ -2732,3 +2732,20 @@ body.fs-open { overflow:hidden; }
   position:absolute; top:12px; left:14px; z-index:5; margin:0; padding:6px 12px; pointer-events:none;
   background:var(--surface); border:1px solid var(--line); border-radius:999px;
 }
+
+/* destaque ao passar o mouse: caixa + vizinhas; o resto esmaece */
+:is(.diagram-canvas, .guia-diagrama-canvas) svg g.node,
+:is(.diagram-canvas, .guia-diagrama-canvas) svg .edgePaths path,
+:is(.diagram-canvas, .guia-diagrama-canvas) svg g.edgeLabel { transition:opacity .16s var(--ease); }
+:is(.diagram-canvas, .guia-diagrama-canvas) svg.fx-focus g.node:not(.fx-on) { opacity:.22; }
+:is(.diagram-canvas, .guia-diagrama-canvas) svg.fx-focus .edgePaths path:not(.fx-on) { opacity:.14; }
+/* g.edgeLabel: o <span class="edgeLabel"> interno do Mermaid não pode entrar na regra */
+:is(.diagram-canvas, .guia-diagrama-canvas) svg.fx-focus g.edgeLabel:not(.fx-on) { opacity:.14; }
+:is(.diagram-canvas, .guia-diagrama-canvas) svg .edgePaths path.fx-on { stroke:var(--f-blue) !important; stroke-width:2.6px !important; }
+:is(.diagram-canvas, .guia-diagrama-canvas) svg g.node.fx-hot { filter:drop-shadow(0 0 7px rgba(0,84,236,.5)); }
+
+/* animação do sentido do fluxo (opcional, na tela cheia) */
+@keyframes fxDash { to { stroke-dashoffset:-26; } }
+.fx-anim svg .flowchart-link.edge-pattern-solid { stroke-dasharray:8 5 !important; animation:fxDash 1.1s linear infinite; }
+.fs-anim-btn[aria-pressed="true"] { background:rgba(0,84,236,.12); color:var(--f-blue); }
+@media (prefers-reduced-motion: reduce) { .fx-anim svg .flowchart-link.edge-pattern-solid { animation:none; stroke-dasharray:none !important; } }

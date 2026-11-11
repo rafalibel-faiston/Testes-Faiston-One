@@ -1345,6 +1345,44 @@
     return m ? ATOR_POR_PALAVRA[m[1]] : null;
   }
 
+  // ---- destaque ao passar o mouse ----
+  // Caixa sob o mouse + quem entra e quem sai dela (e as setas entre elas); o resto esmaece.
+  // Só nas telas de leitura: com a edição inline ligada o hover é do editor.
+  function destacaVizinhos(svg, id) {
+    const fx = svg.__fx;
+    if (!fx || !fx.nodes.has(id)) return;
+    const on = new Set([id]);
+    fx.arestas.forEach((a) => { if (a.de === id) on.add(a.para); if (a.para === id) on.add(a.de); });
+    fx.nodes.forEach((g, nid) => { g.classList.toggle("fx-on", on.has(nid)); g.classList.toggle("fx-hot", nid === id); });
+    fx.arestas.forEach((a) => {
+      const liga = a.de === id || a.para === id;
+      a.path.classList.toggle("fx-on", liga);
+      if (a.rotulo) a.rotulo.classList.toggle("fx-on", liga);
+    });
+    svg.classList.add("fx-focus");
+  }
+
+  function limpaDestaque(svg) {
+    if (!svg || !svg.classList.contains("fx-focus")) return;
+    svg.classList.remove("fx-focus");
+    svg.querySelectorAll(".fx-on, .fx-hot").forEach((e) => e.classList.remove("fx-on", "fx-hot"));
+  }
+
+  function ligaDestaque(container) {
+    if (container.dataset.fxHover) return;   // o canvas é o mesmo a cada redesenho: liga uma vez só
+    container.dataset.fxHover = "1";
+    const emEdicao = () => !!container.closest(".diagram.editing") || container.classList.contains("panning");
+    container.addEventListener("mouseover", (ev) => {
+      const svg = container.querySelector(":scope > svg");
+      if (!svg) return;
+      if (emEdicao()) { limpaDestaque(svg); return; }
+      const g = ev.target.closest && ev.target.closest("g.node");
+      const id = g && inlineNodeId(g);
+      if (id) destacaVizinhos(svg, id); else limpaDestaque(svg);
+    });
+    container.addEventListener("mouseleave", () => limpaDestaque(container.querySelector(":scope > svg")));
+  }
+
   function estilizaDiagrama(container) {
     const svg = container.querySelector(":scope > svg");
     if (!svg) return;
@@ -1357,6 +1395,9 @@
 
     // graus de entrada/saída pelas setas visíveis (id do tipo "L_origem_destino_0")
     const entra = new Set(), sai = new Set();
+    const rotulos = new Map();   // data-id da seta -> <g.edgeLabel>
+    svg.querySelectorAll(".edgeLabels .edgeLabel .label[data-id]").forEach((l) => rotulos.set(l.dataset.id, l.closest(".edgeLabel")));
+    const arestas = [];          // { de, para, path, rotulo } — base do destaque ao passar o mouse
     svg.querySelectorAll(".edgePaths path[data-id]").forEach((path) => {
       if (/invisible/.test(path.getAttribute("class") || "")) return;   // elo "~~~" do lado a lado
       const m = /^L_(.+)_\d+$/.exec(path.dataset.id || "");
@@ -1364,9 +1405,15 @@
       const partes = m[1].split("_");
       for (let i = 1; i < partes.length; i++) {      // ids podem ter "_": acha o corte em que os dois lados existem
         const de = partes.slice(0, i).join("_"), para = partes.slice(i).join("_");
-        if (nodes.has(de) && nodes.has(para)) { sai.add(de); entra.add(para); break; }
+        if (nodes.has(de) && nodes.has(para)) {
+          sai.add(de); entra.add(para);
+          arestas.push({ de, para, path, rotulo: rotulos.get(path.dataset.id) || null });
+          break;
+        }
       }
     });
+    svg.__fx = { nodes, arestas };
+    ligaDestaque(container);
 
     const gradId = svg.id + "-fx";
     let temGradiente = false;
@@ -1579,6 +1626,11 @@
     el.querySelectorAll(".diagram-fs, .guia-fs").forEach((b) => b.setAttribute("aria-pressed", on ? "true" : "false"));
     const cv = fsCanvas(el);
     if (cv) { views.delete(cv); updateZoomLabel(el); if (on) setupPanZoom(el, cv); }
+    if (!on) {   // a animação é um recurso de apresentação: sai junto com a tela cheia
+      el.classList.remove("fx-anim");
+      const ab = el.querySelector(".fs-anim-btn");
+      if (ab) { ab.setAttribute("aria-pressed", "false"); ab.textContent = "▶ Animar"; }
+    }
     // o tamanho do desenho mudou: refaz o desenho (e as alças, se estiver em edição inline)
     if (el.classList.contains("diagram")) refreshDiagramAfterFs(el);
     else if (el.id === "guia-diagrama-wrap") desenharDiagramaDoGuia();
@@ -1595,6 +1647,7 @@
       <span class="fs-zoom-pct" aria-live="polite">100%</span>
       <button type="button" data-z="in" title="Aumentar (+)" aria-label="Aumentar zoom">+</button>
       <button type="button" data-z="fit" class="fs-zoom-fit" title="Ajustar à tela (0)">Ajustar</button>
+      <button type="button" data-z="anim" class="fs-zoom-fit fs-anim-btn" aria-pressed="false" title="Animar o sentido do fluxo (A)">▶ Animar</button>
     </div>
     <div class="fs-pan-hint">Arraste pra mover · role pra dar zoom</div>`;
   const views = new WeakMap();   // canvas -> { k, x, y }
@@ -1726,6 +1779,13 @@
 
     el.querySelectorAll(".fs-zoom [data-z]").forEach((b) => b.addEventListener("click", () => {
       const z = b.dataset.z;
+      if (z === "anim") {
+        const on = !el.classList.contains("fx-anim");
+        el.classList.toggle("fx-anim", on);
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+        b.textContent = on ? "⏸ Animando" : "▶ Animar";
+        return;
+      }
       if (z === "fit") { views.delete(canvas); applyView(canvas); }
       else zoomCentered(canvas, z === "in" ? 1.25 : 1 / 1.25);
       viewChanged(el, canvas);
@@ -1757,7 +1817,8 @@
     if (!fsEl) return;
     if (e.target && e.target.closest && e.target.closest("input, textarea")) return;   // renomeando uma caixa
     // atalhos de zoom: + / − / 0
-    const z = e.key === "+" || e.key === "=" ? "in" : e.key === "-" || e.key === "_" ? "out" : e.key === "0" ? "fit" : null;
+    const z = e.key === "+" || e.key === "=" ? "in" : e.key === "-" || e.key === "_" ? "out" : e.key === "0" ? "fit"
+      : e.key === "a" || e.key === "A" ? "anim" : null;
     if (z && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const btn = fsEl.querySelector(`.fs-zoom [data-z="${z}"]`);
       if (btn) { e.preventDefault(); btn.click(); }
