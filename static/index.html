@@ -797,6 +797,67 @@
   </div>
 </div>
 
+<!-- telinhas (protótipo de tela por etapa do fluxo): construtor e visualizador -->
+<div class="modal tela-modal" id="tela-modal" hidden aria-modal="true" role="dialog" aria-labelledby="tela-modal-title">
+  <div class="modal-card tela-card">
+    <div class="modal-head">
+      <h3 id="tela-modal-title">Tela da etapa</h3>
+      <span class="modal-code" id="tela-modal-etapa"></span>
+      <button type="button" class="modal-close" id="tela-close" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body tela-body">
+      <div class="tela-form">
+        <div class="tela-linha">
+          <div class="tela-disp" role="group" aria-label="Tipo de tela">
+            <button type="button" data-disp="celular">📱 Celular</button>
+            <button type="button" data-disp="web">🖥 Web</button>
+          </div>
+          <select id="tela-modelo" aria-label="Começar de um modelo"><option value="">Começar de um modelo…</option></select>
+          <select id="tela-copiar" aria-label="Copiar de outra etapa"><option value="">Copiar de outra etapa…</option></select>
+        </div>
+        <label class="fld">Nome da tela
+          <input id="tela-titulo" maxlength="120" placeholder="ex.: Chamado aceito">
+        </label>
+        <label class="fld">O que acontece nesta tela
+          <textarea id="tela-legenda" rows="2" maxlength="600" placeholder="Uma frase para quem vai ver: o que o usuário faz ou vê aqui"></textarea>
+        </label>
+        <div class="tela-sec">Blocos da tela <span class="tela-sec-dica">de cima pra baixo, como aparece</span></div>
+        <div class="tela-blocos" id="tela-blocos"></div>
+        <div class="tela-sec">Adicionar bloco</div>
+        <div class="tela-paleta" id="tela-paleta"></div>
+      </div>
+      <div class="tela-previa-col">
+        <div class="tela-sec">Pré-visualização</div>
+        <div class="tela-previa" id="tela-previa"></div>
+      </div>
+    </div>
+    <div class="modal-actions tela-actions">
+      <button type="button" class="btn-ghost tela-excluir" id="tela-excluir" hidden>Excluir tela</button>
+      <span class="tela-actions-spacer"></span>
+      <button type="button" class="btn-ghost" id="tela-cancelar">Cancelar</button>
+      <button type="button" class="btn-primary" id="tela-salvar">Salvar tela</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal tela-modal" id="tela-viewer" hidden aria-modal="true" role="dialog" aria-labelledby="tela-view-titulo">
+  <div class="modal-card tela-view-card">
+    <div class="modal-head">
+      <h3 id="tela-view-titulo">Tela</h3>
+      <span class="modal-code" id="tela-view-etapa"></span>
+      <button type="button" class="modal-close" id="tela-view-close" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body tela-view-body">
+      <div id="tela-view-tela"></div>
+      <p id="tela-view-legenda" class="tela-view-legenda"></p>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="tela-view-editar">✎ Editar tela</button>
+      <button type="button" class="btn-primary" id="tela-view-ok">Fechar</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="diagram-modal" hidden aria-modal="true" role="dialog">
   <div class="modal-card diagram-card">
     <div class="modal-head">

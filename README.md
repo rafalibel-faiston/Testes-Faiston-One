@@ -501,6 +501,23 @@ visão *Fluxos* da própria aba de fluxo, e as Novidades dele ficam na trilha do
 fluxo `projetos`.) As dúvidas e decisões em aberto continuam na lista de
 pendências. Nada de etapa ou regra vem semeado além do que a LPD descreveu.
 
+**Fluxogramas: tela cheia, apresentação e telinhas.** Cada diagrama abre em **tela cheia**
+(Fullscreen API, com overlay em CSS de reserva) com zoom e "mãozinha" (arrastar, roda do
+mouse, pinça, `+` `-` `0`). Nela, **Apresentar** (`P`) vai revelando o fluxo passo a passo,
+com a câmera acompanhando; **Animar** (`A`) faz as setas correrem. Passar o mouse numa caixa
+destaca ela e as vizinhas. O acabamento (cor por ator pelo prefixo do rótulo — `Técnico ·`,
+`Operador`, `Cliente`, `Financeiro` —, pílulas de início/fim e legenda) é pós-processamento do
+SVG (`estilizaDiagrama`): não muda o código Mermaid salvo.
+
+Cada etapa pode ter uma **telinha** (protótipo de tela, não a tela real): no "Editar aqui", o
+botão 🖼 da caixa abre o construtor — celular ou web, com blocos (barra de título, texto,
+campo, botão, status, lista, mapa, notificação, aviso, abas, tabela), modelos prontos e
+"copiar de outra etapa". Fica guardada em `diagrama_telas` (`/api/diagramas-telas`,
+`PUT/DELETE /api/diagramas/{id}/telas/{no_id}`), ligada à caixa pelo id dela no Mermaid. A caixa
+ganha um selo que abre a tela grande, e na apresentação a tela da etapa atual aparece num painel
+ao lado do fluxo. Os diagramas do seed que o time exclui ficam registrados em
+`diagramas_seed_removidos` e não voltam a cada subida do app.
+
 **Como acrescentar um módulo:** uma entrada na lista `MODULOS` de
 `app/modulos.py` (`key`, `label`, `titulo`, `descricao`, `versao_padrao` e, opcionais, `processo:
 True` se o processo ainda precisa ser desenhado na aba, ou `dispatcher_fluxo` se o

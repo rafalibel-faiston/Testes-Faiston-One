@@ -238,6 +238,26 @@ class FlowDiagram(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
 
+class DiagramaTela(Base):
+    """Telinha (protótipo) de uma etapa do fluxograma: um desenho simples, montado com blocos
+    (título, campo, botão, lista...), que mostra como a tela dessa etapa deveria ser. Fica
+    ligada à caixa pelo id dela no código Mermaid (`no_id`). Aparece como selo na caixa e,
+    no modo Apresentar, ao lado do fluxo. Não é a tela real do sistema: é proposta."""
+    __tablename__ = "diagrama_telas"
+    __table_args__ = (UniqueConstraint("diagrama_id", "no_id", name="uq_diagrama_tela_no"),)
+
+    id = Column(Integer, primary_key=True)
+    diagrama_id = Column(Integer, ForeignKey("flow_diagrams.id"), nullable=False, index=True)
+    no_id = Column(String, nullable=False)                    # id da caixa no Mermaid (A, n3...)
+    dispositivo = Column(String, nullable=False, default="celular", server_default="celular")  # celular / web
+    titulo = Column(String, nullable=True, default="")        # nome da tela ("Chamado aceito")
+    legenda = Column(Text, nullable=True, default="")         # o que acontece nessa tela
+    blocos = Column(Text, nullable=False, default="[]")       # JSON: lista de {tipo, texto, extra}
+    atualizado_por = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
 class DiagramaSeedRemovido(Base):
     """Diagrama do seed que o time excluiu de propósito. O seed roda a cada subida do app e,
     sem este registro, recriaria o diagrama apagado (nos módulos ele confere pelo título)."""

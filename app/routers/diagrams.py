@@ -1,3 +1,5 @@
+import json
+import re
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -142,6 +144,82 @@ def delete_diagram(diagram_id: int, db: Session = Depends(get_db)):
         ).first()
         if not ja:
             db.add(models.DiagramaSeedRemovido(fluxo=diagram.fluxo, titulo=diagram.titulo))
+    db.query(models.DiagramaTela).filter(models.DiagramaTela.diagrama_id == diagram_id).delete(
+        synchronize_session=False)
     db.delete(diagram)
     db.commit()
     return {"deleted": diagram_id}
+
+
+# ---------------------------------------------------------------- telinhas (protótipo por etapa)
+
+NO_ID_RE = re.compile(r"^[A-Za-z0-9_]{1,40}$")
+
+
+def _tela_out(t: models.DiagramaTela) -> schemas.TelaOut:
+    try:
+        blocos = json.loads(t.blocos or "[]")
+    except ValueError:
+        blocos = []
+    return schemas.TelaOut(
+        id=t.id, diagrama_id=t.diagrama_id, no_id=t.no_id, dispositivo=t.dispositivo or "celular",
+        titulo=t.titulo or "", legenda=t.legenda or "", blocos=blocos,
+        atualizado_por=t.atualizado_por, updated_at=t.updated_at,
+    )
+
+
+@router.get("/diagramas-telas", response_model=List[schemas.TelaOut])
+def list_telas(fluxo: Optional[str] = None, db: Session = Depends(get_db)):
+    """Todas as telinhas dos diagramas de um fluxo (ou de todos). A tela carrega uma vez só,
+    junto com os diagramas, em vez de uma chamada por diagrama."""
+    q = db.query(models.DiagramaTela)
+    if fluxo:
+        q = q.join(models.FlowDiagram, models.FlowDiagram.id == models.DiagramaTela.diagrama_id).filter(
+            models.FlowDiagram.fluxo == fluxo)
+    return [_tela_out(t) for t in q.order_by(models.DiagramaTela.id).all()]
+
+
+@router.put("/diagramas/{diagram_id}/telas/{no_id}", response_model=schemas.TelaOut)
+def save_tela(diagram_id: int, no_id: str, payload: schemas.TelaIn, db: Session = Depends(get_db)):
+    """Cria ou substitui a telinha de uma etapa (a caixa de id `no_id`)."""
+    diagram = db.query(models.FlowDiagram).filter(models.FlowDiagram.id == diagram_id).first()
+    if not diagram:
+        raise HTTPException(status_code=404, detail="Diagrama não encontrado")
+    if not NO_ID_RE.match(no_id):
+        raise HTTPException(status_code=400, detail="Id de etapa inválido.")
+    if not payload.blocos:
+        raise HTTPException(status_code=400, detail="A tela precisa de pelo menos um bloco.")
+    tela = db.query(models.DiagramaTela).filter(
+        models.DiagramaTela.diagrama_id == diagram_id, models.DiagramaTela.no_id == no_id).first()
+    novo = tela is None
+    if novo:
+        tela = models.DiagramaTela(diagrama_id=diagram_id, no_id=no_id)
+        db.add(tela)
+    tela.dispositivo = payload.dispositivo
+    tela.titulo = (payload.titulo or "").strip()
+    tela.legenda = (payload.legenda or "").strip()
+    tela.blocos = json.dumps([b.model_dump() for b in payload.blocos], ensure_ascii=False)
+    tela.atualizado_por = payload.atualizado_por
+    nome = tela.titulo or no_id
+    log_activity(db, _trilha(diagram.fluxo), "diagrama",
+                 f'Tela "{nome}" {"criada" if novo else "atualizada"} no diagrama "{diagram.titulo}"{_onde(diagram.fluxo)}',
+                 autor=payload.atualizado_por, case_code=f"diagrama:{diagram.id}")
+    db.commit()
+    db.refresh(tela)
+    return _tela_out(tela)
+
+
+@router.delete("/diagramas/{diagram_id}/telas/{no_id}")
+def delete_tela(diagram_id: int, no_id: str, db: Session = Depends(get_db)):
+    tela = db.query(models.DiagramaTela).filter(
+        models.DiagramaTela.diagrama_id == diagram_id, models.DiagramaTela.no_id == no_id).first()
+    if not tela:
+        raise HTTPException(status_code=404, detail="Tela não encontrada")
+    diagram = db.query(models.FlowDiagram).filter(models.FlowDiagram.id == diagram_id).first()
+    if diagram:
+        log_activity(db, _trilha(diagram.fluxo), "diagrama",
+                     f'Tela "{tela.titulo or no_id}" excluída do diagrama "{diagram.titulo}"{_onde(diagram.fluxo)}',
+                     case_code=f"diagrama:{diagram.id}")
+    db.delete(tela)
+    db.commit()
+    return {"deleted": no_id}

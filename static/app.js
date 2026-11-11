@@ -1345,6 +1345,364 @@
     return m ? ATOR_POR_PALAVRA[m[1]] : null;
   }
 
+  // ---------------- telinhas (protótipo de tela por etapa) ----------------
+  // Cada caixa do fluxograma pode ter uma "telinha": um desenho simples, montado com blocos, que
+  // mostra como a tela dessa etapa deveria ser. Aparece como selo na caixa e, na apresentação,
+  // num painel ao lado do fluxo. É proposta (protótipo), não a tela real do sistema.
+  let TELAS = [];   // todas, vindas de /api/diagramas-telas
+
+  const telaDe = (diagId, noId) => TELAS.find((t) => t.diagrama_id === diagId && t.no_id === noId) || null;
+  const telasDoDiagrama = (diagId) => TELAS.filter((t) => t.diagrama_id === diagId);
+  async function loadTelas() {
+    try { TELAS = await api("/api/diagramas-telas"); } catch (e) { TELAS = []; }
+  }
+
+  const TELA_BLOCOS = {
+    topo:        { nome: "Barra de título",   dica: "Título da barra (ex.: Chamado #1234)" },
+    texto:       { nome: "Texto",             dica: "Texto livre", multi: true },
+    campo:       { nome: "Campo",             dica: "Rótulo: valor de exemplo" },
+    botao:       { nome: "Botão",             dica: "Texto do botão" },
+    botao2:      { nome: "Botão secundário",  dica: "Texto do botão" },
+    status:      { nome: "Status",            dica: "Texto do status (ex.: Agendado)", cor: true },
+    lista:       { nome: "Lista de cards",    dica: "Um card por linha:  Título | detalhe", multi: true },
+    mapa:        { nome: "Mapa",              dica: "Endereço ou legenda do mapa" },
+    notificacao: { nome: "Notificação",       dica: "Mensagem da notificação (push / WhatsApp)" },
+    aviso:       { nome: "Aviso",             dica: "Texto do aviso", cor: true },
+    abas:        { nome: "Abas",              dica: "Aba 1 | Aba 2 | Aba 3   (a primeira fica ativa)" },
+    tabela:      { nome: "Tabela",            dica: "Uma linha por registro, colunas separadas por |   (a 1ª linha é o cabeçalho)", multi: true },
+  };
+  const TELA_CORES = [["azul", "Azul"], ["verde", "Verde"], ["ambar", "Âmbar"], ["vermelho", "Vermelho"]];
+  const corTela = (b) => (TELA_CORES.some(([k]) => k === b.extra) ? b.extra : (b.tipo === "aviso" ? "ambar" : "azul"));
+
+  // um bloco -> HTML (tudo escapado: o texto vem do usuário)
+  function telaBlocoHtml(b) {
+    const t = b.texto || "";
+    const linhas = t.split("\n").map((l) => l.trim()).filter(Boolean);
+    const partes = (l) => l.split("|").map((x) => x.trim());
+    switch (b.tipo) {
+      case "topo": return `<div class="tb tb-topo">${esc(t) || "&nbsp;"}</div>`;
+      case "texto": return `<p class="tb tb-texto">${linhas.map(esc).join("<br>") || "&nbsp;"}</p>`;
+      case "campo": {
+        const i = t.indexOf(":");
+        const rot = i >= 0 ? t.slice(0, i).trim() : t.trim(), val = i >= 0 ? t.slice(i + 1).trim() : "";
+        return `<div class="tb tb-campo"><span class="tb-campo-rot">${esc(rot) || "Campo"}</span><div class="tb-input">${esc(val) || "&nbsp;"}</div></div>`;
+      }
+      case "botao": return `<div class="tb tb-botao">${esc(t) || "Botão"}</div>`;
+      case "botao2": return `<div class="tb tb-botao tb-botao2">${esc(t) || "Botão"}</div>`;
+      case "status": return `<div class="tb tb-statusrow"><span class="tb-status tb-c-${corTela(b)}">${esc(t) || "Status"}</span></div>`;
+      case "lista": {
+        const cards = (linhas.length ? linhas : ["Item | detalhe"]).map((l) => {
+          const [tit, ...det] = partes(l);
+          return `<div class="tb-card"><b>${esc(tit)}</b>${det.length ? `<span>${esc(det.join(" | "))}</span>` : ""}</div>`;
+        });
+        return `<div class="tb tb-lista">${cards.join("")}</div>`;
+      }
+      case "mapa": return `<div class="tb tb-mapa"><i class="tb-pin"></i>${t ? `<span class="tb-mapa-leg">${esc(t)}</span>` : ""}</div>`;
+      case "notificacao": return `<div class="tb tb-notif"><i>🔔</i><span>${esc(t) || "Notificação"}</span></div>`;
+      case "aviso": return `<div class="tb tb-aviso tb-c-${corTela(b)}">${esc(t) || "Aviso"}</div>`;
+      case "abas": {
+        const abas = partes(linhas[0] || "Aba 1 | Aba 2");
+        return `<div class="tb tb-abas">${abas.map((a, i) => `<span class="${i === 0 ? "on" : ""}">${esc(a)}</span>`).join("")}</div>`;
+      }
+      case "tabela": {
+        const rows = (linhas.length ? linhas : ["Coluna 1 | Coluna 2"]).map(partes);
+        const [cab, ...corpo] = rows;
+        return `<div class="tb tb-tabela"><table><thead><tr>${cab.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>` +
+          `<tbody>${corpo.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+      }
+      default: return "";
+    }
+  }
+
+  // a tela inteira (moldura de celular ou de navegador + blocos)
+  function telaHtml(t) {
+    const web = t.dispositivo === "web";
+    const corpo = (t.blocos || []).map(telaBlocoHtml).join("");
+    const moldura = web
+      ? `<div class="tela-web"><div class="tela-web-barra"><i></i><i></i><i></i><span>faiston.one</span></div><div class="tela-corpo">${corpo}</div></div>`
+      : `<div class="tela-cel"><div class="tela-cel-topo"><span></span></div><div class="tela-corpo">${corpo}</div></div>`;
+    return `<div class="tela ${web ? "tela-w" : "tela-c"}">${moldura}<div class="tela-tag">Protótipo · não é a tela real</div></div>`;
+  }
+
+  // ---- onde o modal abre: em tela cheia nativa só o elemento em tela cheia é exibido, então o modal
+  //      precisa estar dentro dele; ao fechar, volta pro body (o card pode ser redesenhado).
+  function modalAbre(modal) { (fsEl || document.body).appendChild(modal); modal.hidden = false; }
+  function modalFecha(modal) { modal.hidden = true; if (modal.parentNode !== document.body) document.body.appendChild(modal); }
+
+  function diagramaIdDoCanvas(canvas) {
+    if (canvas.dataset && canvas.dataset.canvas) return Number(canvas.dataset.canvas);
+    if (canvas.id === "guia-diagrama-canvas") return guiaDiagramaAtivo;
+    return null;
+  }
+
+  // texto da caixa (o que aparece no desenho), pra mostrar "Etapa: 03 · Tec. Aceitou"
+  function rotuloDoNo(diagId, noId) {
+    const canvas = document.querySelector(`.diagram-canvas[data-canvas="${diagId}"]`)
+      || ($("#guia-diagrama-canvas") && guiaDiagramaAtivo === diagId ? $("#guia-diagrama-canvas") : null);
+    const svg = canvas && canvas.querySelector(":scope > svg");
+    const g = svg && svg.__fx && svg.__fx.nodes.get(noId);
+    const txt = g && g.querySelector(".nodeLabel") ? g.querySelector(".nodeLabel").textContent.trim() : "";
+    return txt || noId;
+  }
+
+  // ---- selo na caixa (SVG): clicar abre a tela grande
+  function atualizaSelosTelas(canvas) {
+    const svg = canvas.querySelector(":scope > svg");
+    if (!svg || !svg.__fx) return;
+    svg.querySelectorAll(".fx-tela-selo").forEach((e) => e.remove());
+    const diagId = diagramaIdDoCanvas(canvas);
+    if (diagId == null) return;
+    const NS = "http://www.w3.org/2000/svg";
+    svg.__fx.nodes.forEach((g, noId) => {
+      const tela = telaDe(diagId, noId);
+      if (!tela) return;
+      let bb;
+      try { bb = g.getBBox(); } catch (_) { return; }   // card recolhido: sem layout, tenta no próximo redesenho
+      if (!bb.width) return;
+      const losango = !!g.querySelector("polygon");
+      // caixa: canto superior esquerdo; losango: meio da aresta superior esquerda
+      const x = losango ? bb.x + bb.width * 0.27 : bb.x + 2, y = losango ? bb.y + bb.height * 0.27 : bb.y + 2;
+      const sg = document.createElementNS(NS, "g");
+      sg.setAttribute("class", "fx-tela-selo");
+      sg.setAttribute("transform", `translate(${x} ${y})`);
+      sg.innerHTML =
+        `<title>Ver a tela desta etapa${tela.titulo ? ": " + tela.titulo.replace(/[<&]/g, "") : ""}</title>` +
+        `<circle r="11" class="fx-tela-selo-bg"/>` +
+        `<rect x="-3.6" y="-6.2" width="7.2" height="12.4" rx="1.6" class="fx-tela-selo-ic"/>` +
+        `<line x1="-1.4" y1="4" x2="1.4" y2="4" class="fx-tela-selo-ic"/>`;
+      sg.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+      sg.addEventListener("click", (ev) => { ev.stopPropagation(); abreViewerTela(diagId, noId); });
+      g.appendChild(sg);
+    });
+  }
+
+  // ---- visualizador (tela grande)
+  let viewerCtx = null;   // { diagId, noId }
+  function abreViewerTela(diagId, noId) {
+    const tela = telaDe(diagId, noId);
+    if (!tela) return;
+    viewerCtx = { diagId, noId };
+    $("#tela-view-titulo").textContent = tela.titulo || "Tela da etapa";
+    $("#tela-view-etapa").textContent = rotuloDoNo(diagId, noId);
+    $("#tela-view-tela").innerHTML = telaHtml(tela);
+    const leg = $("#tela-view-legenda");
+    leg.textContent = tela.legenda || ""; leg.hidden = !tela.legenda;
+    modalAbre($("#tela-viewer"));
+  }
+  const fechaViewerTela = () => { modalFecha($("#tela-viewer")); viewerCtx = null; };
+  $("#tela-view-close").addEventListener("click", fechaViewerTela);
+  $("#tela-view-ok").addEventListener("click", fechaViewerTela);
+  $("#tela-viewer").addEventListener("click", (e) => { if (e.target.id === "tela-viewer") fechaViewerTela(); });
+  $("#tela-view-editar").addEventListener("click", () => {
+    const c = viewerCtx; if (!c) return;
+    fechaViewerTela();
+    abreConstrutorTela(c.diagId, c.noId);
+  });
+
+  // ---- construtor
+  const TELA_MODELOS = {
+    "tec-chamado": { nome: "App do técnico — chamado", dispositivo: "celular", blocos: [
+      { tipo: "topo", texto: "Chamado #1234" },
+      { tipo: "status", texto: "Aguardando aceite", extra: "ambar" },
+      { tipo: "texto", texto: "Instalação de ponto de rede\nAv. Paulista, 1000 · hoje, 14h" },
+      { tipo: "mapa", texto: "Av. Paulista, 1000" },
+      { tipo: "botao", texto: "Aceitar chamado" },
+      { tipo: "botao2", texto: "Recusar" },
+    ] },
+    "tec-lista": { nome: "App do técnico — lista de chamados", dispositivo: "celular", blocos: [
+      { tipo: "topo", texto: "Meus chamados" },
+      { tipo: "abas", texto: "Abertos | Agendados | Concluídos" },
+      { tipo: "lista", texto: "#1234 | Av. Paulista · hoje 14h\n#1235 | Rua Augusta · amanhã 09h\n#1236 | Rua Oscar Freire · sexta 10h" },
+    ] },
+    "tec-notif": { nome: "Notificação para o técnico", dispositivo: "celular", blocos: [
+      { tipo: "notificacao", texto: "Novo chamado perto de você: Instalação de ponto de rede" },
+      { tipo: "botao", texto: "Ver chamado" },
+    ] },
+    "web-painel": { nome: "Web do operador — painel", dispositivo: "web", blocos: [
+      { tipo: "topo", texto: "Dispatcher" },
+      { tipo: "abas", texto: "Chamados | Técnicos | Relatórios" },
+      { tipo: "tabela", texto: "Chamado | Cliente | Status\n#1234 | Cliente A | Buscando técnico\n#1235 | Cliente B | Agendado" },
+      { tipo: "botao", texto: "Criar OS" },
+    ] },
+  };
+
+  const telaModal = $("#tela-modal");
+  let telaSt = null;   // { diagId, noId, existe, dispositivo, titulo, legenda, blocos }
+
+  const novoBloco = (tipo) => ({ tipo, texto: "", extra: TELA_BLOCOS[tipo].cor ? (tipo === "aviso" ? "ambar" : "azul") : null });
+
+  function renderPreviaTela() {
+    if (!telaSt) return;
+    $("#tela-previa").innerHTML = telaHtml({ dispositivo: telaSt.dispositivo, blocos: telaSt.blocos });
+  }
+
+  function renderBlocosTela() {
+    const wrap = $("#tela-blocos");
+    if (!telaSt.blocos.length) {
+      wrap.innerHTML = `<div class="tela-vazio">Nenhum bloco ainda. Comece por um modelo ou adicione os blocos abaixo.</div>`;
+      return;
+    }
+    wrap.innerHTML = telaSt.blocos.map((b, i) => {
+      const def = TELA_BLOCOS[b.tipo];
+      const campo = def.multi
+        ? `<textarea rows="3" data-i="${i}" placeholder="${esc(def.dica)}">${esc(b.texto)}</textarea>`
+        : `<input data-i="${i}" value="${esc(b.texto)}" placeholder="${esc(def.dica)}" maxlength="800">`;
+      const cor = def.cor
+        ? `<select class="tela-cor" data-i="${i}" aria-label="Cor">${TELA_CORES.map(([k, n]) => `<option value="${k}"${corTela(b) === k ? " selected" : ""}>${n}</option>`).join("")}</select>`
+        : "";
+      return `<div class="tela-bloco" data-i="${i}">
+        <div class="tela-bloco-cab"><span class="tela-bloco-tipo">${esc(def.nome)}</span>${cor}
+          <span class="tela-bloco-acoes">
+            <button type="button" data-ac="up" data-i="${i}" title="Subir" ${i === 0 ? "disabled" : ""}>▲</button>
+            <button type="button" data-ac="down" data-i="${i}" title="Descer" ${i === telaSt.blocos.length - 1 ? "disabled" : ""}>▼</button>
+            <button type="button" data-ac="del" data-i="${i}" title="Remover bloco" class="del">✕</button>
+          </span></div>${campo}</div>`;
+    }).join("");
+  }
+
+  function abreConstrutorTela(diagId, noId) {
+    const atual = telaDe(diagId, noId);
+    telaSt = {
+      diagId, noId, existe: !!atual,
+      dispositivo: atual ? atual.dispositivo : "celular",
+      titulo: atual ? atual.titulo || "" : "",
+      legenda: atual ? atual.legenda || "" : "",
+      blocos: atual ? atual.blocos.map((b) => ({ tipo: b.tipo, texto: b.texto || "", extra: b.extra || null })) : [],
+    };
+    $("#tela-modal-title").textContent = atual ? "Editar tela da etapa" : "Nova tela da etapa";
+    $("#tela-modal-etapa").textContent = rotuloDoNo(diagId, noId);
+    $("#tela-titulo").value = telaSt.titulo;
+    $("#tela-legenda").value = telaSt.legenda;
+    $("#tela-excluir").hidden = !atual;
+    $$("#tela-modal .tela-disp button").forEach((b) => b.classList.toggle("on", b.dataset.disp === telaSt.dispositivo));
+    // modelos e "copiar de outra etapa"
+    $("#tela-modelo").innerHTML = `<option value="">Começar de um modelo…</option>` +
+      Object.entries(TELA_MODELOS).map(([k, m]) => `<option value="${k}">${esc(m.nome)}</option>`).join("");
+    const outras = telasDoDiagrama(diagId).filter((t) => t.no_id !== noId);
+    $("#tela-copiar").innerHTML = `<option value="">Copiar de outra etapa…</option>` +
+      outras.map((t) => `<option value="${esc(t.no_id)}">${esc(rotuloDoNo(diagId, t.no_id))}</option>`).join("");
+    $("#tela-copiar").hidden = !outras.length;
+    renderBlocosTela();
+    renderPreviaTela();
+    modalAbre(telaModal);
+    setTimeout(() => $("#tela-titulo").focus(), 50);
+  }
+
+  // paleta
+  $("#tela-paleta").innerHTML = Object.entries(TELA_BLOCOS).map(([tipo, d]) =>
+    `<button type="button" data-tipo="${tipo}">+ ${esc(d.nome)}</button>`).join("");
+  $("#tela-paleta").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-tipo]");
+    if (!b || !telaSt) return;
+    telaSt.blocos.push(novoBloco(b.dataset.tipo));
+    renderBlocosTela(); renderPreviaTela();
+    const rows = $$("#tela-blocos .tela-bloco"); const last = rows[rows.length - 1];
+    if (last) { last.scrollIntoView({ block: "nearest" }); const f = last.querySelector("input, textarea"); if (f) f.focus(); }
+  });
+
+  // edição dos blocos (delegação: digitar só atualiza a prévia, sem redesenhar os campos)
+  $("#tela-blocos").addEventListener("input", (e) => {
+    const i = Number(e.target.dataset.i);
+    if (!telaSt || Number.isNaN(i) || !telaSt.blocos[i]) return;
+    if (e.target.classList.contains("tela-cor")) telaSt.blocos[i].extra = e.target.value;
+    else telaSt.blocos[i].texto = e.target.value;
+    renderPreviaTela();
+  });
+  $("#tela-blocos").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-ac]");
+    if (!b || !telaSt) return;
+    const i = Number(b.dataset.i), ac = b.dataset.ac, arr = telaSt.blocos;
+    if (ac === "del") arr.splice(i, 1);
+    else if (ac === "up" && i > 0) [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]];
+    else if (ac === "down" && i < arr.length - 1) [arr[i + 1], arr[i]] = [arr[i], arr[i + 1]];
+    renderBlocosTela(); renderPreviaTela();
+  });
+
+  $$("#tela-modal .tela-disp button").forEach((b) => b.addEventListener("click", () => {
+    if (!telaSt) return;
+    telaSt.dispositivo = b.dataset.disp;
+    $$("#tela-modal .tela-disp button").forEach((x) => x.classList.toggle("on", x === b));
+    renderPreviaTela();
+  }));
+  $("#tela-titulo").addEventListener("input", (e) => { if (telaSt) telaSt.titulo = e.target.value; });
+  $("#tela-legenda").addEventListener("input", (e) => { if (telaSt) telaSt.legenda = e.target.value; });
+
+  function substituiBlocosTela(origem) {
+    if (telaSt.blocos.length && !confirm("Substituir os blocos atuais da tela?")) return false;
+    telaSt.dispositivo = origem.dispositivo;
+    telaSt.blocos = origem.blocos.map((b) => ({ tipo: b.tipo, texto: b.texto || "", extra: b.extra || null }));
+    $$("#tela-modal .tela-disp button").forEach((x) => x.classList.toggle("on", x.dataset.disp === telaSt.dispositivo));
+    renderBlocosTela(); renderPreviaTela();
+    return true;
+  }
+  $("#tela-modelo").addEventListener("change", (e) => {
+    const m = TELA_MODELOS[e.target.value];
+    if (m && telaSt) { substituiBlocosTela(m); if (!telaSt.titulo) { telaSt.titulo = ""; } }
+    e.target.value = "";
+  });
+  $("#tela-copiar").addEventListener("change", (e) => {
+    const t = e.target.value && telaDe(telaSt.diagId, e.target.value);
+    if (t && telaSt) substituiBlocosTela(t);
+    e.target.value = "";
+  });
+
+  const fechaConstrutorTela = () => { modalFecha(telaModal); telaSt = null; };
+  $("#tela-close").addEventListener("click", fechaConstrutorTela);
+  $("#tela-cancelar").addEventListener("click", fechaConstrutorTela);
+  telaModal.addEventListener("click", (e) => { if (e.target.id === "tela-modal") fechaConstrutorTela(); });
+
+  function atualizaTelasDoDiagrama(diagId) {
+    $$(".diagram-canvas, .guia-diagrama-canvas").forEach((cv) => {
+      if (diagramaIdDoCanvas(cv) === diagId) atualizaSelosTelas(cv);
+    });
+  }
+
+  $("#tela-salvar").addEventListener("click", async () => {
+    if (!telaSt) return;
+    const st = telaSt;
+    const blocos = st.blocos.filter((b) => (b.texto || "").trim() || b.tipo === "mapa");
+    if (!blocos.length) { toast("Adicione pelo menos um bloco com texto.", true); return; }
+    const btn = $("#tela-salvar"); btn.disabled = true;
+    try {
+      const salva = await api(`/api/diagramas/${st.diagId}/telas/${encodeURIComponent(st.noId)}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dispositivo: st.dispositivo, titulo: st.titulo, legenda: st.legenda,
+          blocos: blocos.map((b) => ({ tipo: b.tipo, texto: b.texto || "", extra: b.extra || null })),
+          atualizado_por: testerName() || undefined,
+        }),
+      });
+      TELAS = TELAS.filter((t) => !(t.diagrama_id === salva.diagrama_id && t.no_id === salva.no_id)).concat(salva);
+      fechaConstrutorTela();
+      atualizaTelasDoDiagrama(st.diagId);
+      toast("Tela salva");
+    } catch (err) {
+      toast("Erro ao salvar a tela: " + err.message, true);
+    } finally { btn.disabled = false; }
+  });
+
+  $("#tela-excluir").addEventListener("click", async () => {
+    if (!telaSt || !telaSt.existe) return;
+    if (!confirm("Excluir a tela desta etapa?")) return;
+    const st = telaSt;
+    try {
+      await api(`/api/diagramas/${st.diagId}/telas/${encodeURIComponent(st.noId)}`, { method: "DELETE" });
+      TELAS = TELAS.filter((t) => !(t.diagrama_id === st.diagId && t.no_id === st.noId));
+      fechaConstrutorTela();
+      atualizaTelasDoDiagrama(st.diagId);
+      toast("Tela excluída");
+    } catch (err) {
+      toast("Erro ao excluir a tela: " + err.message, true);
+    }
+  });
+
+  // Esc fecha o modal aberto (e não sai da tela cheia junto)
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!$("#tela-viewer").hidden) { e.preventDefault(); fechaViewerTela(); }
+    else if (!telaModal.hidden) { e.preventDefault(); fechaConstrutorTela(); }
+  }, true);
+
   // ---- apresentação passo a passo ----
   // O fluxo vai aparecendo na ordem real: a cada passo entra um "nível" (as caixas à mesma distância
   // do início — os ramos de uma decisão aparecem juntos) e as setas que ficam completas, desenhadas
@@ -1408,7 +1766,40 @@
       }
     });
     atualizaBarra(canvas);
+    atualizaPainelTela(canvas);
     if (enquadrar && st.step >= 0) enquadraPasso(canvas, svg);
+  }
+
+  // Painel da telinha: mostra a tela da etapa mais recente que já apareceu (e tenha tela). Se várias
+  // caixas do mesmo passo têm tela (ramos de uma decisão), vira abas.
+  function atualizaPainelTela(canvas) {
+    const el = canvas.closest(".diagram, .guia-diagrama-wrap");
+    const painel = el && el.querySelector(".fs-tela-panel");
+    if (!painel) return;
+    const st = canvas.__play, svg = canvas.querySelector(":scope > svg");
+    const diagId = diagramaIdDoCanvas(canvas);
+    const lista = diagId == null ? [] : telasDoDiagrama(diagId);
+    if (!st || !st.aberto || !svg || !svg.__fx || !lista.length) { painel.hidden = true; painel.innerHTML = ""; return; }
+    const fx = svg.__fx, plano = planoApresentacao(fx);
+    painel.hidden = false;
+    const alcancadas = lista.filter((t) => fx.nodes.has(t.no_id) && plano.dist.get(t.no_id) <= st.step);
+    if (!alcancadas.length) {
+      painel.innerHTML = `<div class="fs-tela-vazio">A tela de cada etapa aparece aqui conforme o fluxo avança.</div>`;
+      return;
+    }
+    const nivel = Math.max(...alcancadas.map((t) => plano.dist.get(t.no_id)));
+    const grupo = alcancadas.filter((t) => plano.dist.get(t.no_id) === nivel);
+    const sel = grupo.find((t) => t.no_id === st.telaSel) || grupo[0];
+    st.telaSel = sel.no_id;
+    const rot = (t) => { const g = fx.nodes.get(t.no_id); const n = g && g.querySelector(".nodeLabel"); return (n && n.textContent.trim()) || t.no_id; };
+    painel.innerHTML =
+      `<div class="fs-tela-cab"><span class="fs-tela-passo">Etapa ${nivel + 1}</span><span class="fs-tela-nome">${esc(rot(sel))}</span></div>` +
+      (grupo.length > 1 ? `<div class="fs-tela-abas">${grupo.map((t) => `<button type="button" data-no="${esc(t.no_id)}" class="${t === sel ? "on" : ""}">${esc(rot(t))}</button>`).join("")}</div>` : "") +
+      `<button type="button" class="fs-tela-corpo" title="Ver a tela em tamanho grande">${telaHtml(sel)}</button>` +
+      (sel.titulo ? `<div class="fs-tela-titulo">${esc(sel.titulo)}</div>` : "") +
+      (sel.legenda ? `<p class="fs-tela-legenda">${esc(sel.legenda)}</p>` : "");
+    painel.querySelectorAll(".fs-tela-abas button").forEach((b) => b.addEventListener("click", () => { st.telaSel = b.dataset.no; atualizaPainelTela(canvas); }));
+    painel.querySelector(".fs-tela-corpo").addEventListener("click", () => abreViewerTela(diagId, sel.no_id));
   }
 
   // Câmera da apresentação: enquadra só o que já apareceu (caixas + setas), com zoom limitado pra o
@@ -1416,6 +1807,10 @@
   const CAM_ZOOM_MAX = 2.4, CAM_ZOOM_MIN = 0.5, CAM_MARGEM = 48, CAM_RESERVA_BAIXO = 70;   // reserva = altura da barra de controles
   function enquadraPasso(canvas, svg) {
     const fx = svg.__fx;
+    // medir no meio de uma transição anterior dá posições falsas: assenta a câmera no destino atual primeiro
+    svg.style.transition = "none";
+    applyView(canvas);
+    void svg.getBoundingClientRect();
     const vis = [...fx.nodes.values()].filter((g) => g.classList.contains("fx-shown"))
       .concat(fx.arestas.map((a) => a.path).filter((pa) => pa.classList.contains("fx-shown")));
     if (!vis.length) return;
@@ -1428,16 +1823,21 @@
     const sr = svg.getBoundingClientRect();
     const ox = sr.left - v.x, oy = sr.top - v.y;               // onde o svg ficaria sem o transform
     const util = c.height - 2 * CAM_MARGEM - CAM_RESERVA_BAIXO;   // altura livre acima da barra de controles
-    const f = Math.min((c.width - 2 * CAM_MARGEM) / bw, util / bh);
+    const el = canvas.closest(".diagram, .guia-diagrama-wrap");
+    const painel = el && el.querySelector(".fs-tela-panel");
+    const resDir = painel && !painel.hidden ? painel.offsetWidth + 24 : 0;   // o painel da tela ocupa a direita
+    const larg = c.width - 2 * CAM_MARGEM - resDir;
+    const f = Math.min(larg / bw, util / bh);
     const k2 = Math.min(CAM_ZOOM_MAX, Math.max(CAM_ZOOM_MIN, v.k * f));
     // ponto do desenho (coordenadas locais) que está no centro do que apareceu
     const lx = ((L + R) / 2 - ox - v.x) / v.k, ly = ((T + B) / 2 - oy - v.y) / v.k;
-    const alvoX = c.left + c.width / 2, alvoY = c.top + CAM_MARGEM + util / 2;
+    const alvoX = c.left + CAM_MARGEM + larg / 2, alvoY = c.top + CAM_MARGEM + util / 2;
     views.set(canvas, { k: k2, x: alvoX - ox - lx * k2, y: alvoY - oy - ly * k2 });
-    svg.style.transition = "transform .75s cubic-bezier(.4,0,.2,1)";
+    void svg.getBoundingClientRect();   // fixa o ponto de partida antes de ligar a transição
+    svg.style.transition = "transform .6s cubic-bezier(.4,0,.2,1)";
     applyView(canvas);
     clearTimeout(svg.__camT);
-    svg.__camT = setTimeout(() => { svg.style.transition = ""; }, 800);
+    svg.__camT = setTimeout(() => { svg.style.transition = ""; }, 650);
     updateZoomLabel(canvas.closest(".diagram, .guia-diagrama-wrap") || canvas);
   }
 
@@ -1500,6 +1900,8 @@
     const st = canvas && canvas.__play;
     if (st) { clearTimeout(st.timer); st.playing = false; st.aberto = false; st.step = -1; }
     el.classList.remove("fx-presenting");
+    const painel = el.querySelector(".fs-tela-panel");
+    if (painel) { painel.hidden = true; painel.innerHTML = ""; }
     const b = el.querySelector(".fs-play-btn");
     if (b) { b.setAttribute("aria-pressed", "false"); b.textContent = "🎬 Apresentar"; }
     const svg = canvas && canvas.querySelector(":scope > svg");
@@ -1578,6 +1980,7 @@
       }
     });
     svg.__fx = { nodes, arestas };
+    atualizaSelosTelas(container);
     ligaDestaque(container);
     // redesenhou no meio da apresentação (zoom na edição, tamanho da tela…): reaplica o passo atual
     if (container.__play && container.__play.aberto) aplicaPasso(container, container.__play.step, false);
@@ -1687,6 +2090,7 @@
     if (!diagramsLoaded) $("#diagrams-loading").hidden = false;
     try {
       DIAGRAMS = await api("/api/diagramas");
+      await loadTelas();
       diagramsLoaded = true;
     } catch (e) {
       $("#diagrams-loading").textContent = "Erro ao carregar diagramas: " + e.message;
@@ -1826,7 +2230,8 @@
       <span class="fs-play-count" aria-live="polite">—</span>
       <button type="button" data-p="speed" class="fs-play-speed" title="Velocidade">1×</button>
     </div>
-    <div class="fs-pan-hint">Arraste pra mover · role pra dar zoom</div>`;
+    <div class="fs-pan-hint">Arraste pra mover · role pra dar zoom</div>
+    <aside class="fs-tela-panel" hidden aria-label="Tela da etapa"></aside>`;
   const views = new WeakMap();   // canvas -> { k, x, y }
   const ZOOM_MIN = 0.3, ZOOM_MAX = 8;
 
@@ -1910,6 +2315,7 @@
     canvas.addEventListener("pointerdown", (ev) => {
       if (!el.classList.contains("fs")) return;
       if (ev.pointerType === "mouse" && ev.button !== 0 && ev.button !== 1) return;
+      if (ev.target.closest && ev.target.closest(".fx-tela-selo")) return;   // o selo abre a tela: não vira "arrastar"
       if (ev.button !== 1 && ehInterativo(ev.target)) return;
       ptrs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
       try { canvas.setPointerCapture(ev.pointerId); } catch (_) { /* sem captura: segue assim mesmo */ }
@@ -2008,8 +2414,9 @@
   document.addEventListener("webkitfullscreenchange", onFullscreenChange);
   // No overlay em CSS (sem Fullscreen API) o Esc precisa ser tratado aqui.
   document.addEventListener("keydown", (e) => {
-    if (!fsEl) return;
-    if (e.target && e.target.closest && e.target.closest("input, textarea")) return;   // renomeando uma caixa
+    if (!fsEl || e.defaultPrevented) return;
+    if (!$("#tela-modal").hidden || !$("#tela-viewer").hidden) return;   // modal da tela aberto: os atalhos são dele
+    if (e.target && e.target.closest && e.target.closest("input, textarea, select")) return;   // renomeando uma caixa
     // atalhos de zoom: + / − / 0
     // apresentação em andamento: Espaço/←/→/R conduzem os passos
     if (fsEl.classList.contains("fx-presenting") && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -2974,7 +3381,8 @@
       grp.innerHTML =
         `<button type="button" class="ifx ifx-add" title="Clique: nova etapa · Arraste até uma caixa pra ligar">+</button>
          <button type="button" class="ifx ifx-shape" title="Alternar tipo: etapa / decisão / notificação"></button>
-         <button type="button" class="ifx ifx-del" title="Excluir etapa">×</button>`;
+         <button type="button" class="ifx ifx-del" title="Excluir etapa">×</button>
+         <button type="button" class="ifx ifx-tela" title="Tela desta etapa (protótipo)">🖼</button>`;
       const SHAPE_GLYPH = { step: "▭", botao: "▢", decision: "◇", notif: "🔔" };
       const shapeBtn = grp.querySelector(".ifx-shape");
       shapeBtn.textContent = SHAPE_GLYPH[node.shape] || "▭";
@@ -3015,6 +3423,10 @@
         const order = ["step", "botao", "decision", "notif"];
         node.shape = order[(order.indexOf(node.shape) + 1) % order.length];
         commitInline(art, st);
+      });
+      grp.querySelector(".ifx-tela").addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        abreConstrutorTela(st.d.id, nid);
       });
       grp.querySelector(".ifx-del").addEventListener("click", (ev) => {
         ev.stopPropagation();

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 
 class ScreenshotOut(BaseModel):
@@ -332,6 +332,51 @@ class FlowDiagramCreate(BaseModel):
     mermaid: str
     ordem: Optional[int] = 0
     atualizado_por: Optional[str] = None
+
+
+TELA_TIPOS = ("topo", "texto", "campo", "botao", "botao2", "status", "lista", "mapa",
+              "notificacao", "aviso", "abas", "tabela")
+TELA_DISPOSITIVOS = ("celular", "web")
+
+
+class TelaBloco(BaseModel):
+    tipo: str
+    texto: str = Field("", max_length=800)
+    extra: Optional[str] = Field(None, max_length=40)   # cor do status/aviso: verde, ambar, vermelho, azul
+
+    @field_validator("tipo")
+    @classmethod
+    def _tipo_valido(cls, v):
+        if v not in TELA_TIPOS:
+            raise ValueError(f"Tipo de bloco inválido: {v}")
+        return v
+
+
+class TelaIn(BaseModel):
+    dispositivo: str = "celular"
+    titulo: Optional[str] = Field("", max_length=120)
+    legenda: Optional[str] = Field("", max_length=600)
+    blocos: List[TelaBloco] = Field(default_factory=list, max_length=40)
+    atualizado_por: Optional[str] = None
+
+    @field_validator("dispositivo")
+    @classmethod
+    def _dispositivo_valido(cls, v):
+        if v not in TELA_DISPOSITIVOS:
+            raise ValueError("Dispositivo deve ser 'celular' ou 'web'.")
+        return v
+
+
+class TelaOut(BaseModel):
+    id: int
+    diagrama_id: int
+    no_id: str
+    dispositivo: str = "celular"
+    titulo: Optional[str] = ""
+    legenda: Optional[str] = ""
+    blocos: List[TelaBloco] = []
+    atualizado_por: Optional[str] = None
+    updated_at: Optional[datetime] = None
 
 
 class ActivityOut(BaseModel):
