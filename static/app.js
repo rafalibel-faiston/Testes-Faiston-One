@@ -1369,7 +1369,14 @@
     notificacao: { nome: "Notificação",       dica: "Mensagem da notificação (push / WhatsApp)" },
     aviso:       { nome: "Aviso",             dica: "Texto do aviso", cor: true },
     abas:        { nome: "Abas",              dica: "Aba 1 | Aba 2 | Aba 3   (a primeira fica ativa)" },
-    tabela:      { nome: "Tabela",            dica: "Uma linha por registro, colunas separadas por |   (a 1ª linha é o cabeçalho)", multi: true },
+    tabela:      { nome: "Tabela",            dica: "Uma linha por registro, colunas separadas por |   (a 1ª linha é o cabeçalho). Status colorido: {verde}Concluído  ·  {ambar}Pendente  ·  {vermelho}Atrasado  ·  {azul}Novo", multi: true },
+    // blocos pensados pro sistema web
+    menu:        { nome: "Menu lateral",      dica: "Item 1 | Item 2 | Item 3   (o primeiro fica ativo; na web vira a barra lateral)", web: true },
+    kpis:        { nome: "Indicadores",       dica: "Uma linha por indicador:  Rótulo | valor   (opcional: | cor)  ex.: Atrasados | 3 | vermelho", multi: true, web: true },
+    filtros:     { nome: "Filtros",           dica: "Cliente | Período | Status   (cada item vira um filtro)", web: true },
+    formulario:  { nome: "Formulário",        dica: "Um campo por linha:  Rótulo: valor de exemplo   (na web fica em 2 colunas)", multi: true, web: true },
+    cartao:      { nome: "Cartão",            dica: "A 1ª linha é o título; as demais, o conteúdo", multi: true, web: true },
+    dialogo:     { nome: "Janela de confirmação", dica: "1ª linha = título · demais = texto · última começando com >  = botões:   > Cancelar | Confirmar", multi: true, web: true },
   };
   const TELA_CORES = [["azul", "Azul"], ["verde", "Verde"], ["ambar", "Âmbar"], ["vermelho", "Vermelho"]];
   const corTela = (b) => (TELA_CORES.some(([k]) => k === b.extra) ? b.extra : (b.tipo === "aviso" ? "ambar" : "azul"));
@@ -1407,21 +1414,96 @@
       case "tabela": {
         const rows = (linhas.length ? linhas : ["Coluna 1 | Coluna 2"]).map(partes);
         const [cab, ...corpo] = rows;
+        // célula "{verde}Concluído" vira selo colorido (azul, verde, ambar, vermelho)
+        const cel = (c) => {
+          const m = /^\{(azul|verde|ambar|vermelho)\}\s*(.*)$/.exec(c);
+          return m ? `<td><span class="tb-status tb-c-${m[1]}">${esc(m[2])}</span></td>` : `<td>${esc(c)}</td>`;
+        };
         return `<div class="tb tb-tabela"><table><thead><tr>${cab.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>` +
-          `<tbody>${corpo.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+          `<tbody>${corpo.map((r) => `<tr>${r.map(cel).join("")}</tr>`).join("")}</tbody></table></div>`;
+      }
+      case "menu": {
+        const itens = partes(linhas[0] || "Início | Chamados | Técnicos");
+        return `<div class="tb tb-menu-m">${itens.map((a, i) => `<span class="${i === 0 ? "on" : ""}"><i></i>${esc(a)}</span>`).join("")}</div>`;   // no celular: barra de navegação
+      }
+      case "kpis": {
+        const cards = (linhas.length ? linhas : ["Abertos | 12", "Concluídos | 48"]).map((l) => {
+          const [rot, val, cor] = partes(l);
+          const c = ["azul", "verde", "ambar", "vermelho"].includes(cor) ? cor : "azul";
+          return `<div class="tb-kpi tb-k-${c}"><span>${esc(rot)}</span><b>${esc(val || "—")}</b></div>`;
+        });
+        return `<div class="tb tb-kpis">${cards.join("")}</div>`;
+      }
+      case "filtros": {
+        const itens = partes(linhas[0] || "Cliente | Período | Status");
+        return `<div class="tb tb-filtros"><span class="tb-busca">🔎 Buscar</span>${itens.map((f) => `<span class="tb-filtro">${esc(f)} <i>▾</i></span>`).join("")}</div>`;
+      }
+      case "formulario": {
+        const campos = (linhas.length ? linhas : ["Campo 1: ", "Campo 2: "]).map((l) => {
+          const i = l.indexOf(":");
+          const rot = i >= 0 ? l.slice(0, i).trim() : l, val = i >= 0 ? l.slice(i + 1).trim() : "";
+          return `<div class="tb-campo"><span class="tb-campo-rot">${esc(rot)}</span><div class="tb-input">${esc(val) || "&nbsp;"}</div></div>`;
+        });
+        return `<div class="tb tb-form">${campos.join("")}</div>`;
+      }
+      case "cartao": {
+        const [tit, ...resto] = linhas.length ? linhas : ["Título do cartão"];
+        return `<div class="tb tb-cartao"><b>${esc(tit)}</b>${resto.length ? `<p>${resto.map(esc).join("<br>")}</p>` : ""}</div>`;
+      }
+      case "dialogo": {
+        const btnLinha = linhas.length && linhas[linhas.length - 1].startsWith(">") ? linhas.pop() : "";
+        const [tit, ...resto] = linhas.length ? linhas : ["Confirmar ação?"];
+        const bts = btnLinha ? partes(btnLinha.slice(1)).filter(Boolean) : [];
+        return `<div class="tb tb-dialogo"><div class="tb-dialogo-caixa"><b>${esc(tit)}</b>${resto.length ? `<p>${resto.map(esc).join("<br>")}</p>` : ""}` +
+          (bts.length ? `<div class="tb-dialogo-bts">${bts.map((b, i) => `<span class="${i === bts.length - 1 ? "pri" : ""}">${esc(b)}</span>`).join("")}</div>` : "") + `</div></div>`;
       }
       default: return "";
     }
   }
 
   // a tela inteira (moldura de celular ou de navegador + blocos)
+  const WEB_LARGURA = 780;   // largura lógica da tela web; é reduzida (zoom) pra caber onde for mostrada
   function telaHtml(t) {
     const web = t.dispositivo === "web";
-    const corpo = (t.blocos || []).map(telaBlocoHtml).join("");
-    const moldura = web
-      ? `<div class="tela-web"><div class="tela-web-barra"><i></i><i></i><i></i><span>faiston.one</span></div><div class="tela-corpo">${corpo}</div></div>`
-      : `<div class="tela-cel"><div class="tela-cel-topo"><span></span></div><div class="tela-corpo">${corpo}</div></div>`;
-    return `<div class="tela ${web ? "tela-w" : "tela-c"}">${moldura}<div class="tela-tag">Protótipo · não é a tela real</div></div>`;
+    const blocos = t.blocos || [];
+    if (!web) {
+      const corpo = blocos.map(telaBlocoHtml).join("");
+      return `<div class="tela tela-c"><div class="tela-cel"><div class="tela-cel-topo"><span></span></div><div class="tela-corpo">${corpo}</div></div>` +
+        `<div class="tela-tag">Protótipo · não é a tela real</div></div>`;
+    }
+    // web: o 1º "menu" vira a barra lateral; botões seguidos ficam lado a lado
+    const iMenu = blocos.findIndex((b) => b.tipo === "menu");
+    const iTopo = blocos.findIndex((b) => b.tipo === "topo");
+    const menu = iMenu >= 0 ? blocos[iMenu] : null;
+    const topo = iTopo >= 0 ? blocos[iTopo] : null;
+    const resto = blocos.filter((_, i) => i !== iMenu && i !== iTopo);
+    let corpo = "", grupo = [];
+    const fechaGrupo = () => { if (grupo.length) { corpo += `<div class="tb tb-botoes">${grupo.join("")}</div>`; grupo = []; } };
+    resto.forEach((b) => {
+      if (b.tipo === "botao" || b.tipo === "botao2") grupo.push(telaBlocoHtml(b).replace('class="tb tb-botao', 'class="tb-botao'));
+      else { fechaGrupo(); corpo += telaBlocoHtml(b); }
+    });
+    fechaGrupo();
+    const lateral = menu
+      ? `<nav class="tela-side">${(menu.texto || "").split("|").map((x) => x.trim()).filter(Boolean).map((a, i) => `<span class="${i === 0 ? "on" : ""}"><i></i>${esc(a)}</span>`).join("")}</nav>`
+      : "";
+    return `<div class="tela tela-w"><div class="tela-web" style="width:${WEB_LARGURA}px"><div class="tela-web-barra"><i></i><i></i><i></i><span>faiston.one</span></div>` +
+      `<div class="tela-web-head"><span class="tela-web-logo">faiston</span><span class="tela-web-titulo">${esc(topo ? topo.texto : "")}</span><i class="tela-web-avatar"></i></div>` +
+      `<div class="tela-web-shell">${lateral}<div class="tela-corpo">${corpo}</div></div></div>` +
+      `<div class="tela-tag">Protótipo · não é a tela real</div></div>`;
+  }
+
+  // A tela web tem largura lógica fixa; reduz pra caber no espaço onde foi colocada (prévia, viewer, painel).
+  function ajustaEscalaTelas(raiz) {
+    (raiz || document).querySelectorAll(".tela-web").forEach((w) => {
+      const pai = (w.closest(".tela") || {}).parentElement;
+      let disp = 0;
+      if (pai) {
+        const cs = getComputedStyle(pai);
+        disp = pai.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0) - 2;
+      }
+      w.style.zoom = disp > 40 ? String(Math.min(1, disp / WEB_LARGURA)) : "";
+    });
   }
 
   // ---- onde o modal abre: em tela cheia nativa só o elemento em tela cheia é exibido, então o modal
@@ -1488,6 +1570,7 @@
     const leg = $("#tela-view-legenda");
     leg.textContent = tela.legenda || ""; leg.hidden = !tela.legenda;
     modalAbre($("#tela-viewer"));
+    ajustaEscalaTelas($("#tela-view-tela"));
   }
   const fechaViewerTela = () => { modalFecha($("#tela-viewer")); viewerCtx = null; };
   $("#tela-view-close").addEventListener("click", fechaViewerTela);
@@ -1518,11 +1601,39 @@
       { tipo: "notificacao", texto: "Novo chamado perto de você: Instalação de ponto de rede" },
       { tipo: "botao", texto: "Ver chamado" },
     ] },
-    "web-painel": { nome: "Web do operador — painel", dispositivo: "web", blocos: [
-      { tipo: "topo", texto: "Dispatcher" },
-      { tipo: "abas", texto: "Chamados | Técnicos | Relatórios" },
-      { tipo: "tabela", texto: "Chamado | Cliente | Status\n#1234 | Cliente A | Buscando técnico\n#1235 | Cliente B | Agendado" },
+    "web-painel": { nome: "Web — painel de chamados", dispositivo: "web", blocos: [
+      { tipo: "topo", texto: "Dispatcher · Chamados" },
+      { tipo: "menu", texto: "Chamados | Técnicos | Agenda | Relatórios | Configurações" },
+      { tipo: "kpis", texto: "Abertos | 12\nEm atendimento | 8 | verde\nAguardando RAT | 5 | ambar\nAtrasados | 3 | vermelho" },
+      { tipo: "filtros", texto: "Cliente | Período | Status | Região" },
+      { tipo: "tabela", texto: "Chamado | Cliente | Técnico | Status\n#1234 | Cliente A | Carlos Lima | {verde}Em atendimento\n#1235 | Cliente B | — | {ambar}Buscando técnico\n#1236 | Cliente C | Ana Souza | {vermelho}Atrasado" },
       { tipo: "botao", texto: "Criar OS" },
+      { tipo: "botao2", texto: "Exportar" },
+    ] },
+    "web-criar-os": { nome: "Web — criar OS (formulário)", dispositivo: "web", blocos: [
+      { tipo: "topo", texto: "Dispatcher · Criar OS" },
+      { tipo: "menu", texto: "Chamados | Técnicos | Agenda | Relatórios | Configurações" },
+      { tipo: "formulario", texto: "Cliente: Cliente Exemplo\nTipo de serviço: Instalação de ponto de rede\nEndereço: Av. Paulista, 1000 — São Paulo\nPrazo: 3 dias úteis\nContato no local: Maria · (11) 90000-0000\nObservações: Levar escada" },
+      { tipo: "botao", texto: "Criar OS" },
+      { tipo: "botao2", texto: "Cancelar" },
+    ] },
+    "web-detalhe": { nome: "Web — detalhe do chamado", dispositivo: "web", blocos: [
+      { tipo: "topo", texto: "Chamado #1234" },
+      { tipo: "menu", texto: "Chamados | Técnicos | Agenda | Relatórios | Configurações" },
+      { tipo: "abas", texto: "Resumo | Histórico | Evidências | RAT" },
+      { tipo: "status", texto: "Em atendimento", extra: "verde" },
+      { tipo: "cartao", texto: "Dados do chamado\nCliente A · Instalação de ponto de rede\nAv. Paulista, 1000 — São Paulo" },
+      { tipo: "cartao", texto: "Técnico responsável\nCarlos Lima · chegou às 14h05" },
+      { tipo: "botao", texto: "Acompanhamento concluído" },
+    ] },
+    "web-revisao": { nome: "Web — revisão da RAT", dispositivo: "web", blocos: [
+      { tipo: "topo", texto: "Revisão da RAT · Chamado #1234" },
+      { tipo: "menu", texto: "Chamados | Técnicos | Agenda | Relatórios | Configurações" },
+      { tipo: "aviso", texto: "A RAT está aguardando revisão do operador.", extra: "ambar" },
+      { tipo: "tabela", texto: "Item | Previsto | Executado | Situação\nPonto de rede | 4 | 4 | {verde}OK\nPatch cord | 4 | 3 | {vermelho}Divergente" },
+      { tipo: "botao", texto: "Aprovar RAT" },
+      { tipo: "botao2", texto: "Reprovar" },
+      { tipo: "dialogo", texto: "Reprovar a RAT?\nO técnico será avisado e precisará corrigir.\n> Voltar | Reprovar" },
     ] },
   };
 
@@ -1533,7 +1644,9 @@
 
   function renderPreviaTela() {
     if (!telaSt) return;
+    $(".tela-body").classList.toggle("tela-modo-web", telaSt.dispositivo === "web");   // dá mais largura à prévia web
     $("#tela-previa").innerHTML = telaHtml({ dispositivo: telaSt.dispositivo, blocos: telaSt.blocos });
+    ajustaEscalaTelas($("#tela-previa"));
   }
 
   function renderBlocosTela() {
@@ -1562,9 +1675,11 @@
 
   function abreConstrutorTela(diagId, noId) {
     const atual = telaDe(diagId, noId);
+    // etapa do técnico → app (celular); as demais (operador, financeiro, sistema) → web
+    const padrao = atorDoRotulo(rotuloDoNo(diagId, noId)) === "tec" ? "celular" : "web";
     telaSt = {
       diagId, noId, existe: !!atual,
-      dispositivo: atual ? atual.dispositivo : "celular",
+      dispositivo: atual ? atual.dispositivo : padrao,
       titulo: atual ? atual.titulo || "" : "",
       legenda: atual ? atual.legenda || "" : "",
       blocos: atual ? atual.blocos.map((b) => ({ tipo: b.tipo, texto: b.texto || "", extra: b.extra || null })) : [],
@@ -1576,21 +1691,27 @@
     $("#tela-excluir").hidden = !atual;
     $$("#tela-modal .tela-disp button").forEach((b) => b.classList.toggle("on", b.dataset.disp === telaSt.dispositivo));
     // modelos e "copiar de outra etapa"
+    const optModelos = (disp) => Object.entries(TELA_MODELOS).filter(([, m]) => m.dispositivo === disp)
+      .map(([k, m]) => `<option value="${k}">${esc(m.nome)}</option>`).join("");
     $("#tela-modelo").innerHTML = `<option value="">Começar de um modelo…</option>` +
-      Object.entries(TELA_MODELOS).map(([k, m]) => `<option value="${k}">${esc(m.nome)}</option>`).join("");
+      `<optgroup label="Celular (app do técnico)">${optModelos("celular")}</optgroup>` +
+      `<optgroup label="Web (sistema do operador)">${optModelos("web")}</optgroup>`;
     const outras = telasDoDiagrama(diagId).filter((t) => t.no_id !== noId);
     $("#tela-copiar").innerHTML = `<option value="">Copiar de outra etapa…</option>` +
       outras.map((t) => `<option value="${esc(t.no_id)}">${esc(rotuloDoNo(diagId, t.no_id))}</option>`).join("");
     $("#tela-copiar").hidden = !outras.length;
     renderBlocosTela();
-    renderPreviaTela();
     modalAbre(telaModal);
+    renderPreviaTela();   // depois de abrir: com o modal oculto a largura medida é zero e a tela web não reduz
     setTimeout(() => $("#tela-titulo").focus(), 50);
   }
 
   // paleta
-  $("#tela-paleta").innerHTML = Object.entries(TELA_BLOCOS).map(([tipo, d]) =>
-    `<button type="button" data-tipo="${tipo}">+ ${esc(d.nome)}</button>`).join("");
+  const btnPaleta = ([tipo, d]) => `<button type="button" data-tipo="${tipo}">+ ${esc(d.nome)}</button>`;
+  $("#tela-paleta").innerHTML =
+    Object.entries(TELA_BLOCOS).filter(([, d]) => !d.web).map(btnPaleta).join("") +
+    `<span class="tela-paleta-rot">Web</span>` +
+    Object.entries(TELA_BLOCOS).filter(([, d]) => d.web).map(btnPaleta).join("");
   $("#tela-paleta").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-tipo]");
     if (!b || !telaSt) return;
@@ -1792,12 +1913,14 @@
     const sel = grupo.find((t) => t.no_id === st.telaSel) || grupo[0];
     st.telaSel = sel.no_id;
     const rot = (t) => { const g = fx.nodes.get(t.no_id); const n = g && g.querySelector(".nodeLabel"); return (n && n.textContent.trim()) || t.no_id; };
+    painel.classList.toggle("fs-tela-web", sel.dispositivo === "web");   // tela web precisa de mais largura pra ser legível
     painel.innerHTML =
       `<div class="fs-tela-cab"><span class="fs-tela-passo">Etapa ${nivel + 1}</span><span class="fs-tela-nome">${esc(rot(sel))}</span></div>` +
       (grupo.length > 1 ? `<div class="fs-tela-abas">${grupo.map((t) => `<button type="button" data-no="${esc(t.no_id)}" class="${t === sel ? "on" : ""}">${esc(rot(t))}</button>`).join("")}</div>` : "") +
       `<button type="button" class="fs-tela-corpo" title="Ver a tela em tamanho grande">${telaHtml(sel)}</button>` +
       (sel.titulo ? `<div class="fs-tela-titulo">${esc(sel.titulo)}</div>` : "") +
       (sel.legenda ? `<p class="fs-tela-legenda">${esc(sel.legenda)}</p>` : "");
+    ajustaEscalaTelas(painel);
     painel.querySelectorAll(".fs-tela-abas button").forEach((b) => b.addEventListener("click", () => { st.telaSel = b.dataset.no; atualizaPainelTela(canvas); }));
     painel.querySelector(".fs-tela-corpo").addEventListener("click", () => abreViewerTela(diagId, sel.no_id));
   }

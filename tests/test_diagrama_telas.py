@@ -95,3 +95,19 @@ def test_salvar_tela_entra_na_trilha_de_novidades(client, diagrama):
     client.put(f"/api/diagramas/{diagrama['id']}/telas/A", json=_tela(atualizado_por="Rafa"))
     atividades = client.get("/api/atividades", params={"fluxo": "C"}).json()
     assert any("Chamado aceito" in a["texto"] and a["autor"] == "Rafa" for a in atividades)
+
+
+def test_aceita_os_blocos_de_sistema_web(client, diagrama):
+    blocos = [
+        {"tipo": "topo", "texto": "Dispatcher"},
+        {"tipo": "menu", "texto": "Chamados | Técnicos | Relatórios"},
+        {"tipo": "kpis", "texto": "Abertos | 12\nAtrasados | 3 | vermelho"},
+        {"tipo": "filtros", "texto": "Cliente | Período | Status"},
+        {"tipo": "tabela", "texto": "Chamado | Status\n#1234 | {verde}Concluído"},
+        {"tipo": "formulario", "texto": "Cliente: Exemplo\nPrazo: 3 dias"},
+        {"tipo": "cartao", "texto": "Resumo\nDetalhe do chamado"},
+        {"tipo": "dialogo", "texto": "Confirmar?\nEsta ação não pode ser desfeita.\n> Cancelar | Confirmar"},
+    ]
+    resp = client.put(f"/api/diagramas/{diagrama['id']}/telas/A", json=_tela(dispositivo="web", blocos=blocos))
+    assert resp.status_code == 200
+    assert [b["tipo"] for b in resp.json()["blocos"]] == [b["tipo"] for b in blocos]

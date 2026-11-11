@@ -335,7 +335,9 @@ class FlowDiagramCreate(BaseModel):
 
 
 TELA_TIPOS = ("topo", "texto", "campo", "botao", "botao2", "status", "lista", "mapa",
-              "notificacao", "aviso", "abas", "tabela")
+              "notificacao", "aviso", "abas", "tabela",
+              # blocos de sistema web (também aceitos no celular, onde viram versões compactas)
+              "menu", "kpis", "filtros", "formulario", "cartao", "dialogo")
 TELA_DISPOSITIVOS = ("celular", "web")
 
 

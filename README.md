@@ -510,9 +510,12 @@ destaca ela e as vizinhas. O acabamento (cor por ator pelo prefixo do rótulo �
 SVG (`estilizaDiagrama`): não muda o código Mermaid salvo.
 
 Cada etapa pode ter uma **telinha** (protótipo de tela, não a tela real): no "Editar aqui", o
-botão 🖼 da caixa abre o construtor — celular ou web, com blocos (barra de título, texto,
-campo, botão, status, lista, mapa, notificação, aviso, abas, tabela), modelos prontos e
-"copiar de outra etapa". Fica guardada em `diagrama_telas` (`/api/diagramas-telas`,
+botão 🖼 da caixa abre o construtor — **celular** (app do técnico) ou **web** (sistema do
+operador; o padrão sai do ator da etapa: `Tec.` → celular, o resto → web). Blocos gerais (barra
+de título, texto, campo, botão, status, lista, mapa, notificação, aviso, abas, tabela com selos
+`{verde}Ok`) e blocos de sistema web (menu lateral, indicadores, filtros, formulário em
+2 colunas, cartão, janela de confirmação); na web o 1º menu vira a barra lateral e o título,
+o cabeçalho. Tem modelos prontos de celular e de web e "copiar de outra etapa". Fica guardada em `diagrama_telas` (`/api/diagramas-telas`,
 `PUT/DELETE /api/diagramas/{id}/telas/{no_id}`), ligada à caixa pelo id dela no Mermaid. A caixa
 ganha um selo que abre a tela grande, e na apresentação a tela da etapa atual aparece num painel
 ao lado do fluxo. Os diagramas do seed que o time exclui ficam registrados em
