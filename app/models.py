@@ -238,6 +238,18 @@ class FlowDiagram(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
 
+class DiagramaSeedRemovido(Base):
+    """Diagrama do seed que o time excluiu de propósito. O seed roda a cada subida do app e,
+    sem este registro, recriaria o diagrama apagado (nos módulos ele confere pelo título)."""
+    __tablename__ = "diagramas_seed_removidos"
+    __table_args__ = (UniqueConstraint("fluxo", "titulo", name="uq_diagrama_seed_removido"),)
+
+    id = Column(Integer, primary_key=True)
+    fluxo = Column(String, nullable=False)
+    titulo = Column(String, nullable=False)      # título do diagrama no seed
+    removido_em = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class ActivityLog(Base):
     """Trilha de atividades — cada mudança relevante (status, observação, print,
     teste criado/editado, ponto de reunião, diagrama) vira um evento, pra quem

@@ -755,19 +755,25 @@ SEED_DIAGRAMS = [
 
 def seed_diagrams(db):
     """Cria os diagramas iniciais de fluxo. Idempotente, e nunca sobrescreve o que o
-    time editou nem os diagramas extras que criaram:
+    time editou, nem os diagramas extras que criaram, nem recria o que o time excluiu
+    (ver DiagramaSeedRemovido):
     - fluxos do Dispatcher (A/B/C): só insere se ainda não houver NENHUM diagrama
       daquele fluxo+tipo (o time é dono do desenho do fluxo);
     - módulos (Financeiro...): insere se ainda não houver um diagrama com aquele
       TÍTULO no módulo. O desenho semeado é conteúdo novo e não pode deixar de
       aparecer só porque alguém já rabiscou outro diagrama na aba. Se ele já existe e o
       time ainda não o editou (`seeded`), é atualizado pra versão atual do seed."""
-    from .models import FlowDiagram
+    from .models import DiagramaSeedRemovido, FlowDiagram
     from .modulos import e_modulo
+
+    # o que o time excluiu de propósito não volta a cada subida do app
+    removidos = {(r.fluxo, r.titulo) for r in db.query(DiagramaSeedRemovido).all()}
 
     added = 0
     atualizados = 0
     for d in SEED_DIAGRAMS:
+        if (d["fluxo"], d["titulo"]) in removidos:
+            continue
         q = db.query(FlowDiagram).filter(FlowDiagram.fluxo == d["fluxo"])
         if e_modulo(d["fluxo"]):
             q = q.filter(FlowDiagram.titulo == d["titulo"])

@@ -131,6 +131,17 @@ def delete_diagram(diagram_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Diagrama não encontrado")
     log_activity(db, _trilha(diagram.fluxo), "diagrama",
                  f'Diagrama "{diagram.titulo}"{_onde(diagram.fluxo)} excluído')
+    # O seed roda a cada subida do app e recriaria o que veio dele: guarda que este foi excluído
+    # de propósito. Só vale quando o título ainda é o do seed (um diagrama renomeado já não é
+    # reconhecido por ele).
+    from ..seed_data import SEED_DIAGRAMS
+    if any(d["fluxo"] == diagram.fluxo and d["titulo"] == diagram.titulo for d in SEED_DIAGRAMS):
+        ja = db.query(models.DiagramaSeedRemovido).filter(
+            models.DiagramaSeedRemovido.fluxo == diagram.fluxo,
+            models.DiagramaSeedRemovido.titulo == diagram.titulo,
+        ).first()
+        if not ja:
+            db.add(models.DiagramaSeedRemovido(fluxo=diagram.fluxo, titulo=diagram.titulo))
     db.delete(diagram)
     db.commit()
     return {"deleted": diagram_id}
