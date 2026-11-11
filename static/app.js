@@ -1387,6 +1387,7 @@
         <span class="diagram-kind">${esc(KIND_LABEL[d.kind] || d.kind)}</span>
         <span class="diagram-title">${esc(d.titulo)}</span>
         <span class="diagram-actions">
+          <button type="button" class="case-icon-btn diagram-fs" title="Tela cheia (Esc pra sair)" aria-label="Tela cheia" aria-pressed="false">${FS_ICONS}</button>
           <button type="button" class="case-icon-btn diagram-inline-toggle" title="Editar direto no desenho" aria-label="Editar aqui" aria-pressed="false">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
             <span class="inline-toggle-label">Editar aqui</span>
@@ -1439,6 +1440,68 @@
     </article>`;
   }
 
+  // ---- tela cheia ----
+  // Usa a Fullscreen API quando existe e, como reserva (iPhone/iframes), um overlay em CSS (.fs).
+  // O elemento ganha a classe .fs nos dois casos; o CSS cuida do layout.
+  const FS_ICONS = `
+    <svg class="fs-on" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+    <svg class="fs-off" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`;
+  let fsEl = null;   // elemento em tela cheia agora
+
+  function fullscreenAtual() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
+
+  function setFs(el, on) {
+    if (on) {
+      if (fsEl && fsEl !== el) setFs(fsEl, false);
+      fsEl = el;
+      el.classList.add("fs");
+      document.body.classList.add("fs-open");
+      const req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (req) { try { const r = req.call(el); if (r && r.catch) r.catch(() => {}); } catch (_) { /* fica no overlay CSS */ } }
+    } else {
+      if (fsEl === el) fsEl = null;
+      el.classList.remove("fs");
+      if (!fsEl) document.body.classList.remove("fs-open");
+      if (fullscreenAtual() === el) {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen;
+        if (exit) { try { const r = exit.call(document); if (r && r.catch) r.catch(() => {}); } catch (_) { /* já saiu */ } }
+      }
+    }
+    el.querySelectorAll(".diagram-fs, .guia-fs").forEach((b) => b.setAttribute("aria-pressed", on ? "true" : "false"));
+    // o tamanho do desenho mudou: refaz o desenho (e as alças, se estiver em edição inline)
+    if (el.classList.contains("diagram")) refreshDiagramAfterFs(el);
+    else if (el.id === "guia-diagrama-wrap") desenharDiagramaDoGuia();
+  }
+
+  function toggleFs(el) { setFs(el, !el.classList.contains("fs")); }
+
+  function refreshDiagramAfterFs(art) {
+    const id = Number(art.dataset.id);
+    const st = inlineState.get(id);
+    if (st) { renderInlineCanvas(art, st); return; }
+    const d = DIAGRAMS.find((x) => x.id === id);
+    const canvas = art.querySelector(".diagram-canvas");
+    if (d && canvas && canvas.dataset.rendered) renderMermaidInto(canvas, d.mermaid);
+  }
+
+  // Esc nativo sai da Fullscreen API sem passar pelo nosso toggle: sincroniza a classe .fs.
+  function onFullscreenChange() {
+    if (fsEl && !fullscreenAtual() && fsEl.dataset.fsNative === "1") {
+      delete fsEl.dataset.fsNative;
+      setFs(fsEl, false);
+    } else if (fsEl && fullscreenAtual() === fsEl) {
+      fsEl.dataset.fsNative = "1";
+    }
+  }
+  document.addEventListener("fullscreenchange", onFullscreenChange);
+  document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+  // No overlay em CSS (sem Fullscreen API) o Esc precisa ser tratado aqui.
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || !fsEl || fullscreenAtual()) return;
+    if (e.target && e.target.closest && e.target.closest("input, textarea")) return;   // renomeando uma caixa
+    setFs(fsEl, false);
+  });
+
   // renderiza o Mermaid de um card só quando ele está aberto (lazy)
   function renderDiagramCanvas(d, wrap) {
     const canvas = (wrap || document).querySelector(`.diagram-canvas[data-canvas="${d.id}"]`);
@@ -1485,6 +1548,22 @@
         art.querySelector(".diagram-toggle").setAttribute("aria-expanded", nowOpen ? "true" : "false");
         if (nowOpen) { expandedDiagrams.add(id); if (d) renderDiagramCanvas(d, wrap); }
         else { expandedDiagrams.delete(id); if (art.classList.contains("editing")) exitInlineEdit(art); }
+      });
+    });
+    $$(".diagram-fs", wrap).forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const art = btn.closest(".diagram");
+        const id = Number(art.dataset.id);
+        const d = DIAGRAMS.find((x) => x.id === id);
+        // card recolhido: abre e desenha antes de ir pra tela cheia
+        if (art.classList.contains("collapsed")) {
+          art.classList.remove("collapsed");
+          art.querySelector(".diagram-toggle").setAttribute("aria-expanded", "true");
+          expandedDiagrams.add(id);
+          if (d) renderDiagramCanvas(d, wrap);
+        }
+        toggleFs(art);
       });
     });
     $$(".diagram-inline-toggle", wrap).forEach((btn) => {
@@ -3650,7 +3729,10 @@
         <b>Fluxos (diagramas)</b>. Clique num deles pra ver:</p>
         <div class="guia-diagramas" id="guia-diagramas"><span class="guia-nota">Carregando fluxogramas…</span></div>
         <div class="guia-diagrama-desc" id="guia-diagrama-desc" hidden></div>
-        <div class="guia-diagrama-canvas" id="guia-diagrama-canvas"></div>
+        <div class="guia-diagrama-wrap" id="guia-diagrama-wrap">
+          <button type="button" class="case-icon-btn guia-fs" title="Tela cheia (Esc pra sair)" aria-label="Tela cheia" aria-pressed="false">${FS_ICONS}</button>
+          <div class="guia-diagrama-canvas" id="guia-diagrama-canvas"></div>
+        </div>
         <button type="button" class="btn-ghost guia-abrir-fluxos" id="guia-abrir-fluxos">
           Abrir este fluxograma em tamanho grande
         </button>
@@ -3737,6 +3819,8 @@
     });
     const abrir = $("#guia-abrir-fluxos");
     if (abrir) abrir.addEventListener("click", abrirDiagramaNaVisaoFluxos);
+    const gfs = $(".guia-fs");
+    if (gfs) gfs.addEventListener("click", () => toggleFs($("#guia-diagrama-wrap")));
     desenharDiagramaDoGuia();
   }
 

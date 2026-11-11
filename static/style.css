@@ -2639,3 +2639,25 @@ body.inline-connecting * { cursor:crosshair !important; }
 .resp-ufs { font-size:11px; color:var(--text-3); font-family:'Roboto Mono',monospace; }
 .btn-proximo { margin-left:auto; white-space:nowrap; }
 .tecnico-resp { color:var(--part); font-weight:600; }
+
+/* ---------- tela cheia dos fluxogramas ---------- */
+.diagram-fs .fs-off, .guia-fs .fs-off { display:none; }
+.diagram.fs .diagram-fs .fs-on, .guia-diagrama-wrap.fs .guia-fs .fs-on { display:none; }
+.diagram.fs .diagram-fs .fs-off, .guia-diagrama-wrap.fs .guia-fs .fs-off { display:block; }
+body.fs-open { overflow:hidden; }
+.diagram.fs {
+  position:fixed; inset:0; z-index:300; margin:0; border-radius:0; border:0; animation:none;
+  display:flex; flex-direction:column; padding:14px 20px 16px; background:var(--surface); overflow:hidden;
+}
+.diagram.fs .diagram-head { flex-shrink:0; }
+.diagram.fs .diagram-body { flex:1; min-height:0; display:flex; flex-direction:column; }
+.diagram.fs .diagram-desc, .diagram.fs .inline-toolbar { flex-shrink:0; }
+.diagram.fs .diagram-canvas { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:10px; }
+.diagram.fs .diagram-canvas svg { max-width:none !important; width:100%; height:100%; }
+.diagram.fs .diagram-meta-foot { flex-shrink:0; margin-top:8px; padding-top:8px; }
+.guia-diagrama-wrap { position:relative; flex-shrink:0; }
+.guia-fs { position:absolute; top:8px; right:8px; z-index:2; background:var(--surface); }
+.guia-diagrama-wrap.fs { position:fixed; inset:0; z-index:300; background:var(--surface); padding:12px; display:flex; }
+.guia-diagrama-wrap.fs .guia-diagrama-canvas { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; }
+.guia-diagrama-wrap.fs .guia-diagrama-canvas svg { height:100%; }
+.inline-toolbar[hidden] { display:none; }
