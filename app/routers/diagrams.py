@@ -223,3 +223,54 @@ def delete_tela(diagram_id: int, no_id: str, db: Session = Depends(get_db)):
     db.delete(tela)
     db.commit()
     return {"deleted": no_id}
+
+
+# ---------------------------------------------------------------- ambientes ("onde a ação acontece")
+
+# Sugestões iniciais. São só um ponto de partida: o time edita, renomeia, troca cor/estilo e apaga.
+AMBIENTES_PADRAO = [
+    {"slug": "faiston_one",   "nome": "Faiston One",        "cor": "#0054ec", "estilo": "pilula"},
+    {"slug": "app_tecnico",   "nome": "App do técnico",     "cor": "#0d9d6c", "estilo": "pilula"},
+    {"slug": "tiflux",        "nome": "Tiflux",             "cor": "#ea580c", "estilo": "solido"},
+    {"slug": "whatsapp",      "nome": "WhatsApp",           "cor": "#16a34a", "estilo": "tracejado"},
+    {"slug": "sap",           "nome": "SAP Business One",   "cor": "#7c3aed", "estilo": "faixa"},
+    {"slug": "planilha",      "nome": "Planilha (Excel)",   "cor": "#0f766e", "estilo": "suave"},
+    {"slug": "email",         "nome": "E-mail",             "cor": "#64748b", "estilo": "suave"},
+    {"slug": "presencial",    "nome": "Presencial (campo)", "cor": "#b45309", "estilo": "tracejado"},
+]
+
+
+def _ambientes_linha(db: Session) -> models.DiagramaAmbientes:
+    """A linha única do catálogo; cria com as sugestões na primeira vez que for lida."""
+    linha = db.query(models.DiagramaAmbientes).filter(models.DiagramaAmbientes.id == 1).first()
+    if not linha:
+        linha = models.DiagramaAmbientes(id=1, itens=json.dumps(AMBIENTES_PADRAO, ensure_ascii=False))
+        db.add(linha)
+        db.commit()
+        db.refresh(linha)
+    return linha
+
+
+def _ambientes_out(linha: models.DiagramaAmbientes) -> schemas.AmbientesOut:
+    try:
+        itens = json.loads(linha.itens or "[]")
+    except ValueError:
+        itens = []
+    return schemas.AmbientesOut(itens=itens, atualizado_por=linha.atualizado_por, updated_at=linha.updated_at)
+
+
+@router.get("/diagramas-ambientes", response_model=schemas.AmbientesOut)
+def get_ambientes(db: Session = Depends(get_db)):
+    return _ambientes_out(_ambientes_linha(db))
+
+
+@router.put("/diagramas-ambientes", response_model=schemas.AmbientesOut)
+def save_ambientes(payload: schemas.AmbientesIn, db: Session = Depends(get_db)):
+    """Substitui o catálogo inteiro. Apagar um ambiente aqui não mexe nos diagramas: as caixas que o
+    usavam continuam apontando pro identificador dele e só deixam de ter a aparência."""
+    linha = _ambientes_linha(db)
+    linha.itens = json.dumps([i.model_dump() for i in payload.itens], ensure_ascii=False)
+    linha.atualizado_por = payload.atualizado_por
+    db.commit()
+    db.refresh(linha)
+    return _ambientes_out(linha)

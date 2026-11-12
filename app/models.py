@@ -258,6 +258,20 @@ class DiagramaTela(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
 
+class DiagramaAmbientes(Base):
+    """Catálogo de "onde a ação acontece" nos fluxogramas (Faiston One, Tiflux, app do técnico...):
+    cada ambiente tem nome, cor e estilo próprios, e a caixa do fluxo que o usa ganha essa aparência.
+    É UMA linha só (id = 1) com a lista inteira em JSON: o time edita o catálogo todo de uma vez, e por
+    ser linha única o que o time apagar não volta a cada subida do app (o padrão só entra se a linha
+    ainda não existir)."""
+    __tablename__ = "diagrama_ambientes"
+
+    id = Column(Integer, primary_key=True)
+    itens = Column(Text, nullable=False, default="[]")       # JSON: [{slug, nome, cor, estilo}]
+    atualizado_por = Column(String, nullable=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
 class DiagramaSeedRemovido(Base):
     """Diagrama do seed que o time excluiu de propósito. O seed roda a cada subida do app e,
     sem este registro, recriaria o diagrama apagado (nos módulos ele confere pelo título)."""

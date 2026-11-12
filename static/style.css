@@ -2991,12 +2991,62 @@ body.fs-open { overflow:hidden; }
 .ifx-cor { left:50%; top:-11px; margin-left:-11px; font-size:11px; }
 .ifx-cor:hover { color:var(--f-magenta); border-color:var(--f-magenta); }
 .ifx-pop {
-  position:absolute; left:50%; top:-52px; transform:translateX(-50%); z-index:20; pointer-events:auto;
-  display:flex; gap:5px; align-items:center; padding:6px 8px; background:var(--surface); border:1px solid var(--line-2);
-  border-radius:999px; box-shadow:var(--shadow-2); white-space:nowrap;
+  position:fixed; z-index:500; pointer-events:auto;   /* left/top calculados no JS a partir do botão 🎨 */
+  display:flex; flex-direction:column; gap:6px; align-items:stretch; padding:10px 12px 12px; width:268px;
+  background:var(--surface); border:1px solid var(--line-2); border-radius:14px; box-shadow:var(--shadow-2);
+  text-align:left;
 }
+.ifx-pop-sec { font-size:9.5px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--text-3); margin-top:2px; }
+.ifx-pop-amb { display:flex; flex-direction:column; gap:3px; max-height:190px; overflow:auto; }
+.ifx-pop-ambbtn { display:flex; align-items:center; gap:8px; border:1px solid transparent; background:transparent; border-radius:8px; padding:4px 6px; cursor:pointer; font:600 12px 'Roboto',sans-serif; color:var(--text-2); text-align:left; }
+.ifx-pop-ambbtn:hover { background:var(--surface-2); }
+.ifx-pop-ambbtn.on { border-color:var(--text); background:var(--surface-2); color:var(--text); }
+.ifx-pop-row { display:flex; gap:6px; flex-wrap:wrap; }
+.ifx-pop-auto { align-self:flex-start; margin-top:2px; }
+.amb-vazio { font-size:11.5px; color:var(--text-3); font-style:italic; }
 .ifx-pop-cor { width:22px; height:22px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px var(--line-2); cursor:pointer; padding:0; transition:transform .12s var(--ease); }
 .ifx-pop-cor:hover { transform:scale(1.15); }
 .ifx-pop-cor.on { box-shadow:0 0 0 2px var(--text); }
 .ifx-pop-auto { border:1px solid var(--line-2); background:var(--surface-2); border-radius:999px; padding:3px 9px; font:700 10.5px 'Roboto',sans-serif; color:var(--text-2); cursor:pointer; }
 .ifx-pop-auto.on { background:var(--text); color:#fff; border-color:var(--text); }
+
+/* ---------- ambientes: onde a ação acontece (cor livre + 5 estilos) ---------- */
+/* contorno por CSS (variáveis --amb-cor / --amb-tinta vêm do JS), pra o hover/seleção do editor continuar valendo */
+.fx-amb-pilula rect.label-container, .fx-amb-solido rect.label-container { stroke:none !important; }
+.fx-amb-solido { filter:drop-shadow(0 2px 5px rgba(23,26,46,.18)); }
+.fx-amb-suave rect.label-container { stroke:var(--amb-cor) !important; stroke-width:1.8px !important; }
+.fx-amb-tracejado rect.label-container { stroke:var(--amb-cor) !important; stroke-width:2px !important; stroke-dasharray:6 4 !important; }
+.fx-amb-faixa rect.label-container { stroke:#cfd3e6 !important; stroke-width:1.2px !important; }
+.fx-amb-faixa .fx-amb-faixa { pointer-events:none; }
+/* chips "Onde acontece" na barra do editor */
+.inline-palette-amb { flex-wrap:wrap; gap:6px; }
+.amb-chips { display:inline-flex; flex-wrap:wrap; gap:5px; }
+.amb-chip { display:inline-flex; align-items:center; gap:7px; border:1px solid var(--line-2); background:var(--surface); border-radius:999px; padding:3px 11px 3px 7px; cursor:pointer; font:600 12px 'Roboto',sans-serif; color:var(--text-2); transition:border-color .15s var(--ease), transform .12s var(--ease); }
+.amb-chip:hover { border-color:var(--f-blue); color:var(--text); transform:translateY(-1px); }
+.inline-amb-manage { border:1px dashed var(--line-2); background:transparent; border-radius:999px; padding:4px 11px; cursor:pointer; font:600 11.5px 'Roboto',sans-serif; color:var(--text-3); }
+.inline-amb-manage:hover { color:var(--f-blue); border-color:var(--f-blue); }
+/* gerenciador de ambientes */
+.amb-card { max-width:760px; width:min(760px, 96vw); }
+.amb-body { display:flex; flex-direction:column; gap:12px; }
+.amb-intro { margin:0; font-size:12.5px; line-height:1.6; color:var(--text-2); }
+.amb-lista { display:flex; flex-direction:column; gap:7px; }
+.amb-linha { display:grid; grid-template-columns:34px minmax(0,1fr) 44px 170px auto; gap:8px; align-items:center; border:1px solid var(--line-2); border-radius:10px; padding:7px 9px; background:var(--surface-2); }
+.amb-amostra { display:flex; justify-content:center; }
+.amb-linha input.amb-nome, .amb-linha select { font:13px 'Roboto',sans-serif; color:var(--text); background:var(--surface); border:1px solid var(--line-2); border-radius:8px; padding:7px 10px; min-width:0; }
+.amb-linha input.amb-cor { width:44px; height:34px; padding:2px; border:1px solid var(--line-2); border-radius:8px; background:var(--surface); cursor:pointer; }
+.amb-linha input:focus, .amb-linha select:focus { outline:none; border-color:var(--f-blue); box-shadow:0 0 0 3px rgba(0,84,236,.12); }
+.amb-acoes { display:inline-flex; gap:3px; }
+.amb-acoes button { width:26px; height:26px; border:1px solid var(--line-2); background:var(--surface); border-radius:6px; cursor:pointer; font-size:11px; color:var(--text-2); }
+.amb-acoes button:hover:not(:disabled) { color:var(--f-blue); border-color:var(--f-blue); }
+.amb-acoes button.del:hover { color:var(--bad); border-color:var(--bad); background:var(--bad-bg); }
+.amb-acoes button:disabled { opacity:.35; cursor:default; }
+.amb-novo { align-self:flex-start; }
+@media (max-width:640px) { .amb-linha { grid-template-columns:34px minmax(0,1fr) 44px; } .amb-linha select, .amb-acoes { grid-column:2 / -1; } }
+/* legenda dos ambientes */
+.fx-leg-grupo { font-size:10px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--text-3); padding-left:12px; border-left:1px solid var(--line-2); margin-left:2px; }
+.fx-leg-amb { width:24px; height:15px; display:inline-block; border-radius:5px; flex-shrink:0; box-sizing:border-box; }
+.fx-leg-amb-pilula { border-radius:999px; background:var(--g); }
+.fx-leg-amb-solido { background:var(--c); }
+.fx-leg-amb-suave { background:var(--t); border:2px solid var(--c); }
+.fx-leg-amb-tracejado { background:#fff; border:2px dashed var(--c); }
+.fx-leg-amb-faixa { background:#fff; border:1px solid #cfd3e6; box-shadow:inset 6px 0 0 var(--c); }

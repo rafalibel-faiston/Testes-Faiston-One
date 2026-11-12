@@ -516,6 +516,19 @@ propriedade da caixa e vai pro código como `class n1 pill_verde;` (com um `clas
 preenchimento sólido de reserva), então sobrevive ao salvar e é relida pelo editor. Vale só pra
 etapa comum (botão, decisão e notificação têm cor própria) e sobrepõe a cor automática.
 
+**Onde a ação acontece (ambientes).** Pra mostrar em que sistema/lugar cada etapa é feita, o time
+mantém um **catálogo de ambientes** (⚙ Ambientes, na barra do "Editar aqui"): cada um tem nome,
+**cor livre** e um de 5 **estilos** (pílula com degradê, sólido, suave, tracejado, faixa lateral — o
+estilo distingue mesmo em preto e branco). Vem com sugestões (Faiston One, App do técnico, Tiflux,
+WhatsApp, SAP Business One, Planilha, E-mail, Presencial) que podem ser editadas ou apagadas. Na
+barra, a linha **Onde acontece** adiciona uma etapa já no ambiente; o 🎨 da caixa troca o ambiente
+(ou volta ao automático). O diagrama guarda só *qual* ambiente é (`class n1 amb_faiston_one;`, sem
+`classDef`): a aparência sai sempre do catálogo, então recolorir um ambiente repinta todos os
+fluxogramas, e apagar um deixa a caixa sem estilo em vez de com uma cor "congelada". Uma legenda
+**Onde acontece** mostra só os ambientes que aparecem em cada desenho. O catálogo fica em
+`diagrama_ambientes` (uma linha só, JSON; `GET/PUT /api/diagramas-ambientes`): por ser linha única,
+o que o time apaga não volta a cada subida do app.
+
 Cada etapa pode ter uma **telinha** (protótipo de tela, não a tela real): no "Editar aqui", o
 botão 🖼 da caixa abre o construtor — **celular** (app do técnico) ou **web** (sistema do
 operador; o padrão sai do ator da etapa: `Tec.` → celular, o resto → web). Blocos gerais (barra

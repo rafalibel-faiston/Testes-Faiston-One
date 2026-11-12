@@ -858,6 +858,28 @@
   </div>
 </div>
 
+<!-- ambientes: onde a ação acontece (nome, cor livre e estilo de cada um) -->
+<div class="modal tela-modal" id="amb-modal" hidden aria-modal="true" role="dialog" aria-labelledby="amb-titulo">
+  <div class="modal-card amb-card">
+    <div class="modal-head">
+      <h3 id="amb-titulo">Onde a ação acontece</h3>
+      <span class="modal-code">ambientes</span>
+      <button type="button" class="modal-close" id="amb-close" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body amb-body">
+      <p class="amb-intro">Cada ambiente é um lugar onde uma ação é feita (um sistema, um app, presencialmente…).
+        Dê a ele uma <b>cor</b> e um <b>estilo</b>: as caixas do fluxograma marcadas com ele ficam com essa aparência,
+        e uma legenda mostra o que cada um significa. O estilo ajuda a distinguir mesmo em impressão preto e branco.</p>
+      <div class="amb-lista" id="amb-lista"></div>
+      <button type="button" class="btn-ghost amb-novo" id="amb-novo">+ Novo ambiente</button>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="amb-cancelar">Cancelar</button>
+      <button type="button" class="btn-primary" id="amb-salvar">Salvar ambientes</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="diagram-modal" hidden aria-modal="true" role="dialog">
   <div class="modal-card diagram-card">
     <div class="modal-head">

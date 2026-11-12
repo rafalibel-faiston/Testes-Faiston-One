@@ -1312,6 +1312,7 @@
     try { mermaid = await whenMermaid(); }
     catch (e) { container.innerHTML = `<div class="diagram-error">${esc(e.message)}</div>`; return; }
     await aguardaFontes();
+    await garanteAmbientes();
     const id = "mmd-" + (++mermaidSeq);
     try {
       const { svg } = await mermaid.render(id, src);
@@ -1824,6 +1825,148 @@
     else if (!telaModal.hidden) { e.preventDefault(); fechaConstrutorTela(); }
   }, true);
 
+  // ---------------- ambientes: chips da barra, gerenciador e redesenho ----------------
+  // amostra do estilo de um ambiente (a mesma da legenda)
+  const amostraAmb = (a) => {
+    const P = paletaAmbiente(a.cor);
+    return `<i class="fx-leg-amb fx-leg-amb-${a.estilo}" style="--c:${P.base};--t:${P.tinta};--g:linear-gradient(135deg,${P.escuro},${P.claro})"></i>`;
+  };
+
+  // chips "Onde acontece" da barra do editor (todos os cards re-desenham a lista ao mudar o catálogo)
+  function chipsAmbientesHtml() {
+    if (!AMBIENTES.length) return `<span class="amb-vazio">nenhum ambiente — crie em ⚙</span>`;
+    return AMBIENTES.map((a) =>
+      `<button type="button" class="inline-add-amb amb-chip" data-slug="${esc(a.slug)}" title="Adicionar uma etapa em: ${esc(a.nome)}">${amostraAmb(a)}<span>${esc(a.nome)}</span></button>`).join("");
+  }
+  function atualizaChipsAmbientes() {
+    $$(".amb-chips").forEach((el) => { el.innerHTML = chipsAmbientesHtml(); });
+  }
+
+  // redesenha os fluxogramas abertos (o catálogo mudou). Quem está em edição inline é redesenhado no lugar.
+  function redesenhaTodosDiagramas() {
+    $$(".diagram").forEach((art) => {
+      const canvas = art.querySelector(".diagram-canvas");
+      if (!canvas || !canvas.dataset.rendered) return;
+      const id = Number(art.dataset.id), st = inlineState.get(id);
+      if (st) { renderInlineCanvas(art, st); return; }
+      const d = DIAGRAMS.find((x) => x.id === id);
+      if (d) renderMermaidInto(canvas, d.mermaid);
+    });
+    if (typeof desenharDiagramaDoGuia === "function" && $("#guia-diagrama-canvas") && !$("#guia-modal").hidden) desenharDiagramaDoGuia();
+  }
+
+  const ambModal = $("#amb-modal");
+  let ambSt = null;   // cópia de trabalho do catálogo: [{slug|null, nome, cor, estilo}]
+
+  // quantos diagramas carregados usam o ambiente (a classe amb_<slug> aparece no código)
+  const usosDoAmbiente = (slug) => {
+    const re = new RegExp(`\\bamb_${slug}\\b`);
+    return { diagramas: DIAGRAMS.filter((d) => re.test(d.mermaid || "")).length };
+  };
+
+  function renderAmbLista() {
+    const wrap = $("#amb-lista");
+    if (!ambSt.length) { wrap.innerHTML = `<div class="tela-vazio">Nenhum ambiente. Crie o primeiro abaixo.</div>`; return; }
+    wrap.innerHTML = ambSt.map((a, i) => `
+      <div class="amb-linha" data-i="${i}">
+        <span class="amb-amostra">${amostraAmb(a)}</span>
+        <input class="amb-nome" data-i="${i}" value="${esc(a.nome)}" maxlength="40" placeholder="Nome (ex.: Faiston One)" aria-label="Nome do ambiente">
+        <input class="amb-cor" type="color" data-i="${i}" value="${esc(a.cor)}" aria-label="Cor">
+        <select class="amb-estilo" data-i="${i}" aria-label="Estilo">${AMBIENTE_ESTILOS.map(([k, n]) => `<option value="${k}"${a.estilo === k ? " selected" : ""}>${n}</option>`).join("")}</select>
+        <span class="amb-acoes">
+          <button type="button" data-ac="up" data-i="${i}" title="Subir" ${i === 0 ? "disabled" : ""}>▲</button>
+          <button type="button" data-ac="down" data-i="${i}" title="Descer" ${i === ambSt.length - 1 ? "disabled" : ""}>▼</button>
+          <button type="button" data-ac="del" data-i="${i}" title="Excluir ambiente" class="del">✕</button>
+        </span>
+      </div>`).join("");
+  }
+
+  function abreGerenciadorAmbientes() {
+    ambSt = AMBIENTES.map((a) => ({ ...a }));
+    renderAmbLista();
+    modalAbre(ambModal);
+  }
+  const fechaGerenciadorAmbientes = () => { modalFecha(ambModal); ambSt = null; };
+  $("#amb-close").addEventListener("click", fechaGerenciadorAmbientes);
+  $("#amb-cancelar").addEventListener("click", fechaGerenciadorAmbientes);
+  ambModal.addEventListener("click", (e) => { if (e.target.id === "amb-modal") fechaGerenciadorAmbientes(); });
+
+  // edição por delegação: digitar/escolher só atualiza a amostra, sem redesenhar a lista (o foco não se perde)
+  const ambCampo = (e) => {
+    const i = Number(e.target.dataset.i);
+    if (!ambSt || Number.isNaN(i) || !ambSt[i]) return;
+    if (e.target.classList.contains("amb-nome")) ambSt[i].nome = e.target.value;
+    else if (e.target.classList.contains("amb-cor")) ambSt[i].cor = e.target.value;
+    else if (e.target.classList.contains("amb-estilo")) ambSt[i].estilo = e.target.value;
+    else return;
+    const am = e.target.closest(".amb-linha").querySelector(".amb-amostra");
+    if (am) am.innerHTML = amostraAmb(ambSt[i]);
+  };
+  $("#amb-lista").addEventListener("input", ambCampo);
+  $("#amb-lista").addEventListener("change", ambCampo);
+  $("#amb-lista").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-ac]");
+    if (!b || !ambSt) return;
+    const i = Number(b.dataset.i), ac = b.dataset.ac;
+    if (ac === "del") {
+      const a = ambSt[i];
+      if (a.slug) {
+        const u = usosDoAmbiente(a.slug);
+        if (u.diagramas && !confirm(`"${a.nome}" está em ${u.diagramas} diagrama(s). As caixas continuam no fluxograma, mas perdem a cor e o estilo. Excluir mesmo?`)) return;
+      }
+      ambSt.splice(i, 1);
+    } else if (ac === "up" && i > 0) [ambSt[i - 1], ambSt[i]] = [ambSt[i], ambSt[i - 1]];
+    else if (ac === "down" && i < ambSt.length - 1) [ambSt[i + 1], ambSt[i]] = [ambSt[i], ambSt[i + 1]];
+    renderAmbLista();
+  });
+  const CORES_NOVAS = ["#0054ec", "#0d9d6c", "#ea580c", "#7c3aed", "#d6286f", "#0e7490", "#b45309", "#64748b"];
+  $("#amb-novo").addEventListener("click", () => {
+    if (!ambSt) return;
+    if (ambSt.length >= 24) { toast("Máximo de 24 ambientes.", true); return; }
+    ambSt.push({ slug: null, nome: "", cor: CORES_NOVAS[ambSt.length % CORES_NOVAS.length], estilo: "pilula" });
+    renderAmbLista();
+    const ult = $$("#amb-lista .amb-nome").pop(); if (ult) ult.focus();
+  });
+
+  // identificador estável (vai no código do diagrama): a partir do nome, único, só [a-z0-9_]
+  const slugDe = (nome, usados) => {
+    let base = (nome || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 24) || "ambiente";
+    let s = base, n = 2;
+    while (usados.has(s)) s = `${base}_${n++}`;
+    return s;
+  };
+
+  $("#amb-salvar").addEventListener("click", async () => {
+    if (!ambSt) return;
+    const nomes = new Set();
+    for (const a of ambSt) {
+      const nm = (a.nome || "").trim();
+      if (!nm) { toast("Todo ambiente precisa de um nome.", true); return; }
+      if (nomes.has(nm.toLowerCase())) { toast(`Há dois ambientes chamados "${nm}".`, true); return; }
+      nomes.add(nm.toLowerCase());
+    }
+    const usados = new Set(ambSt.filter((a) => a.slug).map((a) => a.slug));
+    const itens = ambSt.map((a) => {
+      const slug = a.slug || slugDe(a.nome, usados);
+      usados.add(slug);
+      return { slug, nome: a.nome.trim(), cor: a.cor, estilo: a.estilo };
+    });
+    const btn = $("#amb-salvar"); btn.disabled = true;
+    try {
+      const r = await api("/api/diagramas-ambientes", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itens, atualizado_por: testerName() || undefined }),
+      });
+      AMBIENTES = r.itens || [];
+      fechaGerenciadorAmbientes();
+      atualizaChipsAmbientes();
+      redesenhaTodosDiagramas();
+      toast("Ambientes salvos");
+    } catch (err) {
+      toast("Erro ao salvar os ambientes: " + err.message, true);
+    } finally { btn.disabled = false; }
+  });
+
   // ---- apresentação passo a passo ----
   // O fluxo vai aparecendo na ordem real: a cada passo entra um "nível" (as caixas à mesma distância
   // do início — os ramos de uma decisão aparecem juntos) e as setas que ficam completas, desenhadas
@@ -2109,8 +2252,9 @@
     if (container.__play && container.__play.aberto) aplicaPasso(container, container.__play.step, false);
 
     const gradId = svg.id + "-fx";
-    const grads = new Set();   // sufixos dos degradês que este desenho usa: "s", "e" ou "p-<cor>"
+    const grads = new Map();   // degradês que este desenho usa: sufixo ("s", "e", "p-<cor>", "a-<slug>") -> [cor inicial, cor final]
     const usados = new Set();
+    const ambUsados = new Set();   // slugs dos ambientes que aparecem (pra legenda)
     nodes.forEach((g, id) => {
       const rect = g.querySelector(":scope > rect.basic.label-container, :scope > rect.label-container");
       const cls = g.classList;
@@ -2120,25 +2264,66 @@
       cls.add("fx-step");
       const h = parseFloat(rect.getAttribute("height")) || 0;
       // pílula: raio = meia altura, com teto pra não espremer o texto de caixas altas
-      const pilula = (suf) => {
+      const pilula = (suf, a, b) => {
         const r = Math.min(h / 2, 18);
         rect.style.setProperty("rx", r + "px"); rect.style.setProperty("ry", r + "px");
         rect.style.setProperty("fill", `url(#${gradId}-${suf})`, "important");
-        grads.add(suf);
+        grads.set(suf, [a, b]);
       };
+      // ambiente (onde a ação acontece): vale sobre tudo — é o que o time marcou de propósito
+      const slugAmb = [...cls].map((c) => /^amb_(\w+)$/.exec(c)).filter(Boolean).map((m) => m[1]).find((k) => ambienteDe(k));
+      if (slugAmb) {
+        const amb = ambienteDe(slugAmb), P = paletaAmbiente(amb.cor);
+        cls.add("fx-amb", "fx-amb-" + amb.estilo);
+        ambUsados.add(slugAmb);
+        // cores variáveis pro CSS (o contorno sai por CSS pra o realce de hover/seleção do editor continuar valendo)
+        g.style.setProperty("--amb-cor", P.base);
+        g.style.setProperty("--amb-tinta", P.tinta);
+        const textoDe = (c) => g.querySelectorAll(".label, .label div, .nodeLabel, .nodeLabel p").forEach((e) => e.style.setProperty("color", c, "important"));
+        if (amb.estilo === "pilula") {
+          cls.add("fx-pill");
+          g.style.setProperty("--pill-glow", `rgba(${P.glow},.38)`);
+          pilula("a-" + slugAmb, P.escuro, P.claro);
+          textoDe(textoSobre(P.base));
+        } else if (amb.estilo === "solido") {
+          rect.style.setProperty("fill", P.base, "important");
+          textoDe(textoSobre(P.base));
+        } else if (amb.estilo === "faixa") {
+          rect.style.setProperty("fill", "#ffffff", "important");
+          // barra de cor na lateral esquerda, recortada pelo contorno arredondado da caixa
+          const NS = "http://www.w3.org/2000/svg";
+          const x = parseFloat(rect.getAttribute("x")) || 0, y = parseFloat(rect.getAttribute("y")) || 0;
+          const w = parseFloat(rect.getAttribute("width")) || 0, rr = 9;
+          const cid = `${gradId}-clip-${id}`;
+          const clip = document.createElementNS(NS, "clipPath"); clip.id = cid;
+          clip.innerHTML = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rr}" ry="${rr}"/>`;
+          const barra = document.createElementNS(NS, "rect");
+          barra.setAttribute("class", "fx-amb-faixa");
+          barra.setAttribute("x", x); barra.setAttribute("y", y); barra.setAttribute("width", 8); barra.setAttribute("height", h);
+          barra.setAttribute("clip-path", `url(#${cid})`);
+          // inline com prioridade: o tema do Mermaid pinta todo rect de caixa (fundo claro + contorno azul)
+          barra.style.setProperty("fill", P.base, "important");
+          barra.style.setProperty("stroke", "none", "important");
+          g.insertBefore(clip, rect.nextSibling); g.insertBefore(barra, clip.nextSibling);
+        } else {   // suave e tracejado: fundo claro, contorno na cor; o texto escurece pra manter o contraste
+          rect.style.setProperty("fill", amb.estilo === "suave" ? P.tinta : "#ffffff", "important");
+          textoDe(P.texto);
+        }
+        return;
+      }
       // caixa de destaque escolhida no editor (classe pill_<cor>): vale sobre o automático
       const cor = [...cls].map((c) => /^pill_(\w+)$/.exec(c)).filter(Boolean).map((m) => m[1]).find((k) => DESTAQUES[k]);
       if (cor) {
         cls.add("fx-pill", "fx-pill-" + cor);
         g.style.setProperty("--pill-glow", `rgba(${DESTAQUES[cor].glow},.38)`);
-        pilula("p-" + cor);
+        pilula("p-" + cor, DESTAQUES[cor].a, DESTAQUES[cor].b);
         return;
       }
       const ator = atorDoRotulo(g.querySelector(".nodeLabel")?.textContent);
       if (!entra.has(id) && sai.has(id)) {
-        cls.add("fx-start"); pilula("s");
+        cls.add("fx-start"); pilula("s", "#1a3fd1", "#12b5d6");   // início: degradê da marca
       } else if (entra.has(id) && !sai.has(id)) {
-        cls.add("fx-end"); pilula("e");
+        cls.add("fx-end"); pilula("e", "#2b2f55", "#4a4f7a");     // fim: índigo escuro, neutro (fim nem sempre é "sucesso")
       } else if (ator) {
         cls.add("fx-ator", "fx-ator-" + ator);
         usados.add(ator);
@@ -2159,11 +2344,7 @@
         });
         defs.appendChild(g);
       };
-      grads.forEach((suf) => {
-        if (suf === "s") grad("s", "#1a3fd1", "#12b5d6");          // início: degradê da marca
-        else if (suf === "e") grad("e", "#2b2f55", "#4a4f7a");     // fim: índigo escuro, neutro (fim nem sempre é "sucesso")
-        else { const d = DESTAQUES[suf.slice(2)]; grad(suf, d.a, d.b); }
-      });
+      grads.forEach(([a, b], suf) => grad(suf, a, b));
     }
 
     // legenda: só o que aparece no desenho, e só nas telas de leitura (não na prévia do editor)
@@ -2175,7 +2356,16 @@
       itens.push(`<span class="fx-leg-item"><i class="fx-leg-dot" style="background:${a.fundo};border-color:${a.cor}"></i>${a.nome}</span>`);
     });
     if (svg.querySelector(".fx-end")) itens.push(`<span class="fx-leg-item"><i class="fx-leg-dot fx-leg-end"></i>Fim</span>`);
-    if (itens.length >= 2) container.insertAdjacentHTML("afterbegin", `<div class="fx-legend" aria-label="Legenda">${itens.join("")}</div>`);
+    // onde a ação acontece: só os ambientes que aparecem neste desenho, na ordem do catálogo
+    const ambs = AMBIENTES.filter((a) => ambUsados.has(a.slug));
+    if (ambs.length) {
+      itens.push(`<span class="fx-leg-grupo">Onde acontece</span>`);
+      ambs.forEach((a) => {
+        const P = paletaAmbiente(a.cor);
+        itens.push(`<span class="fx-leg-item"><i class="fx-leg-amb fx-leg-amb-${a.estilo}" style="--c:${P.base};--t:${P.tinta};--g:linear-gradient(135deg,${P.escuro},${P.claro})"></i>${esc(a.nome)}</span>`);
+      });
+    }
+    if (itens.length >= 2 || ambs.length) container.insertAdjacentHTML("afterbegin", `<div class="fx-legend" aria-label="Legenda">${itens.join("")}</div>`);
   }
 
   function switchView(view) {
@@ -2223,7 +2413,7 @@
     if (!diagramsLoaded) $("#diagrams-loading").hidden = false;
     try {
       DIAGRAMS = await api("/api/diagramas");
-      await loadTelas();
+      await Promise.all([loadTelas(), garanteAmbientes()]);
       diagramsLoaded = true;
     } catch (e) {
       $("#diagrams-loading").textContent = "Erro ao carregar diagramas: " + e.message;
@@ -2287,6 +2477,11 @@
               <svg viewBox="0 0 34 20" width="30" height="18" aria-hidden="true"><rect x="2" y="4" width="30" height="12" rx="6" fill="rgba(245,158,11,.14)" stroke="#f59e0b" stroke-width="1.6"/></svg>
               <span>🔔 Notificação</span>
             </button>
+          </div>
+          <div class="inline-palette inline-palette-amb" role="group" aria-label="Adicionar etapa por ambiente (onde a ação acontece)">
+            <span class="inline-palette-label">Onde acontece:</span>
+            <span class="amb-chips">${chipsAmbientesHtml()}</span>
+            <button type="button" class="inline-amb-manage" title="Gerenciar ambientes: nome, cor e estilo">⚙ Ambientes</button>
           </div>
           <div class="inline-palette inline-palette-destaque" role="group" aria-label="Adicionar caixa de destaque">
             <span class="inline-palette-label">Destaque:</span>
@@ -2758,6 +2953,39 @@
     grafite:  { nome: "Grafite",  a: "#2b2f55", b: "#4a4f7a", glow: "43,47,85" },
   };
 
+  // ---- ambientes: "onde a ação acontece" (Faiston One, Tiflux, app do técnico...) ----
+  // O catálogo (nome, cor livre, estilo) vem de /api/diagramas-ambientes e é editável pelo time. A caixa
+  // só guarda QUAL ambiente é (node.ambiente → `class n1 amb_<slug>;` no código); a aparência sai sempre
+  // do catálogo atual — por isso trocar a cor de um ambiente repinta todos os fluxogramas que o usam.
+  const AMBIENTE_ESTILOS = [
+    ["pilula", "Pílula (degradê)"], ["solido", "Sólido"], ["suave", "Suave (contorno)"],
+    ["tracejado", "Tracejado"], ["faixa", "Faixa lateral"],
+  ];
+  let AMBIENTES = [];   // [{slug, nome, cor, estilo}]
+  const ambienteDe = (slug) => AMBIENTES.find((a) => a.slug === slug) || null;
+  async function loadAmbientes() {
+    try { AMBIENTES = (await api("/api/diagramas-ambientes")).itens || []; } catch (e) { AMBIENTES = []; }
+  }
+  // carrega uma vez só; todo desenho espera por ele (o guia desenha sem passar pela tela de Fluxos)
+  let ambientesPromise = null;
+  const garanteAmbientes = () => ambientesPromise || (ambientesPromise = loadAmbientes());
+
+  // cor livre -> as variações que cada estilo precisa
+  const hex2rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const rgb2hex = (v) => "#" + v.map((x) => Math.max(0, Math.min(255, Math.round(x))).toString(16).padStart(2, "0")).join("");
+  const mixCor = (a, b, t) => { const A = hex2rgb(a), B = hex2rgb(b); return rgb2hex(A.map((x, i) => x + (B[i] - x) * t)); };
+  const luminancia = (h) => {
+    const [r, g, b] = hex2rgb(h).map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const textoSobre = (h) => (luminancia(h) > 0.42 ? "#171a2e" : "#ffffff");   // texto legível sobre a cor
+  function paletaAmbiente(cor) {
+    return {
+      base: cor, escuro: mixCor(cor, "#000000", 0.14), claro: mixCor(cor, "#ffffff", 0.34),
+      tinta: mixCor(cor, "#ffffff", 0.88), texto: mixCor(cor, "#000000", 0.55), glow: hex2rgb(cor).join(","),
+    };
+  }
+
   // uma etapa em código Mermaid (a forma decide os delimitadores)
   function nodeMermaidLine(n) {
     const label = cleanLabel(n.label) || n.id;
@@ -2815,6 +3043,11 @@
       lines.push("    " + NOTIF_CLASSDEF[cls]);
       lines.push("    class " + byClass[cls].join(",") + " " + cls + ";");
     });
+    // ambiente (onde a ação acontece): só a classe, sem classDef — a aparência vem do catálogo na hora de
+    // desenhar, então apagar/recolorir um ambiente não deixa cor antiga guardada no diagrama
+    const porAmb = {};
+    s.nodes.filter((n) => n.shape === "step" && n.ambiente).forEach((n) => { (porAmb[n.ambiente] = porAmb[n.ambiente] || []).push(n.id); });
+    Object.keys(porAmb).forEach((k) => lines.push(`    class ${porAmb[k].join(",")} amb_${k};`));
     // caixas de destaque (só etapas comuns): uma cor por classe. O classDef é um preenchimento sólido
     // de reserva; na tela o degradê é aplicado por estilizaDiagrama.
     const porCor = {};
@@ -2907,6 +3140,11 @@
       // caixa de destaque: `class n1,n2 pill_verde;` (vem depois das definições dos nós)
       if ((m = line.match(/^class\s+([\w,\s]+?)\s+pill_(\w+)\s*;?\s*$/))) {
         if (DESTAQUES[m[2]]) m[1].split(",").map((x) => x.trim()).forEach((id) => { const n = map.get(id); if (n && n.shape === "step") n.estilo = m[2]; });
+        return;
+      }
+      // ambiente: `class n1,n2 amb_faiston_one;` — guarda o slug mesmo se o catálogo não o conhecer (mais)
+      if ((m = line.match(/^class\s+([\w,\s]+?)\s+amb_(\w+)\s*;?\s*$/))) {
+        m[1].split(",").map((x) => x.trim()).forEach((id) => { const n = map.get(id); if (n && n.shape === "step") n.ambiente = m[2]; });
         return;
       }
       line = extractNodes(line);   // nós (inline ou soltos) já registrados; sobra "A --> B"
@@ -3271,6 +3509,17 @@
       st.state.nodes.push({ id, label: "", shape: "notif", to: "Técnico" });
       commitInline(art, st);
     });
+    // chips "Onde acontece" e ⚙ (por delegação: a lista de chips é redesenhada quando o catálogo muda)
+    tb.addEventListener("click", (e) => {
+      const chip = e.target.closest(".inline-add-amb");
+      if (chip) {
+        const id = newNodeId(st.state);
+        st.state.nodes.push({ id, label: "Nova etapa", shape: "step", ambiente: chip.dataset.slug });
+        commitInline(art, st, id);
+        return;
+      }
+      if (e.target.closest(".inline-amb-manage")) abreGerenciadorAmbientes();
+    });
     $$(".inline-add-destaque", tb).forEach((b) => b.addEventListener("click", () => {
       const id = newNodeId(st.state);
       st.state.nodes.push({ id, label: "Destaque", shape: "step", estilo: b.dataset.cor });
@@ -3593,7 +3842,7 @@
         ev.stopPropagation();
         const order = ["step", "botao", "decision", "notif"];
         node.shape = order[(order.indexOf(node.shape) + 1) % order.length];
-        if (node.shape !== "step") delete node.estilo;   // a cor de destaque só existe em etapa comum
+        if (node.shape !== "step") { delete node.estilo; delete node.ambiente; }   // cor de destaque e ambiente só existem em etapa comum
         commitInline(art, st);
       });
       grp.querySelector(".ifx-tela").addEventListener("click", (ev) => {
@@ -3603,27 +3852,47 @@
       const corBtn = grp.querySelector(".ifx-cor");
       if (corBtn) corBtn.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        const aberto = grp.querySelector(".ifx-pop");
-        if (aberto) { aberto.remove(); return; }
+        const jaAberto = $$(".ifx-pop").length > 0;
+        $$(".ifx-pop").forEach((e) => e.remove());
+        if (jaAberto && corBtn._aberto) { corBtn._aberto = false; return; }   // segundo clique no 🎨 fecha
+        corBtn._aberto = true;
         const pop = document.createElement("div");
         pop.className = "ifx-pop";
+        const ambAtual = AMBIENTES.find((a) => a.slug === node.ambiente);
         pop.innerHTML =
-          `<button type="button" class="ifx-pop-auto${node.estilo ? "" : " on"}" data-cor="" title="Automático: cor do ator, início ou fim">Auto</button>` +
-          Object.entries(DESTAQUES).map(([k, d]) =>
-            `<button type="button" class="ifx-pop-cor${node.estilo === k ? " on" : ""}" data-cor="${k}" title="${d.nome}" aria-label="${d.nome}" style="background:linear-gradient(135deg,${d.a},${d.b})"></button>`).join("");
+          `<div class="ifx-pop-sec">Onde acontece</div>` +
+          `<div class="ifx-pop-amb">${AMBIENTES.length ? AMBIENTES.map((a) =>
+            `<button type="button" class="ifx-pop-ambbtn${node.ambiente === a.slug ? " on" : ""}" data-amb="${esc(a.slug)}" title="${esc(a.nome)}">${amostraAmb(a)}<span>${esc(a.nome)}</span></button>`).join("")
+            : `<span class="amb-vazio">nenhum ambiente — crie em ⚙ Ambientes</span>`}` +
+          (node.ambiente && !ambAtual ? `<span class="amb-vazio">ambiente "${esc(node.ambiente)}" não existe mais</span>` : "") + `</div>` +
+          `<div class="ifx-pop-sec">Destaque (só cor)</div>` +
+          `<div class="ifx-pop-row">` + Object.entries(DESTAQUES).map(([k, d]) =>
+            `<button type="button" class="ifx-pop-cor${node.estilo === k ? " on" : ""}" data-cor="${k}" title="${d.nome}" aria-label="${d.nome}" style="background:linear-gradient(135deg,${d.a},${d.b})"></button>`).join("") + `</div>` +
+          `<button type="button" class="ifx-pop-auto${node.estilo || node.ambiente ? "" : " on"}" data-auto="1" title="Automático: cor do ator, início ou fim">Automático</button>`;
         pop.addEventListener("click", (e) => {
-          const b = e.target.closest("button[data-cor]");
-          if (!b) return;
+          const b = e.target.closest("button");
+          if (!b || !pop.contains(b)) return;
           e.stopPropagation();
-          if (b.dataset.cor) node.estilo = b.dataset.cor; else delete node.estilo;
+          // ambiente, destaque e automático são exclusivos entre si
+          if (b.dataset.amb) { node.ambiente = b.dataset.amb; delete node.estilo; }
+          else if (b.dataset.cor) { node.estilo = b.dataset.cor; delete node.ambiente; }
+          else if (b.dataset.auto) { delete node.estilo; delete node.ambiente; }
+          else return;
+          pop.remove(); corBtn._aberto = false;
           commitInline(art, st);
         });
         pop.addEventListener("mousedown", (e) => e.stopPropagation());
-        grp.appendChild(pop);
-        // fecha ao clicar fora
-        setTimeout(() => document.addEventListener("click", function fora(e2) {
-          if (!pop.contains(e2.target)) { pop.remove(); document.removeEventListener("click", fora); }
-        }), 0);
+        // camada fixa na tela (a área do fluxograma tem overflow e cortaria o seletor); em tela cheia nativa
+        // só o elemento em tela cheia é exibido, então ele entra lá dentro
+        (fsEl || document.body).appendChild(pop);
+        const rb = corBtn.getBoundingClientRect(), pw = pop.offsetWidth, ph = pop.offsetHeight;
+        pop.style.left = Math.max(8, Math.min(rb.left + rb.width / 2 - pw / 2, window.innerWidth - pw - 8)) + "px";
+        const abaixo = rb.bottom + 12;
+        pop.style.top = (abaixo + ph > window.innerHeight - 8 ? Math.max(8, rb.top - ph - 12) : abaixo) + "px";
+        // fecha ao clicar fora ou rolar a página (o seletor é fixo e não acompanharia a caixa)
+        const fecha = () => { pop.remove(); corBtn._aberto = false; document.removeEventListener("click", fora, true); window.removeEventListener("scroll", fecha, true); };
+        function fora(e2) { if (!pop.contains(e2.target) && e2.target !== corBtn) fecha(); }
+        setTimeout(() => { document.addEventListener("click", fora, true); window.addEventListener("scroll", fecha, true); }, 0);
       });
       grp.querySelector(".ifx-del").addEventListener("click", (ev) => {
         ev.stopPropagation();

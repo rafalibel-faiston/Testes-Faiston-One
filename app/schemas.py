@@ -381,6 +381,58 @@ class TelaOut(BaseModel):
     updated_at: Optional[datetime] = None
 
 
+AMBIENTE_ESTILOS = ("pilula", "solido", "suave", "tracejado", "faixa")
+
+
+class AmbienteItem(BaseModel):
+    slug: str = Field(..., pattern=r"^[a-z0-9_]{1,30}$")          # id estável: vai no código do diagrama
+    nome: str = Field(..., min_length=1, max_length=40)
+    cor: str = Field(..., pattern=r"^#[0-9a-fA-F]{6}$")
+    estilo: str = "pilula"
+
+    @field_validator("nome")
+    @classmethod
+    def _nome_sem_espaco(cls, v):
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("Nome vazio.")
+        return v
+
+    @field_validator("estilo")
+    @classmethod
+    def _estilo_valido(cls, v):
+        if v not in AMBIENTE_ESTILOS:
+            raise ValueError(f"Estilo inválido: {v}")
+        return v
+
+    @field_validator("cor")
+    @classmethod
+    def _cor_minuscula(cls, v):
+        return v.lower()
+
+
+class AmbientesIn(BaseModel):
+    itens: List[AmbienteItem] = Field(default_factory=list, max_length=24)
+    atualizado_por: Optional[str] = None
+
+    @field_validator("itens")
+    @classmethod
+    def _sem_repetidos(cls, itens):
+        slugs = [i.slug for i in itens]
+        nomes = [i.nome.casefold() for i in itens]
+        if len(set(slugs)) != len(slugs):
+            raise ValueError("Há ambientes com o mesmo identificador.")
+        if len(set(nomes)) != len(nomes):
+            raise ValueError("Há ambientes com o mesmo nome.")
+        return itens
+
+
+class AmbientesOut(BaseModel):
+    itens: List[AmbienteItem] = []
+    atualizado_por: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
+
 class ActivityOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
