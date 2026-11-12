@@ -2977,3 +2977,26 @@ body.fs-open { overflow:hidden; }
 #tela-view-tela { width:100%; }
 .diagram.fx-presenting .fs-tela-panel.fs-tela-web:not([hidden]), .guia-diagrama-wrap.fx-presenting .fs-tela-panel.fs-tela-web:not([hidden]) { width:min(640px, 50%); }
 .tela-body.tela-modo-web { grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); }
+
+/* ---------- caixas de destaque (pílula com degradê, cor escolhida no editor) ---------- */
+/* o contorno sai pelo CSS (não inline) pra o realce de hover/seleção do editor inline aparecer também nas pílulas */
+.fx-start rect.label-container, .fx-end rect.label-container, .fx-pill rect.label-container { stroke:none !important; }
+.fx-pill .nodeLabel, .fx-pill .nodeLabel p { color:#fff !important; font-weight:600; }
+.fx-pill { filter:drop-shadow(0 3px 7px var(--pill-glow, rgba(0,84,236,.35))) !important; }
+/* paleta do editor */
+.inline-palette-destaque { gap:5px; }
+.pill-btn { width:26px; height:18px; border-radius:999px; border:2px solid #fff; box-shadow:0 0 0 1px var(--line-2), 0 2px 5px rgba(23,26,46,.2); cursor:pointer; padding:0; transition:transform .12s var(--ease); }
+.pill-btn:hover { transform:translateY(-2px) scale(1.08); }
+/* botão 🎨 da caixa e seletor de cor */
+.ifx-cor { left:50%; top:-11px; margin-left:-11px; font-size:11px; }
+.ifx-cor:hover { color:var(--f-magenta); border-color:var(--f-magenta); }
+.ifx-pop {
+  position:absolute; left:50%; top:-52px; transform:translateX(-50%); z-index:20; pointer-events:auto;
+  display:flex; gap:5px; align-items:center; padding:6px 8px; background:var(--surface); border:1px solid var(--line-2);
+  border-radius:999px; box-shadow:var(--shadow-2); white-space:nowrap;
+}
+.ifx-pop-cor { width:22px; height:22px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px var(--line-2); cursor:pointer; padding:0; transition:transform .12s var(--ease); }
+.ifx-pop-cor:hover { transform:scale(1.15); }
+.ifx-pop-cor.on { box-shadow:0 0 0 2px var(--text); }
+.ifx-pop-auto { border:1px solid var(--line-2); background:var(--surface-2); border-radius:999px; padding:3px 9px; font:700 10.5px 'Roboto',sans-serif; color:var(--text-2); cursor:pointer; }
+.ifx-pop-auto.on { background:var(--text); color:#fff; border-color:var(--text); }

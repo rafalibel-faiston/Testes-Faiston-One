@@ -2109,7 +2109,7 @@
     if (container.__play && container.__play.aberto) aplicaPasso(container, container.__play.step, false);
 
     const gradId = svg.id + "-fx";
-    let temGradiente = false;
+    const grads = new Set();   // sufixos dos degradês que este desenho usa: "s", "e" ou "p-<cor>"
     const usados = new Set();
     nodes.forEach((g, id) => {
       const rect = g.querySelector(":scope > rect.basic.label-container, :scope > rect.label-container");
@@ -2119,26 +2119,33 @@
       if (!comum) return;
       cls.add("fx-step");
       const h = parseFloat(rect.getAttribute("height")) || 0;
+      // pílula: raio = meia altura, com teto pra não espremer o texto de caixas altas
+      const pilula = (suf) => {
+        const r = Math.min(h / 2, 18);
+        rect.style.setProperty("rx", r + "px"); rect.style.setProperty("ry", r + "px");
+        rect.style.setProperty("fill", `url(#${gradId}-${suf})`, "important");
+        grads.add(suf);
+      };
+      // caixa de destaque escolhida no editor (classe pill_<cor>): vale sobre o automático
+      const cor = [...cls].map((c) => /^pill_(\w+)$/.exec(c)).filter(Boolean).map((m) => m[1]).find((k) => DESTAQUES[k]);
+      if (cor) {
+        cls.add("fx-pill", "fx-pill-" + cor);
+        g.style.setProperty("--pill-glow", `rgba(${DESTAQUES[cor].glow},.38)`);
+        pilula("p-" + cor);
+        return;
+      }
       const ator = atorDoRotulo(g.querySelector(".nodeLabel")?.textContent);
       if (!entra.has(id) && sai.has(id)) {
-        cls.add("fx-start");
+        cls.add("fx-start"); pilula("s");
       } else if (entra.has(id) && !sai.has(id)) {
-        cls.add("fx-end");
+        cls.add("fx-end"); pilula("e");
       } else if (ator) {
         cls.add("fx-ator", "fx-ator-" + ator);
         usados.add(ator);
       }
-      if (cls.contains("fx-start") || cls.contains("fx-end")) {
-        // pílula: raio = meia altura, com teto pra não espremer o texto de caixas altas
-        const r = Math.min(h / 2, 18);
-        rect.style.setProperty("rx", r + "px"); rect.style.setProperty("ry", r + "px");
-        rect.style.setProperty("fill", `url(#${gradId}-${cls.contains("fx-start") ? "s" : "e"})`, "important");
-        rect.style.setProperty("stroke", "none", "important");
-        temGradiente = true;
-      }
     });
 
-    if (temGradiente) {
+    if (grads.size) {
       const NS = "http://www.w3.org/2000/svg";
       let defs = svg.querySelector("defs");
       if (!defs) { defs = document.createElementNS(NS, "defs"); svg.insertBefore(defs, svg.firstChild); }
@@ -2152,8 +2159,11 @@
         });
         defs.appendChild(g);
       };
-      grad("s", "#1a3fd1", "#12b5d6");   // início: degradê da marca
-      grad("e", "#2b2f55", "#4a4f7a");   // fim: índigo escuro, neutro (fim nem sempre é "sucesso")
+      grads.forEach((suf) => {
+        if (suf === "s") grad("s", "#1a3fd1", "#12b5d6");          // início: degradê da marca
+        else if (suf === "e") grad("e", "#2b2f55", "#4a4f7a");     // fim: índigo escuro, neutro (fim nem sempre é "sucesso")
+        else { const d = DESTAQUES[suf.slice(2)]; grad(suf, d.a, d.b); }
+      });
     }
 
     // legenda: só o que aparece no desenho, e só nas telas de leitura (não na prévia do editor)
@@ -2277,6 +2287,11 @@
               <svg viewBox="0 0 34 20" width="30" height="18" aria-hidden="true"><rect x="2" y="4" width="30" height="12" rx="6" fill="rgba(245,158,11,.14)" stroke="#f59e0b" stroke-width="1.6"/></svg>
               <span>🔔 Notificação</span>
             </button>
+          </div>
+          <div class="inline-palette inline-palette-destaque" role="group" aria-label="Adicionar caixa de destaque">
+            <span class="inline-palette-label">Destaque:</span>
+            ${Object.entries(DESTAQUES).map(([k, d]) =>
+              `<button type="button" class="inline-add-destaque pill-btn" data-cor="${k}" title="Caixa de destaque ${d.nome.toLowerCase()}" aria-label="Adicionar caixa ${d.nome.toLowerCase()}" style="background:linear-gradient(135deg,${d.a},${d.b})"></button>`).join("")}
           </div>
           <span class="inline-save-state" aria-live="polite"></span>
           <button type="button" class="inline-done">Concluir</button>
@@ -2730,6 +2745,19 @@
     notifCli: "classDef notifCli fill:#e7f8ef,stroke:#0d9d6c,stroke-width:1.5px,color:#075e40;",
   };
 
+  // Caixas de destaque: pílula com degradê, escolhida no editor. A cor é uma propriedade da caixa
+  // (node.estilo) e vai pro código Mermaid como `class n1 pill_verde;`, então sobrevive ao salvar.
+  const DESTAQUES = {
+    azul:     { nome: "Azul",     a: "#1a3fd1", b: "#12b5d6", glow: "0,84,236" },
+    verde:    { nome: "Verde",    a: "#0a8a5f", b: "#34d399", glow: "13,157,108" },
+    turquesa: { nome: "Turquesa", a: "#0e7490", b: "#2dd4bf", glow: "14,116,144" },
+    roxo:     { nome: "Roxo",     a: "#6d28d9", b: "#c084fc", glow: "109,40,217" },
+    magenta:  { nome: "Magenta",  a: "#960a9c", b: "#f472b6", glow: "150,10,156" },
+    vermelho: { nome: "Vermelho", a: "#c81e3a", b: "#fb7185", glow: "200,30,58" },
+    laranja:  { nome: "Laranja",  a: "#ea580c", b: "#fbbf24", glow: "234,88,12" },
+    grafite:  { nome: "Grafite",  a: "#2b2f55", b: "#4a4f7a", glow: "43,47,85" },
+  };
+
   // uma etapa em código Mermaid (a forma decide os delimitadores)
   function nodeMermaidLine(n) {
     const label = cleanLabel(n.label) || n.id;
@@ -2786,6 +2814,15 @@
     Object.keys(byClass).forEach((cls) => {
       lines.push("    " + NOTIF_CLASSDEF[cls]);
       lines.push("    class " + byClass[cls].join(",") + " " + cls + ";");
+    });
+    // caixas de destaque (só etapas comuns): uma cor por classe. O classDef é um preenchimento sólido
+    // de reserva; na tela o degradê é aplicado por estilizaDiagrama.
+    const porCor = {};
+    s.nodes.filter((n) => n.shape === "step" && DESTAQUES[n.estilo]).forEach((n) => { (porCor[n.estilo] = porCor[n.estilo] || []).push(n.id); });
+    Object.keys(porCor).forEach((k) => {
+      // sem stroke aqui: o Mermaid o emite como estilo inline !important e isso apagaria o realce de hover/seleção do editor
+      lines.push(`    classDef pill_${k} fill:${DESTAQUES[k].a},color:#fff;`);
+      lines.push(`    class ${porCor[k].join(",")} pill_${k};`);
     });
     // botões do sistema ganham cor própria (ciano) pra se distinguir das etapas
     const botaoIds = s.nodes.filter((n) => n.shape === "botao").map((n) => n.id);
@@ -2865,6 +2902,11 @@
       }
       if ((m = line.match(/^direction\s+(TD|TB|LR|RL|BT)/i))) {
         if (group) group.dir = m[1].toUpperCase();
+        return;
+      }
+      // caixa de destaque: `class n1,n2 pill_verde;` (vem depois das definições dos nós)
+      if ((m = line.match(/^class\s+([\w,\s]+?)\s+pill_(\w+)\s*;?\s*$/))) {
+        if (DESTAQUES[m[2]]) m[1].split(",").map((x) => x.trim()).forEach((id) => { const n = map.get(id); if (n && n.shape === "step") n.estilo = m[2]; });
         return;
       }
       line = extractNodes(line);   // nós (inline ou soltos) já registrados; sobra "A --> B"
@@ -3229,6 +3271,11 @@
       st.state.nodes.push({ id, label: "", shape: "notif", to: "Técnico" });
       commitInline(art, st);
     });
+    $$(".inline-add-destaque", tb).forEach((b) => b.addEventListener("click", () => {
+      const id = newNodeId(st.state);
+      st.state.nodes.push({ id, label: "Destaque", shape: "step", estilo: b.dataset.cor });
+      commitInline(art, st, id);   // já abre o nome pra renomear
+    }));
     const linkBtn = tb.querySelector(".inline-link-btn");
     if (linkBtn) linkBtn.addEventListener("click", () => linkSelection(art, st));
     const groupBtn = tb.querySelector(".inline-group-btn");
@@ -3505,7 +3552,8 @@
         `<button type="button" class="ifx ifx-add" title="Clique: nova etapa · Arraste até uma caixa pra ligar">+</button>
          <button type="button" class="ifx ifx-shape" title="Alternar tipo: etapa / decisão / notificação"></button>
          <button type="button" class="ifx ifx-del" title="Excluir etapa">×</button>
-         <button type="button" class="ifx ifx-tela" title="Tela desta etapa (protótipo)">🖼</button>`;
+         <button type="button" class="ifx ifx-tela" title="Tela desta etapa (protótipo)">🖼</button>
+         ${node.shape === "step" ? `<button type="button" class="ifx ifx-cor" title="Cor da caixa">🎨</button>` : ""}`;
       const SHAPE_GLYPH = { step: "▭", botao: "▢", decision: "◇", notif: "🔔" };
       const shapeBtn = grp.querySelector(".ifx-shape");
       shapeBtn.textContent = SHAPE_GLYPH[node.shape] || "▭";
@@ -3545,11 +3593,37 @@
         ev.stopPropagation();
         const order = ["step", "botao", "decision", "notif"];
         node.shape = order[(order.indexOf(node.shape) + 1) % order.length];
+        if (node.shape !== "step") delete node.estilo;   // a cor de destaque só existe em etapa comum
         commitInline(art, st);
       });
       grp.querySelector(".ifx-tela").addEventListener("click", (ev) => {
         ev.stopPropagation();
         abreConstrutorTela(st.d.id, nid);
+      });
+      const corBtn = grp.querySelector(".ifx-cor");
+      if (corBtn) corBtn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const aberto = grp.querySelector(".ifx-pop");
+        if (aberto) { aberto.remove(); return; }
+        const pop = document.createElement("div");
+        pop.className = "ifx-pop";
+        pop.innerHTML =
+          `<button type="button" class="ifx-pop-auto${node.estilo ? "" : " on"}" data-cor="" title="Automático: cor do ator, início ou fim">Auto</button>` +
+          Object.entries(DESTAQUES).map(([k, d]) =>
+            `<button type="button" class="ifx-pop-cor${node.estilo === k ? " on" : ""}" data-cor="${k}" title="${d.nome}" aria-label="${d.nome}" style="background:linear-gradient(135deg,${d.a},${d.b})"></button>`).join("");
+        pop.addEventListener("click", (e) => {
+          const b = e.target.closest("button[data-cor]");
+          if (!b) return;
+          e.stopPropagation();
+          if (b.dataset.cor) node.estilo = b.dataset.cor; else delete node.estilo;
+          commitInline(art, st);
+        });
+        pop.addEventListener("mousedown", (e) => e.stopPropagation());
+        grp.appendChild(pop);
+        // fecha ao clicar fora
+        setTimeout(() => document.addEventListener("click", function fora(e2) {
+          if (!pop.contains(e2.target)) { pop.remove(); document.removeEventListener("click", fora); }
+        }), 0);
       });
       grp.querySelector(".ifx-del").addEventListener("click", (ev) => {
         ev.stopPropagation();

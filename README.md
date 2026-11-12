@@ -509,6 +509,13 @@ destaca ela e as vizinhas. O acabamento (cor por ator pelo prefixo do rótulo �
 `Operador`, `Cliente`, `Financeiro` —, pílulas de início/fim e legenda) é pós-processamento do
 SVG (`estilizaDiagrama`): não muda o código Mermaid salvo.
 
+Além do automático, dá pra **escolher a cor da caixa** no "Editar aqui": a linha **Destaque** da
+barra adiciona uma caixa em pílula com degradê (8 cores: azul, verde, turquesa, roxo, magenta,
+vermelho, laranja, grafite) e o botão 🎨 de cada etapa troca a cor (ou volta ao "Auto"). A cor é
+propriedade da caixa e vai pro código como `class n1 pill_verde;` (com um `classDef` de
+preenchimento sólido de reserva), então sobrevive ao salvar e é relida pelo editor. Vale só pra
+etapa comum (botão, decisão e notificação têm cor própria) e sobrepõe a cor automática.
+
 Cada etapa pode ter uma **telinha** (protótipo de tela, não a tela real): no "Editar aqui", o
 botão 🖼 da caixa abre o construtor — **celular** (app do técnico) ou **web** (sistema do
 operador; o padrão sai do ator da etapa: `Tec.` → celular, o resto → web). Blocos gerais (barra
