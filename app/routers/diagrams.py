@@ -146,6 +146,8 @@ def delete_diagram(diagram_id: int, db: Session = Depends(get_db)):
             db.add(models.DiagramaSeedRemovido(fluxo=diagram.fluxo, titulo=diagram.titulo))
     db.query(models.DiagramaTela).filter(models.DiagramaTela.diagrama_id == diagram_id).delete(
         synchronize_session=False)
+    db.query(models.DiagramaFicha).filter(models.DiagramaFicha.diagrama_id == diagram_id).delete(
+        synchronize_session=False)
     db.delete(diagram)
     db.commit()
     return {"deleted": diagram_id}
@@ -221,6 +223,72 @@ def delete_tela(diagram_id: int, no_id: str, db: Session = Depends(get_db)):
                      f'Tela "{tela.titulo or no_id}" excluída do diagrama "{diagram.titulo}"{_onde(diagram.fluxo)}',
                      case_code=f"diagrama:{diagram.id}")
     db.delete(tela)
+    db.commit()
+    return {"deleted": no_id}
+
+
+# ---------------------------------------------------------------- ficha técnica por etapa
+
+def _ficha_out(f: models.DiagramaFicha) -> schemas.FichaOut:
+    try:
+        campos = json.loads(f.campos or "{}")
+    except ValueError:
+        campos = {}
+    return schemas.FichaOut(id=f.id, diagrama_id=f.diagrama_id, no_id=f.no_id, campos=campos,
+                            atualizado_por=f.atualizado_por, updated_at=f.updated_at)
+
+
+@router.get("/diagramas-fichas", response_model=List[schemas.FichaOut])
+def list_fichas(fluxo: Optional[str] = None, db: Session = Depends(get_db)):
+    """Todas as fichas dos diagramas de um fluxo (ou de todos), numa chamada só, como as telinhas."""
+    q = db.query(models.DiagramaFicha)
+    if fluxo:
+        q = q.join(models.FlowDiagram, models.FlowDiagram.id == models.DiagramaFicha.diagrama_id).filter(
+            models.FlowDiagram.fluxo == fluxo)
+    return [_ficha_out(f) for f in q.order_by(models.DiagramaFicha.id).all()]
+
+
+@router.put("/diagramas/{diagram_id}/fichas/{no_id}", response_model=schemas.FichaOut)
+def save_ficha(diagram_id: int, no_id: str, payload: schemas.FichaIn, db: Session = Depends(get_db)):
+    """Cria ou substitui a ficha técnica de uma etapa (a caixa de id `no_id`)."""
+    diagram = db.query(models.FlowDiagram).filter(models.FlowDiagram.id == diagram_id).first()
+    if not diagram:
+        raise HTTPException(status_code=404, detail="Diagrama não encontrado")
+    if not NO_ID_RE.match(no_id):
+        raise HTTPException(status_code=400, detail="Id de etapa inválido.")
+    campos = {k: (getattr(payload, k) or "").strip() for k in schemas.FICHA_CAMPOS}
+    campos["execucao"] = payload.execucao
+    if not any(campos.values()):
+        raise HTTPException(status_code=400, detail="Preencha pelo menos um campo da ficha.")
+    ficha = db.query(models.DiagramaFicha).filter(
+        models.DiagramaFicha.diagrama_id == diagram_id, models.DiagramaFicha.no_id == no_id).first()
+    novo = ficha is None
+    if novo:
+        ficha = models.DiagramaFicha(diagrama_id=diagram_id, no_id=no_id)
+        db.add(ficha)
+    ficha.campos = json.dumps(campos, ensure_ascii=False)
+    ficha.atualizado_por = payload.atualizado_por
+    log_activity(db, _trilha(diagram.fluxo), "diagrama",
+                 f'Ficha técnica da etapa "{no_id}" {"criada" if novo else "atualizada"} no diagrama '
+                 f'"{diagram.titulo}"{_onde(diagram.fluxo)}',
+                 autor=payload.atualizado_por, case_code=f"diagrama:{diagram.id}")
+    db.commit()
+    db.refresh(ficha)
+    return _ficha_out(ficha)
+
+
+@router.delete("/diagramas/{diagram_id}/fichas/{no_id}")
+def delete_ficha(diagram_id: int, no_id: str, db: Session = Depends(get_db)):
+    ficha = db.query(models.DiagramaFicha).filter(
+        models.DiagramaFicha.diagrama_id == diagram_id, models.DiagramaFicha.no_id == no_id).first()
+    if not ficha:
+        raise HTTPException(status_code=404, detail="Ficha não encontrada")
+    diagram = db.query(models.FlowDiagram).filter(models.FlowDiagram.id == diagram_id).first()
+    if diagram:
+        log_activity(db, _trilha(diagram.fluxo), "diagrama",
+                     f'Ficha técnica da etapa "{no_id}" excluída do diagrama "{diagram.titulo}"{_onde(diagram.fluxo)}',
+                     case_code=f"diagrama:{diagram.id}")
+    db.delete(ficha)
     db.commit()
     return {"deleted": no_id}
 

@@ -858,6 +858,42 @@
   </div>
 </div>
 
+<!-- ficha técnica por etapa: de onde vem a informação, o que a etapa faz, pra onde vai -->
+<div class="modal tela-modal" id="ficha-modal" hidden aria-modal="true" role="dialog" aria-labelledby="ficha-modal-title">
+  <div class="modal-card ficha-card">
+    <div class="modal-head">
+      <h3 id="ficha-modal-title">Ficha técnica da etapa</h3>
+      <span class="modal-code" id="ficha-modal-etapa"></span>
+      <button type="button" class="modal-close" id="ficha-close" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body ficha-body">
+      <p class="ficha-dica">Preencha o que já sabe. O que ficar em branco aparece como <b>a levantar</b>: são as perguntas pra levar pra área.</p>
+      <div class="ficha-grid" id="ficha-campos"></div>
+    </div>
+    <div class="modal-actions tela-actions">
+      <button type="button" class="btn-ghost tela-excluir" id="ficha-excluir" hidden>Excluir ficha</button>
+      <span class="tela-actions-spacer"></span>
+      <button type="button" class="btn-ghost" id="ficha-cancelar">Cancelar</button>
+      <button type="button" class="btn-primary" id="ficha-salvar">Salvar ficha</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal tela-modal" id="ficha-viewer" hidden aria-modal="true" role="dialog" aria-labelledby="ficha-view-titulo">
+  <div class="modal-card ficha-view-card">
+    <div class="modal-head">
+      <h3 id="ficha-view-titulo">Ficha técnica</h3>
+      <span class="modal-code" id="ficha-view-etapa"></span>
+      <button type="button" class="modal-close" id="ficha-view-close" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body" id="ficha-view-corpo"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="ficha-view-editar">✎ Editar ficha</button>
+      <button type="button" class="btn-primary" id="ficha-view-ok">Fechar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ambientes: onde a ação acontece (nome, cor livre e estilo de cada um) -->
 <div class="modal tela-modal" id="amb-modal" hidden aria-modal="true" role="dialog" aria-labelledby="amb-titulo">
   <div class="modal-card amb-card">

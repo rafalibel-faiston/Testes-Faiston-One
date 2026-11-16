@@ -1825,6 +1825,199 @@
     else if (!telaModal.hidden) { e.preventDefault(); fechaConstrutorTela(); }
   }, true);
 
+  // ---------------- ficha técnica por etapa ----------------
+  // Cada caixa do fluxograma pode ter uma ficha: o que dispara a etapa, que dado entra e de onde vem,
+  // o que ela faz e com qual regra, o que sai e pra onde vai. Campo em branco = "a levantar" (a
+  // pergunta que falta fazer pra área). Aparece como selo no canto direito da caixa.
+  let FICHAS = [];   // todas, vindas de /api/diagramas-fichas
+  const fichaDe = (diagId, noId) => FICHAS.find((f) => f.diagrama_id === diagId && f.no_id === noId) || null;
+  const fichasDoDiagrama = (diagId) => FICHAS.filter((f) => f.diagrama_id === diagId);
+  async function loadFichas() {
+    try { FICHAS = await api("/api/diagramas-fichas"); } catch (e) { FICHAS = []; }
+  }
+
+  // grupo: entra (de onde vem) → faz (o que acontece) → sai (pra onde vai)
+  const FICHA_GRUPOS = [
+    ["entra", "Entra", "de onde vem a informação"],
+    ["faz", "Faz", "o que a etapa executa"],
+    ["sai", "Sai", "pra onde vai o resultado"],
+  ];
+  const FICHA_DEF = [
+    { k: "gatilho", g: "entra", nome: "Gatilho", ph: "O que dispara a etapa. ex.: chamado criado no Tiflux (webhook)" },
+    { k: "entrada", g: "entra", nome: "Dados de entrada", ph: "ex.: ticket_id, localidade, escopo, gastos", area: true },
+    { k: "origem", g: "entra", nome: "Origem", ph: "Sistema, tabela ou API. ex.: API do Tiflux → tabela chamados" },
+    { k: "acao", g: "faz", nome: "Ação", ph: "ex.: confronta o escopo do chamado com o contrato do projeto", area: true },
+    { k: "regra", g: "faz", nome: "Regra / critério", ph: "ex.: escopo fora do contrato → reprova com motivo", area: true },
+    { k: "responsavel", g: "faz", nome: "Quem executa", ph: "Pessoa, área ou sistema. ex.: Faiston One (IA)" },
+    { k: "execucao", g: "faz", nome: "Execução", opcoes: [["", "—"], ["automatico", "Automática"], ["humano", "Humana"], ["misto", "Mista (IA + validação humana)"]] },
+    { k: "saida", g: "sai", nome: "Dados de saída", ph: "ex.: status aprovado/reprovado + motivo", area: true },
+    { k: "destino", g: "sai", nome: "Destino", ph: "ex.: fila do coordenador + WhatsApp do solicitante" },
+    { k: "sla", g: "sai", nome: "SLA / prazo", ph: "ex.: até 15 min" },
+    { k: "observacoes", g: "obs", nome: "Observações", ph: "Exceções, dúvidas, pontos de atenção", area: true },
+  ];
+  // campos que contam como "a levantar" quando vazios (observação é opcional de verdade)
+  const FICHA_ESSENCIAIS = FICHA_DEF.filter((d) => d.g !== "obs");
+  const fichaPendentes = (f) => FICHA_ESSENCIAIS.filter((d) => !((f && f.campos && f.campos[d.k]) || "").trim()).length;
+  const fichaValor = (d, v) => (d.opcoes ? (v ? ((d.opcoes.find(([k]) => k === v) || [])[1] || v) : "") : v);
+
+  // ficha em colunas Entra → Faz → Sai; `compacta` é a versão do painel da apresentação
+  function fichaHtml(f, compacta) {
+    const c = (f && f.campos) || {};
+    const campo = (d) => {
+      const v = fichaValor(d, (c[d.k] || "").trim());
+      return `<div class="fc-campo"><span class="fc-rot">${esc(d.nome)}</span>` +
+        (v ? `<span class="fc-val">${esc(v)}</span>` : `<span class="fc-falta">a levantar</span>`) + `</div>`;
+    };
+    const cols = FICHA_GRUPOS.map(([g, nome, sub], i) =>
+      (i ? `<div class="fc-seta" aria-hidden="true">→</div>` : "") +
+      `<section class="fc-col fc-${g}"><header><b>${nome}</b><span>${sub}</span></header>` +
+      FICHA_DEF.filter((d) => d.g === g).map(campo).join("") + `</section>`).join("");
+    const obs = (c.observacoes || "").trim();
+    const pend = fichaPendentes(f);
+    return `<div class="ficha${compacta ? " ficha-compacta" : ""}">` +
+      `<div class="fc-resumo">${pend ? `<span class="fc-pend">${pend} campo${pend > 1 ? "s" : ""} a levantar</span>` : `<span class="fc-ok">Ficha completa</span>`}</div>` +
+      `<div class="fc-cols">${cols}</div>` +
+      (obs ? `<div class="fc-obs"><span class="fc-rot">Observações</span><span class="fc-val">${esc(obs)}</span></div>` : "") +
+      `</div>`;
+  }
+
+  // ---- selo na caixa (canto superior direito; o da telinha fica no esquerdo)
+  function atualizaSelosFichas(canvas) {
+    const svg = canvas.querySelector(":scope > svg");
+    if (!svg || !svg.__fx) return;
+    svg.querySelectorAll(".fx-ficha-selo").forEach((e) => e.remove());
+    const diagId = diagramaIdDoCanvas(canvas);
+    if (diagId == null) return;
+    const NS = "http://www.w3.org/2000/svg";
+    svg.__fx.nodes.forEach((g, noId) => {
+      const ficha = fichaDe(diagId, noId);
+      if (!ficha) return;
+      let bb;
+      try { bb = g.getBBox(); } catch (_) { return; }
+      if (!bb.width) return;
+      const losango = !!g.querySelector("polygon");
+      const x = losango ? bb.x + bb.width * 0.73 : bb.x + bb.width - 2, y = losango ? bb.y + bb.height * 0.27 : bb.y + 2;
+      const pend = fichaPendentes(ficha);
+      const sg = document.createElementNS(NS, "g");
+      sg.setAttribute("class", "fx-ficha-selo" + (pend ? " fx-ficha-pend" : ""));
+      sg.setAttribute("transform", `translate(${x} ${y})`);
+      sg.innerHTML =
+        `<title>Ficha técnica desta etapa${pend ? ` · ${pend} a levantar` : " · completa"}</title>` +
+        `<circle r="11" class="fx-ficha-selo-bg"/>` +
+        `<rect x="-4.6" y="-5.6" width="9.2" height="11.2" rx="1.6" class="fx-ficha-selo-ic"/>` +
+        `<line x1="-2.2" y1="-2" x2="2.2" y2="-2" class="fx-ficha-selo-ic"/>` +
+        `<line x1="-2.2" y1="0.8" x2="2.2" y2="0.8" class="fx-ficha-selo-ic"/>` +
+        `<line x1="-2.2" y1="3.6" x2="0.6" y2="3.6" class="fx-ficha-selo-ic"/>` +
+        (pend ? `<circle cx="8" cy="-8" r="3.4" class="fx-ficha-selo-dot"/>` : "");
+      sg.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+      sg.addEventListener("click", (ev) => { ev.stopPropagation(); abreViewerFicha(diagId, noId); });
+      g.appendChild(sg);
+    });
+  }
+
+  // ---- visualizador
+  let fichaViewCtx = null;
+  function abreViewerFicha(diagId, noId) {
+    const ficha = fichaDe(diagId, noId);
+    if (!ficha) return;
+    fichaViewCtx = { diagId, noId };
+    $("#ficha-view-etapa").textContent = rotuloDoNo(diagId, noId);
+    $("#ficha-view-corpo").innerHTML = fichaHtml(ficha, false);
+    modalAbre($("#ficha-viewer"));
+  }
+  const fechaViewerFicha = () => { modalFecha($("#ficha-viewer")); fichaViewCtx = null; };
+  $("#ficha-view-close").addEventListener("click", fechaViewerFicha);
+  $("#ficha-view-ok").addEventListener("click", fechaViewerFicha);
+  $("#ficha-viewer").addEventListener("click", (e) => { if (e.target.id === "ficha-viewer") fechaViewerFicha(); });
+  $("#ficha-view-editar").addEventListener("click", () => {
+    const c = fichaViewCtx; if (!c) return;
+    fechaViewerFicha();
+    abreEditorFicha(c.diagId, c.noId);
+  });
+
+  // ---- editor
+  const fichaModal = $("#ficha-modal");
+  let fichaSt = null;   // { diagId, noId, existe }
+  function abreEditorFicha(diagId, noId) {
+    const atual = fichaDe(diagId, noId);
+    const c = (atual && atual.campos) || {};
+    fichaSt = { diagId, noId, existe: !!atual };
+    $("#ficha-modal-title").textContent = atual ? "Editar ficha técnica" : "Nova ficha técnica";
+    $("#ficha-modal-etapa").textContent = rotuloDoNo(diagId, noId);
+    $("#ficha-excluir").hidden = !atual;
+    const campo = (d) => {
+      const v = c[d.k] || "";
+      const ctl = d.opcoes
+        ? `<select data-k="${d.k}">${d.opcoes.map(([k, n]) => `<option value="${k}"${k === v ? " selected" : ""}>${esc(n)}</option>`).join("")}</select>`
+        : d.area
+          ? `<textarea data-k="${d.k}" rows="2" placeholder="${esc(d.ph)}">${esc(v)}</textarea>`
+          : `<input data-k="${d.k}" value="${esc(v)}" placeholder="${esc(d.ph)}">`;
+      return `<label class="fld">${esc(d.nome)}${ctl}</label>`;
+    };
+    $("#ficha-campos").innerHTML =
+      FICHA_GRUPOS.map(([g, nome, sub]) =>
+        `<fieldset class="ficha-grupo fc-${g}"><legend><b>${nome}</b> <span>${sub}</span></legend>` +
+        FICHA_DEF.filter((d) => d.g === g).map(campo).join("") + `</fieldset>`).join("") +
+      `<fieldset class="ficha-grupo ficha-grupo-obs"><legend><b>Observações</b></legend>` +
+      FICHA_DEF.filter((d) => d.g === "obs").map(campo).join("") + `</fieldset>`;
+    modalAbre(fichaModal);
+    setTimeout(() => { const p = $("#ficha-campos [data-k]"); if (p) p.focus(); }, 50);
+  }
+  const fechaEditorFicha = () => { modalFecha(fichaModal); fichaSt = null; };
+  $("#ficha-close").addEventListener("click", fechaEditorFicha);
+  $("#ficha-cancelar").addEventListener("click", fechaEditorFicha);
+  fichaModal.addEventListener("click", (e) => { if (e.target.id === "ficha-modal") fechaEditorFicha(); });
+
+  function atualizaFichasDoDiagrama(diagId) {
+    $$(".diagram-canvas, .guia-diagrama-canvas").forEach((cv) => {
+      if (diagramaIdDoCanvas(cv) !== diagId) return;
+      atualizaSelosFichas(cv);
+      if (cv.__play && cv.__play.aberto) atualizaPainelTela(cv);
+    });
+  }
+
+  $("#ficha-salvar").addEventListener("click", async () => {
+    if (!fichaSt) return;
+    const st = fichaSt;
+    const body = { atualizado_por: testerName() || undefined };
+    $$("#ficha-campos [data-k]").forEach((el) => { body[el.dataset.k] = el.value.trim(); });
+    if (!FICHA_DEF.some((d) => body[d.k])) { toast("Preencha pelo menos um campo da ficha.", true); return; }
+    const btn = $("#ficha-salvar"); btn.disabled = true;
+    try {
+      const salva = await api(`/api/diagramas/${st.diagId}/fichas/${encodeURIComponent(st.noId)}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      FICHAS = FICHAS.filter((f) => !(f.diagrama_id === salva.diagrama_id && f.no_id === salva.no_id)).concat(salva);
+      fechaEditorFicha();
+      atualizaFichasDoDiagrama(st.diagId);
+      const pend = fichaPendentes(salva);
+      toast(pend ? `Ficha salva · ${pend} campo${pend > 1 ? "s" : ""} a levantar` : "Ficha salva · completa");
+    } catch (err) {
+      toast("Erro ao salvar a ficha: " + err.message, true);
+    } finally { btn.disabled = false; }
+  });
+
+  $("#ficha-excluir").addEventListener("click", async () => {
+    if (!fichaSt || !fichaSt.existe) return;
+    if (!confirm("Excluir a ficha técnica desta etapa?")) return;
+    const st = fichaSt;
+    try {
+      await api(`/api/diagramas/${st.diagId}/fichas/${encodeURIComponent(st.noId)}`, { method: "DELETE" });
+      FICHAS = FICHAS.filter((f) => !(f.diagrama_id === st.diagId && f.no_id === st.noId));
+      fechaEditorFicha();
+      atualizaFichasDoDiagrama(st.diagId);
+      toast("Ficha excluída");
+    } catch (err) {
+      toast("Erro ao excluir a ficha: " + err.message, true);
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!$("#ficha-viewer").hidden) { e.preventDefault(); fechaViewerFicha(); }
+    else if (!fichaModal.hidden) { e.preventDefault(); fechaEditorFicha(); }
+  }, true);
+
   // ---------------- ambientes: chips da barra, gerenciador e redesenho ----------------
   // amostra do estilo de um ambiente (a mesma da legenda)
   const amostraAmb = (a) => {
@@ -2042,13 +2235,16 @@
     if (!painel) return;
     const st = canvas.__play, svg = canvas.querySelector(":scope > svg");
     const diagId = diagramaIdDoCanvas(canvas);
-    const lista = diagId == null ? [] : telasDoDiagrama(diagId);
+    // etapas com telinha e/ou ficha técnica
+    const ids = diagId == null ? [] : [...new Set([
+      ...telasDoDiagrama(diagId).map((t) => t.no_id), ...fichasDoDiagrama(diagId).map((f) => f.no_id)])];
+    const lista = ids.map((no) => ({ no_id: no, tela: telaDe(diagId, no), ficha: fichaDe(diagId, no) }));
     if (!st || !st.aberto || !svg || !svg.__fx || !lista.length) { painel.hidden = true; painel.innerHTML = ""; return; }
     const fx = svg.__fx, plano = planoApresentacao(fx);
     painel.hidden = false;
     const alcancadas = lista.filter((t) => fx.nodes.has(t.no_id) && plano.dist.get(t.no_id) <= st.step);
     if (!alcancadas.length) {
-      painel.innerHTML = `<div class="fs-tela-vazio">A tela de cada etapa aparece aqui conforme o fluxo avança.</div>`;
+      painel.innerHTML = `<div class="fs-tela-vazio">A tela e a ficha técnica de cada etapa aparecem aqui conforme o fluxo avança.</div>`;
       return;
     }
     const nivel = Math.max(...alcancadas.map((t) => plano.dist.get(t.no_id)));
@@ -2056,17 +2252,23 @@
     const sel = grupo.find((t) => t.no_id === st.telaSel) || grupo[0];
     st.telaSel = sel.no_id;
     const rot = (t) => { const g = fx.nodes.get(t.no_id); const n = g && g.querySelector(".nodeLabel"); return (n && n.textContent.trim()) || t.no_id; };
-    painel.classList.toggle("fs-tela-web", sel.dispositivo === "web");   // tela web precisa de mais largura pra ser legível
+    const tela = sel.tela;
+    painel.classList.toggle("fs-tela-web", !!tela && tela.dispositivo === "web");   // tela web precisa de mais largura pra ser legível
     painel.innerHTML =
       `<div class="fs-tela-cab"><span class="fs-tela-passo">Etapa ${nivel + 1}</span><span class="fs-tela-nome">${esc(rot(sel))}</span></div>` +
       (grupo.length > 1 ? `<div class="fs-tela-abas">${grupo.map((t) => `<button type="button" data-no="${esc(t.no_id)}" class="${t === sel ? "on" : ""}">${esc(rot(t))}</button>`).join("")}</div>` : "") +
-      `<button type="button" class="fs-tela-corpo" title="Ver a tela em tamanho grande">${telaHtml(sel)}</button>` +
-      (sel.titulo ? `<div class="fs-tela-titulo">${esc(sel.titulo)}</div>` : "") +
-      (sel.legenda ? `<p class="fs-tela-legenda">${esc(sel.legenda)}</p>` : "");
+      (tela ? `<button type="button" class="fs-tela-corpo" title="Ver a tela em tamanho grande">${telaHtml(tela)}</button>` +
+        (tela.titulo ? `<div class="fs-tela-titulo">${esc(tela.titulo)}</div>` : "") +
+        (tela.legenda ? `<p class="fs-tela-legenda">${esc(tela.legenda)}</p>` : "") : "") +
+      (sel.ficha ? `<button type="button" class="fs-ficha" title="Ver a ficha técnica completa">${fichaHtml(sel.ficha, true)}</button>` : "");
     ajustaEscalaTelas(painel);
     painel.querySelectorAll(".fs-tela-abas button").forEach((b) => b.addEventListener("click", () => { st.telaSel = b.dataset.no; atualizaPainelTela(canvas); }));
-    painel.querySelector(".fs-tela-corpo").addEventListener("click", () => abreViewerTela(diagId, sel.no_id));
+    const corpo = painel.querySelector(".fs-tela-corpo");
+    if (corpo) corpo.addEventListener("click", () => abreViewerTela(diagId, sel.no_id));
+    const fb = painel.querySelector(".fs-ficha");
+    if (fb) fb.addEventListener("click", () => abreViewerFicha(diagId, sel.no_id));
   }
+
 
   // Câmera da apresentação: enquadra só o que já apareceu (caixas + setas), com zoom limitado pra o
   // texto continuar legível. Conforme o fluxo cresce a câmera se afasta, até mostrar tudo acima da barra.
@@ -2247,6 +2449,7 @@
     });
     svg.__fx = { nodes, arestas };
     atualizaSelosTelas(container);
+    atualizaSelosFichas(container);
     ligaDestaque(container);
     // redesenhou no meio da apresentação (zoom na edição, tamanho da tela…): reaplica o passo atual
     if (container.__play && container.__play.aberto) aplicaPasso(container, container.__play.step, false);
@@ -2413,7 +2616,7 @@
     if (!diagramsLoaded) $("#diagrams-loading").hidden = false;
     try {
       DIAGRAMS = await api("/api/diagramas");
-      await Promise.all([loadTelas(), garanteAmbientes()]);
+      await Promise.all([loadTelas(), loadFichas(), garanteAmbientes()]);
       diagramsLoaded = true;
     } catch (e) {
       $("#diagrams-loading").textContent = "Erro ao carregar diagramas: " + e.message;
@@ -3802,6 +4005,7 @@
          <button type="button" class="ifx ifx-shape" title="Alternar tipo: etapa / decisão / notificação"></button>
          <button type="button" class="ifx ifx-del" title="Excluir etapa">×</button>
          <button type="button" class="ifx ifx-tela" title="Tela desta etapa (protótipo)">🖼</button>
+         <button type="button" class="ifx ifx-ficha" title="Ficha técnica desta etapa (entra → faz → sai)">📋</button>
          ${node.shape === "step" ? `<button type="button" class="ifx ifx-cor" title="Cor da caixa">🎨</button>` : ""}`;
       const SHAPE_GLYPH = { step: "▭", botao: "▢", decision: "◇", notif: "🔔" };
       const shapeBtn = grp.querySelector(".ifx-shape");
@@ -3848,6 +4052,10 @@
       grp.querySelector(".ifx-tela").addEventListener("click", (ev) => {
         ev.stopPropagation();
         abreConstrutorTela(st.d.id, nid);
+      });
+      grp.querySelector(".ifx-ficha").addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        abreEditorFicha(st.d.id, nid);
       });
       const corBtn = grp.querySelector(".ifx-cor");
       if (corBtn) corBtn.addEventListener("click", (ev) => {

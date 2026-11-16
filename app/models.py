@@ -258,6 +258,23 @@ class DiagramaTela(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
 
+class DiagramaFicha(Base):
+    """Ficha técnica de uma etapa do fluxograma: de onde a informação vem, o que a etapa faz, com qual
+    regra, o que sai e pra onde vai. Fica ligada à caixa pelo id dela no Mermaid (`no_id`), como a
+    telinha. Os campos ficam num JSON (`campos`) pra dar pra crescer a ficha sem migração; o que fica
+    em branco é o que ainda falta levantar com a área."""
+    __tablename__ = "diagrama_fichas"
+    __table_args__ = (UniqueConstraint("diagrama_id", "no_id", name="uq_diagrama_ficha_no"),)
+
+    id = Column(Integer, primary_key=True)
+    diagrama_id = Column(Integer, ForeignKey("flow_diagrams.id"), nullable=False, index=True)
+    no_id = Column(String, nullable=False)                    # id da caixa no Mermaid (A, n3...)
+    campos = Column(Text, nullable=False, default="{}")       # JSON: {gatilho, entrada, origem, acao, ...}
+    atualizado_por = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
 class DiagramaAmbientes(Base):
     """Catálogo de "onde a ação acontece" nos fluxogramas (Faiston One, Tiflux, app do técnico...):
     cada ambiente tem nome, cor e estilo próprios, e a caixa do fluxo que o usa ganha essa aparência.

@@ -381,6 +381,42 @@ class TelaOut(BaseModel):
     updated_at: Optional[datetime] = None
 
 
+# Ficha técnica por etapa. A ordem aqui é a ordem em que aparece na tela.
+FICHA_CAMPOS = ("gatilho", "entrada", "origem", "acao", "regra", "saida", "destino", "responsavel", "sla", "observacoes")
+FICHA_EXECUCOES = ("", "automatico", "humano", "misto")
+
+
+class FichaIn(BaseModel):
+    gatilho: str = Field("", max_length=600)       # o que dispara a etapa
+    entrada: str = Field("", max_length=1000)      # dados que a etapa recebe
+    origem: str = Field("", max_length=600)        # de onde vêm esses dados (sistema, tabela, API)
+    acao: str = Field("", max_length=1500)         # o que a etapa faz
+    regra: str = Field("", max_length=1500)        # regra de negócio / critério de decisão
+    saida: str = Field("", max_length=1000)        # o que a etapa produz
+    destino: str = Field("", max_length=600)       # pra onde vai o resultado
+    responsavel: str = Field("", max_length=300)   # quem/qual sistema executa
+    execucao: str = ""                             # automatico / humano / misto
+    sla: str = Field("", max_length=200)
+    observacoes: str = Field("", max_length=1500)
+    atualizado_por: Optional[str] = None
+
+    @field_validator("execucao")
+    @classmethod
+    def _execucao_valida(cls, v):
+        if v not in FICHA_EXECUCOES:
+            raise ValueError("Execução deve ser 'automatico', 'humano' ou 'misto'.")
+        return v
+
+
+class FichaOut(BaseModel):
+    id: int
+    diagrama_id: int
+    no_id: str
+    campos: dict = {}
+    atualizado_por: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
+
 AMBIENTE_ESTILOS = ("pilula", "solido", "suave", "tracejado", "faixa")
 
 

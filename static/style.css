@@ -3050,3 +3050,63 @@ body.fs-open { overflow:hidden; }
 .fx-leg-amb-suave { background:var(--t); border:2px solid var(--c); }
 .fx-leg-amb-tracejado { background:#fff; border:2px dashed var(--c); }
 .fx-leg-amb-faixa { background:#fff; border:1px solid #cfd3e6; box-shadow:inset 6px 0 0 var(--c); }
+
+/* ---------- ficha técnica por etapa (entra → faz → sai) ---------- */
+.ficha-card { max-width:980px; width:min(980px, 96vw); }
+.ficha-view-card { max-width:960px; width:min(960px, 96vw); }
+.ficha-body { display:flex; flex-direction:column; gap:12px; max-height:72vh; overflow:auto; }
+.ficha-dica { margin:0; font-size:12.5px; color:var(--text-2); line-height:1.5; }
+.ficha-grid { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px; }
+.ficha-grupo { margin:0; border:1px solid var(--line-2); border-radius:12px; padding:10px 12px 12px; display:flex; flex-direction:column; gap:10px; min-width:0; }
+.ficha-grupo legend { padding:0 6px; font-size:12px; }
+.ficha-grupo legend span { color:var(--text-3); font-weight:500; }
+.ficha-grupo-obs { grid-column:1 / -1; }
+.ficha-grupo-obs > .fld { font-size:0; gap:0; }
+.ficha-grupo-obs > .fld textarea { font-size:13px; }
+.ficha-grupo input, .ficha-grupo textarea, .ficha-grupo select {
+  width:100%; font:13px 'Roboto',sans-serif; color:var(--text); background:var(--surface); border:1px solid var(--line-2);
+  border-radius:8px; padding:7px 10px; margin-top:4px; box-sizing:border-box;
+}
+.ficha-grupo textarea { resize:vertical; min-height:52px; line-height:1.5; }
+.ficha-grupo input:focus, .ficha-grupo textarea:focus, .ficha-grupo select:focus { outline:none; border-color:var(--f-blue); box-shadow:0 0 0 3px rgba(0,84,236,.12); }
+.fc-entra { --fc:#0054ec; } .fc-faz { --fc:#7c3aed; } .fc-sai { --fc:#0d9d6c; }
+.ficha-grupo.fc-entra, .ficha-grupo.fc-faz, .ficha-grupo.fc-sai { border-top:3px solid var(--fc); }
+.ficha-grupo legend b { color:var(--fc, var(--text)); }
+
+.ficha { display:flex; flex-direction:column; gap:10px; text-align:left; }
+.fc-resumo { display:flex; }
+.fc-pend, .fc-ok { font:700 11px 'Roboto',sans-serif; border-radius:999px; padding:3px 10px; }
+.fc-pend { background:#fff4e0; color:#a15c00; }
+.fc-ok { background:#e7f8ef; color:#075e40; }
+.fc-cols { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr); gap:8px; align-items:stretch; }
+.fc-seta { align-self:center; font:700 18px 'Roboto',sans-serif; color:var(--text-3); }
+.fc-col { border:1px solid var(--line-2); border-top:3px solid var(--fc); border-radius:12px; padding:10px 12px; display:flex; flex-direction:column; gap:9px; background:var(--surface); min-width:0; }
+.fc-col header { display:flex; flex-direction:column; }
+.fc-col header b { font-size:13px; color:var(--fc); text-transform:uppercase; letter-spacing:.5px; }
+.fc-col header span { font-size:11px; color:var(--text-3); }
+.fc-campo, .fc-obs { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.fc-rot { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--text-3); }
+.fc-val { font-size:13px; color:var(--text); line-height:1.45; white-space:pre-wrap; overflow-wrap:anywhere; }
+.fc-falta { align-self:flex-start; font-size:11px; font-weight:600; color:#a15c00; background:#fff4e0; border:1px dashed #f0b45a; border-radius:6px; padding:1px 7px; }
+.fc-obs { border:1px solid var(--line-2); border-radius:12px; padding:10px 12px; }
+@media (max-width:760px) {
+  .ficha-grid { grid-template-columns:1fr; }
+  .fc-cols { grid-template-columns:1fr; }
+  .fc-seta { transform:rotate(90deg); justify-self:center; }
+}
+/* versão compacta (painel da apresentação): uma coluna */
+.ficha-compacta .fc-cols { grid-template-columns:1fr; gap:6px; }
+.ficha-compacta .fc-seta { justify-self:center; transform:rotate(90deg); font-size:14px; line-height:1; }
+.ficha-compacta .fc-col { padding:8px 10px; gap:6px; }
+.ficha-compacta .fc-val { font-size:12px; }
+.fs-ficha { align-self:stretch; border:0; background:transparent; padding:0; cursor:zoom-in; font:inherit; color:inherit; }
+
+/* selo na caixa: o CSS que o Mermaid injeta usa #id .node circle/rect, por isso o !important */
+.fx-ficha-selo { cursor:pointer; }
+.fx-ficha-selo .fx-ficha-selo-bg { fill:#7c3aed !important; stroke:#fff !important; stroke-width:2px !important; filter:drop-shadow(0 2px 3px rgba(124,58,237,.45)); }
+.fx-ficha-selo:hover .fx-ficha-selo-bg { fill:#5b21b6 !important; }
+.fx-ficha-selo .fx-ficha-selo-ic { fill:none !important; stroke:#fff !important; stroke-width:1.4px !important; stroke-linecap:round; }
+.fx-ficha-selo .fx-ficha-selo-dot { fill:#f59e0b !important; stroke:#fff !important; stroke-width:1.5px !important; }
+/* botão do editor inline (canto inferior esquerdo) */
+.ifx-ficha { left:-11px; bottom:-11px; font-size:11px; }
+.ifx-ficha:hover { color:#7c3aed; border-color:#7c3aed; }
