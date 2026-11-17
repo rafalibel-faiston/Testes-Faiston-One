@@ -702,6 +702,47 @@ FINANCEIRO_CLT = """flowchart TD
     classDef notifTec fill:#e8f0ff,stroke:#0054ec,stroke-width:1.5px,color:#0b2e75;
 """
 
+# Projetos — campanha de projetos novos, do cadastro do projeto até o técnico atribuído.
+# Junta o "Fluxo Campanha Projetos Novos v2" que o time desenhou na tela (projeto →
+# campanha → cronograma padrão de localidades → upload/retroalimentação → cruzamento com
+# a base técnica) com o desenho do aceite pelo PAI (WhatsApp de interesse, valores no app,
+# fila de exceções, reserva da loja e confirmação no chamado). Cada etapa marca ONDE a
+# ação acontece (amb_<slug>, catálogo de ambientes): Faiston One, app do técnico, Tiflux,
+# WhatsApp e planilha.
+PROJETOS_CAMPANHA = """flowchart TD
+    n1["Novo Projeto"] --> n2["Nova Campanha · lojas + faixa de valor"]
+    n2 --> n3["Novo Cronograma Padrão de Localidades"]
+    n3 --> n4["Upload de Cronograma no Faiston One"]
+    n3 --> n5["Retroalimentar Upload"]
+    n4 --> n6["Cruzamento de Cronograma vs Base Técnica do Faiston One"]
+    n5 --> n6
+    n6 --> n7["WhatsApp de interesse · sem link, só sim ou não"]
+    n7 --> n8{"PAI disse sim?"}
+    n8 -->|Não| n9["Sai da campanha"]
+    n8 -->|Sim| n10["Valores no app · PAI informa técnicos e valor por loja"]
+    n10 --> n11{"Valor até o médio da faixa?"}
+    n11 -->|Sim · aceite automático| n15["Reserva da loja · 3 a 5 técnicos, por nota"]
+    n11 -->|Não| n12["Fila de exceções · negociação com o PAI"]
+    n12 --> n13{"Fechou acordo?"}
+    n13 -->|Sim| n15
+    n13 -->|Não| n14["Fica fora da campanha"]
+    n15 --> n16["Chamado aberto na loja"]
+    n16 --> n17["Operação escolhe o técnico da reserva"]
+    n17 --> n18(["🔔 Notifica o técnico: chamado oferecido ao PAI"])
+    n18 --> n19{"PAI confirma?"}
+    n19 -->|Sim| n20["Técnico atribuído · valor vai junto"]
+    n19 -->|Não| n21{"Ainda tem técnico na reserva?"}
+    n21 -->|Sim · próximo da reserva| n17
+    n21 -->|Não · esgotou| n22["Repescagem"]
+    class n18 notifTec;
+    classDef notifTec fill:#e8f0ff,stroke:#0054ec,stroke-width:1.5px,color:#0b2e75;
+    class n2,n4,n5,n6,n12,n15,n17,n22 amb_faiston_one;
+    class n10,n20 amb_app_tecnico;
+    class n16 amb_tiflux;
+    class n7 amb_whatsapp;
+    class n3 amb_planilha;
+"""
+
 SEED_DIAGRAMS = [
     dict(
         fluxo="C", kind="ideal", ordem=0,
@@ -750,6 +791,17 @@ SEED_DIAGRAMS = [
                   "conhecidos e não há negociação no acionamento.",
         mermaid=FINANCEIRO_CLT,
     ),
+    dict(
+        fluxo="projetos", kind="ideal", ordem=0, por_titulo=True,
+        titulo="Fluxo Campanha Projetos Novos v3",
+        descricao="Fluxo completo da campanha de projetos novos: o cronograma padrão de "
+                  "localidades é cruzado com a base técnica do Faiston One, o PAI recebe o "
+                  "interesse pelo WhatsApp (só sim ou não) e informa técnicos e valores no app. "
+                  "Valor até o médio da faixa é aceito na hora; acima vai pra fila de exceções. "
+                  "Cada loja guarda uma reserva de 3 a 5 técnicos por nota, e no chamado a "
+                  "operação escolhe da reserva até o PAI confirmar (esgotou: repescagem).",
+        mermaid=PROJETOS_CAMPANHA,
+    ),
 ]
 
 
@@ -760,7 +812,8 @@ def seed_diagrams(db):
     - fluxos do Dispatcher (A/B/C): só insere se ainda não houver NENHUM diagrama
       daquele fluxo+tipo (o time é dono do desenho do fluxo);
     - módulos (Financeiro...): insere se ainda não houver um diagrama com aquele
-      TÍTULO no módulo. O desenho semeado é conteúdo novo e não pode deixar de
+      TÍTULO no módulo (vale também pra entrada com `por_titulo=True`, como o
+      fluxo da campanha em Projetos, que convive com os desenhos que o time fez). O desenho semeado é conteúdo novo e não pode deixar de
       aparecer só porque alguém já rabiscou outro diagrama na aba. Se ele já existe e o
       time ainda não o editou (`seeded`), é atualizado pra versão atual do seed."""
     from .models import DiagramaSeedRemovido, FlowDiagram
@@ -772,10 +825,12 @@ def seed_diagrams(db):
     added = 0
     atualizados = 0
     for d in SEED_DIAGRAMS:
+        d = dict(d)
+        por_titulo = d.pop("por_titulo", False) or e_modulo(d["fluxo"])
         if (d["fluxo"], d["titulo"]) in removidos:
             continue
         q = db.query(FlowDiagram).filter(FlowDiagram.fluxo == d["fluxo"])
-        if e_modulo(d["fluxo"]):
+        if por_titulo:
             q = q.filter(FlowDiagram.titulo == d["titulo"])
         else:
             q = q.filter(FlowDiagram.kind == d["kind"])
@@ -783,7 +838,7 @@ def seed_diagrams(db):
         if existente:
             # modelo inicial que o time ainda não mexeu (seeded=True) acompanha a versão nova
             # do seed; qualquer edição pela tela zera o `seeded` e a partir daí é do time
-            if (e_modulo(d["fluxo"]) and existente.seeded
+            if (por_titulo and existente.seeded
                     and (existente.mermaid != d["mermaid"] or existente.descricao != d["descricao"])):
                 existente.mermaid, existente.descricao = d["mermaid"], d["descricao"]
                 atualizados += 1

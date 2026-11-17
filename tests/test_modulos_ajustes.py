@@ -356,6 +356,9 @@ def test_catalogo_marca_financeiro_como_processo_a_desenhar(client):
     assert "ainda não está desenhado" in cat["financeiro"]["descricao"]
 
 
+TITULO_CAMPANHA_PROJETOS = "Fluxo Campanha Projetos Novos v3"
+
+
 def _diagrama(client, fluxo, titulo="Fluxo de aprovação", **extra):
     resp = client.post("/api/diagramas", json={
         "fluxo": fluxo, "kind": "ideal", "titulo": titulo,
@@ -370,7 +373,9 @@ def test_diagrama_de_modulo_fica_separado_dos_fluxos_do_dispatcher(client):
     try:
         ids_fin = [d["id"] for d in client.get("/api/diagramas", params={"fluxo": "financeiro"}).json()]
         assert fin["id"] in ids_fin and proj["id"] not in ids_fin
-        assert [d["id"] for d in client.get("/api/diagramas", params={"fluxo": "projetos"}).json()] == [proj["id"]]
+        # em Projetos só o desenho novo e o fluxo da campanha que vem do seed
+        assert [d["id"] for d in client.get("/api/diagramas", params={"fluxo": "projetos"}).json()
+                if d["titulo"] != TITULO_CAMPANHA_PROJETOS] == [proj["id"]]
         # os fluxos A/B/C não enxergam os desenhos dos módulos
         for fluxo in ("A", "B", "C"):
             ids = {d["id"] for d in client.get("/api/diagramas", params={"fluxo": fluxo}).json()}
@@ -545,8 +550,9 @@ def test_financeiro_nasce_com_a_visao_geral_e_um_diagrama_por_cenario(client):
     de_novo = _diagramas_financeiro(client)
     assert len([t for t in TITULOS_FINANCEIRO if t in de_novo]) == 4
     assert de_novo[TITULOS_FINANCEIRO[1]]["descricao"] == "editado pelo time"
-    # o Projetos (aba de fluxo do Dispatcher) segue sem desenho: nada foi inventado pra ele
-    assert client.get("/api/diagramas", params={"fluxo": "projetos"}).json() == []
+    # o Projetos (aba de fluxo do Dispatcher) só ganha o fluxo da campanha
+    assert [d["titulo"] for d in client.get("/api/diagramas", params={"fluxo": "projetos"}).json()] \
+        == [TITULO_CAMPANHA_PROJETOS]
 
 
 def test_diagramas_dos_cenarios_entram_mesmo_com_outro_desenho_no_financeiro():
@@ -722,3 +728,21 @@ def test_modelo_inicial_nao_editado_acompanha_o_seed_e_o_editado_fica():
         assert "Do time" in d.mermaid
     finally:
         db.close()
+
+def test_projetos_ganha_o_fluxo_da_campanha_com_os_ambientes(client):
+    """O fluxo da campanha de projetos novos entra em Projetos ao lado dos desenhos do time
+    (por título, não some se já houver outro diagrama ideal) e marca onde cada etapa acontece."""
+    diagramas = {d["titulo"]: d for d in client.get("/api/diagramas", params={"fluxo": "projetos"}).json()}
+    d = diagramas[TITULO_CAMPANHA_PROJETOS]
+    assert d["kind"] == "ideal"
+    mermaid = d["mermaid"]
+    for trecho in ("Novo Cronograma Padrão de Localidades", "Cruzamento de Cronograma vs Base Técnica",
+                   "WhatsApp de interesse", "Fila de exceções", "Reserva da loja · 3 a 5 técnicos",
+                   "PAI confirma?", "Repescagem"):
+        assert trecho in mermaid, trecho
+    for amb in ("faiston_one", "app_tecnico", "tiflux", "whatsapp", "planilha"):
+        assert re.search(rf"^\s*class [\w,]+ amb_{amb};", mermaid, re.M), amb
+    # todo nó citado numa ligação tem definição (nada de caixa sem rótulo)
+    definidos = set(re.findall(r'\b(n\d+)[\[\{\(]', mermaid))
+    citados = set(re.findall(r'\b(n\d+)\b', mermaid))
+    assert citados == definidos
