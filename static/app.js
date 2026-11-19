@@ -2435,6 +2435,9 @@
         <span class="diagram-title">${esc(d.titulo)}</span>
         <span class="diagram-actions">
           <button type="button" class="case-icon-btn diagram-fs" title="Tela cheia (Esc pra sair)" aria-label="Tela cheia" aria-pressed="false">${FS_ICONS}</button>
+          <button type="button" class="case-icon-btn diagram-export" title="Exportar como imagem (PNG)" aria-label="Exportar imagem">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
           <button type="button" class="case-icon-btn diagram-inline-toggle" title="Editar direto no desenho" aria-label="Editar aqui" aria-pressed="false">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
             <span class="inline-toggle-label">Editar aqui</span>
@@ -2861,12 +2864,179 @@
         else enterInlineEdit(art, d);
       });
     });
+    $$(".diagram-export", wrap).forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const art = btn.closest(".diagram");
+        const id = Number(art.dataset.id);
+        const d = DIAGRAMS.find((x) => x.id === id);
+        if (!d) return;
+        // card recolhido: abre e desenha antes de exportar (o PNG sai do desenho da tela)
+        if (art.classList.contains("collapsed")) {
+          art.classList.remove("collapsed");
+          art.querySelector(".diagram-toggle").setAttribute("aria-expanded", "true");
+          expandedDiagrams.add(id);
+          renderDiagramCanvas(d, wrap);
+        }
+        exportaDiagramaPng(art, d, btn);
+      });
+    });
     $$(".diagram-edit", wrap).forEach((btn) => {
       btn.addEventListener("click", (ev) => { ev.stopPropagation(); openDiagramModal("edit", btn.closest(".diagram").dataset.id); });
     });
     $$(".diagram-del", wrap).forEach((btn) => {
       btn.addEventListener("click", (ev) => { ev.stopPropagation(); deleteDiagram(btn.closest(".diagram").dataset.id); });
     });
+  }
+
+  // ---- exportar fluxograma como imagem (PNG) ----
+  // O PNG sai do desenho que está na tela (com ambientes, pílulas e legenda), não do código:
+  // o acabamento visual vem do CSS da página, que não viaja com o SVG. Por isso cada elemento
+  // leva os estilos calculados inline, e a Roboto vai embutida (sem ela o navegador desenha a
+  // imagem com a fonte de reserva e o texto passa da caixa).
+  const EXPORT_SVG_PROPS = ["fill", "fill-opacity", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap",
+    "stroke-linejoin", "stroke-opacity", "opacity", "visibility", "display", "filter", "rx", "ry",
+    "font-family", "font-size", "font-weight", "font-style", "letter-spacing", "text-anchor", "dominant-baseline"];
+  const EXPORT_HTML_PROPS = ["color", "background-color", "font-family", "font-size", "font-weight", "font-style",
+    "line-height", "letter-spacing", "text-align", "white-space", "display", "padding", "margin", "border-radius", "max-width"];
+  const FONTES_URL = "https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;600;700;800&family=Roboto:wght@300;400;500;600&display=swap";
+  let fontesEmbutidas = null;
+
+  const blobParaDataUrl = (blob) => new Promise((ok, erro) => {
+    const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = erro; r.readAsDataURL(blob);
+  });
+
+  // @font-face da Roboto/Roboto Slab com os arquivos em base64 (só os subconjuntos latinos)
+  function fontesParaExportar() {
+    if (!fontesEmbutidas) {
+      fontesEmbutidas = (async () => {
+        const css = await (await fetch(FONTES_URL)).text();
+        const blocos = css.split("}").filter((b) => b.includes("@font-face") && /U\+0000-00FF/.test(b));
+        const saida = await Promise.all(blocos.map(async (b) => {
+          const m = /url\((https:[^)]+)\)/.exec(b);
+          if (!m) return "";
+          const data = await blobParaDataUrl(await (await fetch(m[1])).blob());
+          return b.replace(m[1], data) + "}";
+        }));
+        return saida.join("\n");
+      })().catch(() => { fontesEmbutidas = null; return ""; });
+    }
+    return fontesEmbutidas;
+  }
+
+  function copiaEstilos(orig, clone) {
+    if (!orig || !clone || orig.nodeType !== 1) return;
+    const cs = getComputedStyle(orig);
+    const props = orig instanceof SVGElement ? EXPORT_SVG_PROPS : EXPORT_HTML_PROPS;
+    props.forEach((pr) => {
+      const v = cs.getPropertyValue(pr);
+      if (v && !(pr === "filter" && v === "none")) clone.style.setProperty(pr, v);
+    });
+    for (let i = 0; i < orig.children.length; i++) copiaEstilos(orig.children[i], clone.children[i]);
+  }
+
+  async function esperaSvg(canvas, ms = 8000) {
+    const fim = Date.now() + ms;
+    while (Date.now() < fim) {
+      const svg = canvas.querySelector(":scope > svg");
+      if (svg) return svg;
+      if (canvas.querySelector(".diagram-error")) return null;
+      await new Promise((ok) => setTimeout(ok, 120));
+    }
+    return null;
+  }
+
+  const nomeArquivo = (t) => (t || "fluxograma").normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_").slice(0, 80) || "fluxograma";
+
+  function baixa(href, nome) {
+    const a = document.createElement("a");
+    a.href = href; a.download = nome;
+    document.body.appendChild(a); a.click(); a.parentNode.removeChild(a);
+  }
+
+  async function montaSvgExportacao(svg, titulo) {
+    const NS = "http://www.w3.org/2000/svg";
+    const vb = (svg.getAttribute("viewBox") || "").split(/[\s,]+/).map(Number);
+    const bb = svg.getBBox();
+    const [vx, vy, vw, vh] = vb.length === 4 && vb[2] > 0 ? vb : [bb.x, bb.y, bb.width, bb.height];
+    const clone = svg.cloneNode(true);
+    copiaEstilos(svg, clone);
+    // desfaz zoom/posição da tela cheia e o "max-width" responsivo do Mermaid
+    clone.style.removeProperty("transform"); clone.style.removeProperty("transform-origin");
+    clone.style.removeProperty("max-width");
+    // o id fica: o CSS interno do Mermaid é preso a ele (#mmd-N p { margin: 0 } etc.)
+    // na imagem o texto pode sair 1-2 px mais largo que na medição da tela: não deixa cortar a última letra
+    clone.querySelectorAll("foreignObject").forEach((fo) => {
+      fo.setAttribute("overflow", "visible"); fo.style.setProperty("overflow", "visible");
+      fo.querySelectorAll("*").forEach((el) => el.style.setProperty("overflow", "visible"));
+    });
+
+    const PAD = 40, TOPO = 112;
+    const W = Math.max(Math.ceil(vw) + PAD * 2, 640), H = Math.ceil(vh) + TOPO + PAD;
+    const raiz = document.createElementNS(NS, "svg");
+    raiz.setAttribute("xmlns", NS);
+    raiz.setAttribute("width", W); raiz.setAttribute("height", H);
+    raiz.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    const fontes = await fontesParaExportar();
+    raiz.innerHTML = `<defs><style>${fontes}</style>
+        <linearGradient id="fx-export-brand" x1="0" x2="1"><stop offset="0" stop-color="#2226C0"/><stop offset=".55" stop-color="#FD11A4"/><stop offset="1" stop-color="#FD5665"/></linearGradient></defs>
+      <rect width="${W}" height="${H}" fill="#ffffff"/>
+      <rect x="${PAD}" y="66" width="${W - PAD * 2}" height="4" rx="2" fill="url(#fx-export-brand)"/>
+      <text x="${PAD}" y="100" font-family="'Roboto Slab', serif" font-weight="700" font-size="20" fill="#151720">${esc(titulo)}</text>`;
+    // logo da Faiston (o mesmo do cabeçalho da página)
+    const logo = document.querySelector(".brand svg");
+    if (logo) {
+      const l = logo.cloneNode(true);
+      l.setAttribute("x", PAD); l.setAttribute("y", 22); l.setAttribute("height", 32); l.setAttribute("width", 127);
+      l.removeAttribute("class"); l.removeAttribute("style");
+      raiz.appendChild(l);
+    }
+    const data = new Date().toLocaleDateString("pt-BR");
+    raiz.insertAdjacentHTML("beforeend", `<text x="${W - PAD}" y="44" text-anchor="end" font-family="Roboto, sans-serif" font-size="12" fill="#6B6B6B">Exportado em ${data}</text>`);
+    clone.setAttribute("x", PAD); clone.setAttribute("y", TOPO);
+    clone.setAttribute("width", vw); clone.setAttribute("height", vh);
+    clone.setAttribute("viewBox", `${vx} ${vy} ${vw} ${vh}`);
+    raiz.appendChild(clone);
+    return { texto: new XMLSerializer().serializeToString(raiz), W, H };
+  }
+
+  async function exportaDiagramaPng(art, d, btn) {
+    const canvas = art.querySelector(".diagram-canvas");
+    if (btn) btn.disabled = true;
+    try {
+      const svg = canvas && await esperaSvg(canvas);
+      if (!svg) { toast("Não deu pra exportar: o diagrama não desenhou.", true); return; }
+      const { texto, W, H } = await montaSvgExportacao(svg, d.titulo);
+      const nome = nomeArquivo(d.titulo);
+      const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(texto);
+      const img = new Image();
+      await new Promise((ok, erro) => { img.onload = ok; img.onerror = () => erro(new Error("imagem")); img.src = url; });
+      // 2x pra ficar nítido em apresentação/documento, com teto pro navegador conseguir gerar
+      const escala = Math.max(1, Math.min(2, 8000 / Math.max(W, H)));
+      const cv = document.createElement("canvas");
+      cv.width = Math.round(W * escala); cv.height = Math.round(H * escala);
+      const ctx = cv.getContext("2d");
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.scale(escala, escala);
+      ctx.drawImage(img, 0, 0, W, H);
+      try {
+        const blob = await new Promise((ok) => cv.toBlob(ok, "image/png"));
+        if (!blob) throw new Error("png");
+        const href = URL.createObjectURL(blob);
+        baixa(href, nome + ".png");
+        setTimeout(() => URL.revokeObjectURL(href), 4000);
+        toast("Fluxograma exportado em PNG.");
+      } catch (e) {
+        // navegador que bloqueia o PNG (ex.: Safari com texto em HTML no SVG): entrega o SVG
+        baixa(url, nome + ".svg");
+        toast("Esse navegador não gerou o PNG — baixei em SVG (abre em qualquer navegador).");
+      }
+    } catch (e) {
+      toast("Erro ao exportar o fluxograma: " + e.message, true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   // ---- editor modal (builder por formulário) ----
