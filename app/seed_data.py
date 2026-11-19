@@ -780,7 +780,8 @@ PROJETOS_CAMPANHA_V4 = """flowchart TD
     n22 -->|Sim| n25
     n22 -->|Não| n23["Fica fora da campanha"]
     n25 --> n26["Chamado aberto na loja"]
-    n26 --> n27["Operação escolhe o técnico da reserva"]
+    n26 --> n35["Liga o chamado à localidade do cronograma · 1º pelo endereço, 2º pelo nome da loja"]
+    n35 --> n27["Operação escolhe o técnico da reserva"]
     n27 --> n28(["🔔 Notifica o técnico: chamado oferecido ao PAI"])
     n28 --> n29{"PAI confirma?"}
     n29 -->|Sim| n30["Técnico atribuído · valor vai junto"]
@@ -791,11 +792,29 @@ PROJETOS_CAMPANHA_V4 = """flowchart TD
     n33 --> n34["Técnicos que não fecharam acordo por valores"]
     class n28 notifTec;
     classDef notifTec fill:#e8f0ff,stroke:#0054ec,stroke-width:1.5px,color:#0b2e75;
-    class n3,n4,n5,n7,n8,n9,n11,n18,n25,n27,n33 amb_faiston_one;
+    class n3,n4,n5,n7,n8,n9,n11,n18,n25,n27,n33,n35 amb_faiston_one;
     class n16,n30,n31 amb_app_tecnico;
     class n26 amb_tiflux;
     class n13,n21 amb_whatsapp;
     class n6 amb_planilha;
+"""
+
+# Como o chamado aberto no Tiflux encontra a localidade do cronograma dentro do Faiston One:
+# primeiro pelo endereço; se não achar, pelo nome da loja. Detalha a etapa "Liga o chamado
+# à localidade do cronograma" do v4. O que fazer quando nenhum dos dois casa ainda não foi
+# definido (etapa sem ambiente, "Regra a definir").
+PROJETOS_VINCULO_CHAMADO = """flowchart TD
+    n1["Chamado aberto na loja"] --> n2["Faiston One recebe o chamado · endereço e nome da loja"]
+    n2 --> n3["Busca a localidade do cronograma pelo endereço do chamado"]
+    n3 --> n4{"Achou a localidade pelo endereço?"}
+    n4 -->|Sim| n7["Chamado ligado à localidade · usa a reserva daquela loja"]
+    n4 -->|Não| n5["Busca a localidade pelo nome da loja"]
+    n5 --> n6{"Achou a localidade pelo nome da loja?"}
+    n6 -->|Sim| n7
+    n6 -->|Não| n8["Regra a definir · chamado sem localidade no cronograma, ocorrência para a operação"]
+    n7 --> n9["Operação escolhe o técnico da reserva"]
+    class n1 amb_tiflux;
+    class n2,n3,n5,n7,n9 amb_faiston_one;
 """
 
 SEED_DIAGRAMS = [
@@ -869,6 +888,16 @@ SEED_DIAGRAMS = [
                   "WhatsApp (botão liberado pelo gestor, print como evidência). No Estou indo, o "
                   "app calcula o KM de ida e volta.",
         mermaid=PROJETOS_CAMPANHA_V4,
+    ),
+    dict(
+        fluxo="projetos", kind="ideal", ordem=1, por_titulo=True,
+        titulo="v4 · Vínculo do chamado Tiflux com a localidade do cronograma",
+        descricao="Detalhe da etapa do v4 em que o chamado aberto no Tiflux é ligado a uma "
+                  "localidade do cronograma dentro do Faiston One. A busca é pelo endereço do "
+                  "chamado; se não achar, pelo nome da loja. Ligado à localidade, o chamado usa "
+                  "a reserva de técnicos daquela loja. Se nenhum dos dois casar, o que fazer "
+                  "ainda é regra a definir.",
+        mermaid=PROJETOS_VINCULO_CHAMADO,
     ),
 ]
 

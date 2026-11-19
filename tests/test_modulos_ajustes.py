@@ -357,7 +357,8 @@ def test_catalogo_marca_financeiro_como_processo_a_desenhar(client):
 
 
 TITULO_CAMPANHA_PROJETOS = "Fluxo Campanha Projetos Novos v3"
-TITULOS_CAMPANHA_PROJETOS = [TITULO_CAMPANHA_PROJETOS, "Fluxo Campanha Projetos Novos v4"]
+TITULO_VINCULO_CHAMADO = "v4 · Vínculo do chamado Tiflux com a localidade do cronograma"
+TITULOS_CAMPANHA_PROJETOS = [TITULO_CAMPANHA_PROJETOS, "Fluxo Campanha Projetos Novos v4", TITULO_VINCULO_CHAMADO]
 
 
 def _diagrama(client, fluxo, titulo="Fluxo de aprovação", **extra):
@@ -553,7 +554,7 @@ def test_financeiro_nasce_com_a_visao_geral_e_um_diagrama_por_cenario(client):
     assert de_novo[TITULOS_FINANCEIRO[1]]["descricao"] == "editado pelo time"
     # o Projetos (aba de fluxo do Dispatcher) só ganha o fluxo da campanha
     assert sorted(d["titulo"] for d in client.get("/api/diagramas", params={"fluxo": "projetos"}).json()) \
-        == TITULOS_CAMPANHA_PROJETOS
+        == sorted(TITULOS_CAMPANHA_PROJETOS)
 
 
 def test_diagramas_dos_cenarios_entram_mesmo_com_outro_desenho_no_financeiro():
@@ -761,3 +762,18 @@ def test_projetos_v4_traz_as_mudancas_da_reuniao(client):
     assert set(re.findall(r'\b(n\d+)\b', mermaid)) == definidos
     rotulos = re.findall(r'n\d+[\[\{\(]+"(.*?)"', mermaid)
     assert max(len(r) for r in rotulos) <= 90
+
+
+def test_projetos_vinculo_do_chamado_tiflux_com_a_localidade(client):
+    """O chamado do Tiflux acha a localidade do cronograma primeiro pelo endereço e,
+    se não achar, pelo nome da loja — no v4 e no diagrama de detalhe."""
+    diagramas = {d["titulo"]: d for d in client.get("/api/diagramas", params={"fluxo": "projetos"}).json()}
+    assert "1º pelo endereço, 2º pelo nome da loja" in diagramas["Fluxo Campanha Projetos Novos v4"]["mermaid"]
+    mermaid = diagramas[TITULO_VINCULO_CHAMADO]["mermaid"]
+    endereco = mermaid.index("Achou a localidade pelo endereço?")
+    nome = mermaid.index("Achou a localidade pelo nome da loja?")
+    assert endereco < nome
+    assert re.search(r"n4 -->\|Não\| n5", mermaid)   # sem endereço, cai na busca pelo nome
+    assert re.search(r"^\s*class n1 amb_tiflux;", mermaid, re.M)
+    definidos = set(re.findall(r'\b(n\d+)[\[\{\(]', mermaid))
+    assert set(re.findall(r'\b(n\d+)\b', mermaid)) == definidos
