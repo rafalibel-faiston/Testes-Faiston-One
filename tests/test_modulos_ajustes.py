@@ -357,6 +357,7 @@ def test_catalogo_marca_financeiro_como_processo_a_desenhar(client):
 
 
 TITULO_CAMPANHA_PROJETOS = "Fluxo Campanha Projetos Novos v3"
+TITULOS_CAMPANHA_PROJETOS = [TITULO_CAMPANHA_PROJETOS, "Fluxo Campanha Projetos Novos v4"]
 
 
 def _diagrama(client, fluxo, titulo="Fluxo de aprovação", **extra):
@@ -375,7 +376,7 @@ def test_diagrama_de_modulo_fica_separado_dos_fluxos_do_dispatcher(client):
         assert fin["id"] in ids_fin and proj["id"] not in ids_fin
         # em Projetos só o desenho novo e o fluxo da campanha que vem do seed
         assert [d["id"] for d in client.get("/api/diagramas", params={"fluxo": "projetos"}).json()
-                if d["titulo"] != TITULO_CAMPANHA_PROJETOS] == [proj["id"]]
+                if d["titulo"] not in TITULOS_CAMPANHA_PROJETOS] == [proj["id"]]
         # os fluxos A/B/C não enxergam os desenhos dos módulos
         for fluxo in ("A", "B", "C"):
             ids = {d["id"] for d in client.get("/api/diagramas", params={"fluxo": fluxo}).json()}
@@ -551,8 +552,8 @@ def test_financeiro_nasce_com_a_visao_geral_e_um_diagrama_por_cenario(client):
     assert len([t for t in TITULOS_FINANCEIRO if t in de_novo]) == 4
     assert de_novo[TITULOS_FINANCEIRO[1]]["descricao"] == "editado pelo time"
     # o Projetos (aba de fluxo do Dispatcher) só ganha o fluxo da campanha
-    assert [d["titulo"] for d in client.get("/api/diagramas", params={"fluxo": "projetos"}).json()] \
-        == [TITULO_CAMPANHA_PROJETOS]
+    assert sorted(d["titulo"] for d in client.get("/api/diagramas", params={"fluxo": "projetos"}).json()) \
+        == TITULOS_CAMPANHA_PROJETOS
 
 
 def test_diagramas_dos_cenarios_entram_mesmo_com_outro_desenho_no_financeiro():
@@ -746,3 +747,17 @@ def test_projetos_ganha_o_fluxo_da_campanha_com_os_ambientes(client):
     definidos = set(re.findall(r'\b(n\d+)[\[\{\(]', mermaid))
     citados = set(re.findall(r'\b(n\d+)\b', mermaid))
     assert citados == definidos
+
+
+def test_projetos_v4_traz_as_mudancas_da_reuniao(client):
+    """O v4 entra ao lado do v3 com o que mudou na reunião de 19/11/2026."""
+    diagramas = {d["titulo"]: d for d in client.get("/api/diagramas", params={"fluxo": "projetos"}).json()}
+    mermaid = diagramas["Fluxo Campanha Projetos Novos v4"]["mermaid"]
+    for trecho in ("Modalidade do projeto?", "raio padrão 50 km", "Há técnico no raio de 50 km?",
+                   "até 3 ofertas", "Operação aceita o valor do PAI?", "Renegociar por WhatsApp",
+                   "Estou indo", "Técnicos que não fecharam acordo por valores"):
+        assert trecho in mermaid, trecho
+    definidos = set(re.findall(r'\b(n\d+)[\[\{\(]', mermaid))
+    assert set(re.findall(r'\b(n\d+)\b', mermaid)) == definidos
+    rotulos = re.findall(r'n\d+[\[\{\(]+"(.*?)"', mermaid)
+    assert max(len(r) for r in rotulos) <= 90
