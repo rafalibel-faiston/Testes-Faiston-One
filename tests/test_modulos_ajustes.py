@@ -356,7 +356,7 @@ def test_catalogo_marca_financeiro_como_processo_a_desenhar(client):
     assert "ainda não está desenhado" in cat["financeiro"]["descricao"]
 
 
-TITULO_CAMPANHA_PROJETOS = "Fluxo Campanha Projetos Novos v3"
+TITULO_CAMPANHA_PROJETOS = "Fluxo Campanha Projetos Novos v4"
 
 
 def _diagrama(client, fluxo, titulo="Fluxo de aprovação", **extra):
@@ -738,7 +738,11 @@ def test_projetos_ganha_o_fluxo_da_campanha_com_os_ambientes(client):
     mermaid = d["mermaid"]
     for trecho in ("Novo Cronograma Padrão de Localidades", "Cruzamento de Cronograma vs Base Técnica",
                    "WhatsApp de interesse", "Fila de exceções", "Reserva da loja · 3 a 5 técnicos",
-                   "PAI confirma?", "Repescagem"):
+                   "PAI confirma?", "Repescagem",
+                   # novidades da v4
+                   "Modalidade do projeto?", "raio padrão 50 km", "Repescagem automática",
+                   "até 3 ofertas", "Operação aceita o valor do PAI?", "Renegociar por WhatsApp",
+                   "Estou indo", "Técnicos que não fecharam acordo por valores"):
         assert trecho in mermaid, trecho
     for amb in ("faiston_one", "app_tecnico", "tiflux", "whatsapp", "planilha"):
         assert re.search(rf"^\s*class [\w,]+ amb_{amb};", mermaid, re.M), amb

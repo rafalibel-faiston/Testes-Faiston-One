@@ -702,45 +702,63 @@ FINANCEIRO_CLT = """flowchart TD
     classDef notifTec fill:#e8f0ff,stroke:#0054ec,stroke-width:1.5px,color:#0b2e75;
 """
 
-# Projetos — campanha de projetos novos, do cadastro do projeto até o técnico atribuído.
-# Junta o "Fluxo Campanha Projetos Novos v2" que o time desenhou na tela (projeto →
-# campanha → cronograma padrão de localidades → upload/retroalimentação → cruzamento com
-# a base técnica) com o desenho do aceite pelo PAI (WhatsApp de interesse, valores no app,
-# fila de exceções, reserva da loja e confirmação no chamado). Cada etapa marca ONDE a
-# ação acontece (amb_<slug>, catálogo de ambientes): Faiston One, app do técnico, Tiflux,
-# WhatsApp e planilha.
+# Projetos — campanha de projetos novos, do cadastro do projeto até o técnico a caminho.
+# Versão v4 (reunião de 19/11/2026) sobre a v3: modalidade do projeto (valor fechado x valor
+# do chamado), faixa mín/médio/máx com adicional por equipamento, raio padrão de 50 km com
+# repescagem automática (amplia raio e filtro; limite esgotado vira ocorrência — regra a
+# definir), contraproposta da operação em até 3 ofertas, renegociação por WhatsApp liberada
+# só pelo gestor e o "Estou indo" com KM de ida e volta no app. Cada etapa marca ONDE a ação
+# acontece (amb_<slug>, catálogo de ambientes): Faiston One, app do técnico, Tiflux, WhatsApp
+# e planilha.
 PROJETOS_CAMPANHA = """flowchart TD
-    n1["Novo Projeto"] --> n2["Nova Campanha · lojas + faixa de valor"]
-    n2 --> n3["Novo Cronograma Padrão de Localidades"]
-    n3 --> n4["Upload de Cronograma no Faiston One"]
-    n3 --> n5["Retroalimentar Upload"]
-    n4 --> n6["Cruzamento de Cronograma vs Base Técnica do Faiston One"]
-    n5 --> n6
-    n6 --> n7["WhatsApp de interesse · sem link, só sim ou não"]
-    n7 --> n8{"PAI disse sim?"}
-    n8 -->|Não| n9["Sai da campanha"]
-    n8 -->|Sim| n10["Valores no app · PAI informa técnicos e valor por loja"]
-    n10 --> n11{"Valor até o médio da faixa?"}
-    n11 -->|Sim · aceite automático| n15["Reserva da loja · 3 a 5 técnicos, por nota"]
-    n11 -->|Não| n12["Fila de exceções · negociação com o PAI"]
-    n12 --> n13{"Fechou acordo?"}
-    n13 -->|Sim| n15
-    n13 -->|Não| n14["Fica fora da campanha"]
-    n15 --> n16["Chamado aberto na loja"]
-    n16 --> n17["Operação escolhe o técnico da reserva"]
-    n17 --> n18(["🔔 Notifica o técnico: chamado oferecido ao PAI"])
-    n18 --> n19{"PAI confirma?"}
-    n19 -->|Sim| n20["Técnico atribuído · valor vai junto"]
-    n19 -->|Não| n21{"Ainda tem técnico na reserva?"}
-    n21 -->|Sim · próximo da reserva| n17
-    n21 -->|Não · esgotou| n22["Repescagem"]
-    class n18 notifTec;
+    n1["Novo Projeto"] --> n2{"Modalidade do projeto?"}
+    n2 -->|Valor fechado| n3["Valor fechado · dispara só o valor fechado aos técnicos, sem KM"]
+    n2 -->|Valor do chamado| n4["Valor do chamado · sistema calcula KM e outras despesas do chamado"]
+    n3 --> n5["Nova Campanha · lojas, faixa mín/médio/máx e adicional por equipamento"]
+    n4 --> n5
+    n5 --> n6["Novo Cronograma Padrão de Localidades"]
+    n6 --> n7["Upload de Cronograma no Faiston One"]
+    n6 --> n8["Retroalimentar Upload"]
+    n7 --> n9["Cruzamento de Cronograma vs Base Técnica · raio padrão 50 km, por localidade e skill"]
+    n8 --> n9
+    n9 --> n10{"Há técnico no raio de 50 km?"}
+    n10 -->|Não| n11["Repescagem automática · sistema aumenta o raio e o filtro de busca"]
+    n11 -->|Novo raio e filtro| n9
+    n11 -->|Limite esgotado| n12["Limite de expansão esgotado · ocorrência para a operação (regra a definir)"]
+    n10 -->|Sim| n13["WhatsApp de interesse · sem link, só sim ou não"]
+    n13 --> n14{"PAI disse sim?"}
+    n14 -->|Não| n15["Sai da campanha"]
+    n14 -->|Sim| n16["Valores no app · PAI informa técnicos e valor por loja"]
+    n16 --> n17{"Valor até o médio da faixa?"}
+    n17 -->|Sim · aceite automático| n24["Reserva da loja · 3 a 5 técnicos, por nota"]
+    n17 -->|Não| n18["Fila de exceções · operação envia contraproposta (até 3 ofertas)"]
+    n18 --> n19{"Fechou acordo?"}
+    n19 -->|Sim| n24
+    n19 -->|Não · 3 ofertas esgotadas| n20{"Operação aceita o valor do PAI?"}
+    n20 -->|Sim| n24
+    n20 -->|Não| n21["Renegociar por WhatsApp · botão só liberado pelo gestor, print como evidência"]
+    n21 --> n22{"Fechou acordo?"}
+    n22 -->|Sim| n24
+    n22 -->|Não| n23["Fica fora da campanha"]
+    n24 --> n25["Chamado aberto na loja"]
+    n25 --> n26["Operação escolhe o técnico da reserva"]
+    n26 --> n27(["🔔 Notifica o técnico: chamado oferecido ao PAI"])
+    n27 --> n28{"PAI confirma?"}
+    n28 -->|Sim| n29["Técnico atribuído · valor vai junto"]
+    n29 --> n30["Estou indo · no valor do chamado, KM de ida e volta calculado no app"]
+    n28 -->|Não| n31{"Ainda tem técnico na reserva?"}
+    n31 -->|Sim · próximo da reserva| n26
+    n31 -->|Não · esgotou| n32["Repescagem"]
+    n32 --> n33["Técnicos que não fecharam acordo por valores"]
+    class n27 notifTec;
+    class n12 notif;
     classDef notifTec fill:#e8f0ff,stroke:#0054ec,stroke-width:1.5px,color:#0b2e75;
-    class n2,n4,n5,n6,n12,n15,n17,n22 amb_faiston_one;
-    class n10,n20 amb_app_tecnico;
-    class n16 amb_tiflux;
-    class n7 amb_whatsapp;
-    class n3 amb_planilha;
+    classDef notif fill:#fff7e6,stroke:#f59e0b,stroke-width:1.5px,color:#7c4a03;
+    class n3,n4,n5,n7,n8,n9,n11,n18,n24,n26,n32 amb_faiston_one;
+    class n16,n29,n30 amb_app_tecnico;
+    class n25 amb_tiflux;
+    class n13,n21 amb_whatsapp;
+    class n6 amb_planilha;
 """
 
 SEED_DIAGRAMS = [
@@ -793,13 +811,16 @@ SEED_DIAGRAMS = [
     ),
     dict(
         fluxo="projetos", kind="ideal", ordem=0, por_titulo=True,
-        titulo="Fluxo Campanha Projetos Novos v3",
-        descricao="Fluxo completo da campanha de projetos novos: o cronograma padrão de "
-                  "localidades é cruzado com a base técnica do Faiston One, o PAI recebe o "
-                  "interesse pelo WhatsApp (só sim ou não) e informa técnicos e valores no app. "
-                  "Valor até o médio da faixa é aceito na hora; acima vai pra fila de exceções. "
-                  "Cada loja guarda uma reserva de 3 a 5 técnicos por nota, e no chamado a "
-                  "operação escolhe da reserva até o PAI confirmar (esgotou: repescagem).",
+        titulo="Fluxo Campanha Projetos Novos v4",
+        descricao="Fluxo completo da campanha de projetos novos (v4, reunião de 19/11/2026). "
+                  "O projeto nasce com valor fechado (sem KM) ou valor do chamado (sistema calcula "
+                  "KM e despesas). O cronograma padrão é cruzado com a base técnica num raio de "
+                  "50 km; sem técnico, a repescagem amplia raio e filtro sozinha até o limite. O PAI "
+                  "diz sim pelo WhatsApp e informa valores no app: até o médio da faixa é aceito na "
+                  "hora; acima, a operação faz até 3 contrapropostas e, se não fechar, o gestor "
+                  "libera a renegociação por WhatsApp. Cada loja guarda uma reserva de 3 a 5 "
+                  "técnicos por nota; no chamado a operação escolhe da reserva até o PAI confirmar "
+                  "(esgotou: repescagem), e o técnico marca \"Estou indo\" com o KM no app.",
         mermaid=PROJETOS_CAMPANHA,
     ),
 ]
