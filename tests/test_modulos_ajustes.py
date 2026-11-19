@@ -356,7 +356,9 @@ def test_catalogo_marca_financeiro_como_processo_a_desenhar(client):
     assert "ainda não está desenhado" in cat["financeiro"]["descricao"]
 
 
-TITULO_CAMPANHA_PROJETOS = "Fluxo Campanha Projetos Novos v4"
+TITULO_CAMPANHA_PROJETOS = "Fluxo Campanha Projetos Novos v3"
+TITULO_VINCULO_CHAMADO = "v4 · Vínculo do chamado Tiflux com a localidade do cronograma"
+TITULOS_CAMPANHA_PROJETOS = [TITULO_CAMPANHA_PROJETOS, "Fluxo Campanha Projetos Novos v4", TITULO_VINCULO_CHAMADO]
 
 
 def _diagrama(client, fluxo, titulo="Fluxo de aprovação", **extra):
@@ -375,7 +377,7 @@ def test_diagrama_de_modulo_fica_separado_dos_fluxos_do_dispatcher(client):
         assert fin["id"] in ids_fin and proj["id"] not in ids_fin
         # em Projetos só o desenho novo e o fluxo da campanha que vem do seed
         assert [d["id"] for d in client.get("/api/diagramas", params={"fluxo": "projetos"}).json()
-                if d["titulo"] != TITULO_CAMPANHA_PROJETOS] == [proj["id"]]
+                if d["titulo"] not in TITULOS_CAMPANHA_PROJETOS] == [proj["id"]]
         # os fluxos A/B/C não enxergam os desenhos dos módulos
         for fluxo in ("A", "B", "C"):
             ids = {d["id"] for d in client.get("/api/diagramas", params={"fluxo": fluxo}).json()}
@@ -551,8 +553,8 @@ def test_financeiro_nasce_com_a_visao_geral_e_um_diagrama_por_cenario(client):
     assert len([t for t in TITULOS_FINANCEIRO if t in de_novo]) == 4
     assert de_novo[TITULOS_FINANCEIRO[1]]["descricao"] == "editado pelo time"
     # o Projetos (aba de fluxo do Dispatcher) só ganha o fluxo da campanha
-    assert [d["titulo"] for d in client.get("/api/diagramas", params={"fluxo": "projetos"}).json()] \
-        == [TITULO_CAMPANHA_PROJETOS]
+    assert sorted(d["titulo"] for d in client.get("/api/diagramas", params={"fluxo": "projetos"}).json()) \
+        == sorted(TITULOS_CAMPANHA_PROJETOS)
 
 
 def test_diagramas_dos_cenarios_entram_mesmo_com_outro_desenho_no_financeiro():
@@ -738,11 +740,7 @@ def test_projetos_ganha_o_fluxo_da_campanha_com_os_ambientes(client):
     mermaid = d["mermaid"]
     for trecho in ("Novo Cronograma Padrão de Localidades", "Cruzamento de Cronograma vs Base Técnica",
                    "WhatsApp de interesse", "Fila de exceções", "Reserva da loja · 3 a 5 técnicos",
-                   "PAI confirma?", "Repescagem",
-                   # novidades da v4
-                   "Modalidade do projeto?", "raio padrão 50 km", "Repescagem automática",
-                   "até 3 ofertas", "Operação aceita o valor do PAI?", "Renegociar por WhatsApp",
-                   "Estou indo", "Técnicos que não fecharam acordo por valores"):
+                   "PAI confirma?", "Repescagem"):
         assert trecho in mermaid, trecho
     for amb in ("faiston_one", "app_tecnico", "tiflux", "whatsapp", "planilha"):
         assert re.search(rf"^\s*class [\w,]+ amb_{amb};", mermaid, re.M), amb
@@ -750,3 +748,32 @@ def test_projetos_ganha_o_fluxo_da_campanha_com_os_ambientes(client):
     definidos = set(re.findall(r'\b(n\d+)[\[\{\(]', mermaid))
     citados = set(re.findall(r'\b(n\d+)\b', mermaid))
     assert citados == definidos
+
+
+def test_projetos_v4_traz_as_mudancas_da_reuniao(client):
+    """O v4 entra ao lado do v3 com o que mudou na reunião de 19/11/2026."""
+    diagramas = {d["titulo"]: d for d in client.get("/api/diagramas", params={"fluxo": "projetos"}).json()}
+    mermaid = diagramas["Fluxo Campanha Projetos Novos v4"]["mermaid"]
+    for trecho in ("Modalidade do projeto?", "raio padrão 50 km", "Há técnico no raio de 50 km?",
+                   "até 3 ofertas", "Operação aceita o valor do PAI?", "Renegociar por WhatsApp",
+                   "Estou indo", "Técnicos que não fecharam acordo por valores"):
+        assert trecho in mermaid, trecho
+    definidos = set(re.findall(r'\b(n\d+)[\[\{\(]', mermaid))
+    assert set(re.findall(r'\b(n\d+)\b', mermaid)) == definidos
+    rotulos = re.findall(r'n\d+[\[\{\(]+"(.*?)"', mermaid)
+    assert max(len(r) for r in rotulos) <= 90
+
+
+def test_projetos_vinculo_do_chamado_tiflux_com_a_localidade(client):
+    """O chamado do Tiflux acha a localidade do cronograma primeiro pelo endereço e,
+    se não achar, pelo nome da loja — no v4 e no diagrama de detalhe."""
+    diagramas = {d["titulo"]: d for d in client.get("/api/diagramas", params={"fluxo": "projetos"}).json()}
+    assert "1º pelo endereço, 2º pelo nome da loja" in diagramas["Fluxo Campanha Projetos Novos v4"]["mermaid"]
+    mermaid = diagramas[TITULO_VINCULO_CHAMADO]["mermaid"]
+    endereco = mermaid.index("Achou a localidade pelo endereço?")
+    nome = mermaid.index("Achou a localidade pelo nome da loja?")
+    assert endereco < nome
+    assert re.search(r"n4 -->\|Não\| n5", mermaid)   # sem endereço, cai na busca pelo nome
+    assert re.search(r"^\s*class n1 amb_tiflux;", mermaid, re.M)
+    definidos = set(re.findall(r'\b(n\d+)[\[\{\(]', mermaid))
+    assert set(re.findall(r'\b(n\d+)\b', mermaid)) == definidos
